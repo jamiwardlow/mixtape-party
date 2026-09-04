@@ -2,14 +2,22 @@ import request from 'supertest';
 import type { Express } from 'express';
 import type { Pool } from 'pg';
 import { createApp } from '../app.js';
-import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
+import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 
 export function buildApp(pool: Pool) {
   const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
-  const app = createApp({ pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter });
-  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter };
+  const bandcampAdapter = new FakeBandcampAdapter();
+  const app = createApp({
+    pool,
+    sessionSecret: 'test-secret',
+    spotifyAdapter,
+    appleMusicAdapter,
+    youtubeMusicAdapter,
+    bandcampAdapter,
+  });
+  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter };
 }
 
 export async function signUp(app: Express, email: string) {

@@ -32,6 +32,18 @@ export interface MusicServiceAdapter {
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
 }
 
+/**
+ * Contract for a service with no catalog search/discovery API (currently only Bandcamp): a player
+ * submits a track by pasting its URL instead of searching, and it's excluded from cross-service
+ * playlist export since there's no ID to match against the other services' catalogs.
+ */
+export interface EmbedOnlyMusicServiceAdapter {
+  readonly service: ServiceName;
+  /** Resolves a pasted track/album URL into a track, or null if the URL isn't a valid/resolvable link. */
+  submit(url: string): Promise<TrackResult | null>;
+  getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
+}
+
 /** OAuth account-linking, implemented by adapters whose service supports user-scoped linking (e.g. Spotify). */
 export interface OAuthLinkableAdapter {
   getAuthorizeUrl(params: { codeChallenge: string; redirectUri: string; state: string; scope: string }): string;

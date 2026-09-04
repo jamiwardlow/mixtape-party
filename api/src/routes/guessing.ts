@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
+import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
@@ -76,7 +76,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const tracks = await Promise.all(
       submissions.rows.map(async (row) => {
-        const playback = await adapterFor(deps, row.service).getPlaybackLaunchHandle({
+        const playback = await playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle({
           externalId: row.external_id,
           title: row.title,
           artist: row.artist,
@@ -90,6 +90,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
           artist: row.artist,
           playback,
           guessedAccountId: row.guessed_account_id,
+          excludedFromExport: row.service === 'bandcamp',
         };
       }),
     );

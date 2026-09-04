@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../app.js';
-import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
+import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
 import { closeGuessingWindow as closeGuessingWindowFor } from './testHelpers.js';
 
@@ -30,6 +30,7 @@ function buildApp() {
     spotifyAdapter,
     appleMusicAdapter,
     youtubeMusicAdapter,
+    bandcampAdapter: new FakeBandcampAdapter(),
   });
   return { app, spotifyAdapter };
 }

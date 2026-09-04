@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import type { Pool } from 'pg';
 import type {
   AppleMusicLinkableAdapter,
+  EmbedOnlyMusicServiceAdapter,
   MusicServiceAdapter,
   OAuthLinkableAdapter,
   YouTubeMusicLinkableAdapter,
@@ -22,6 +23,7 @@ export interface AppDeps {
   spotifyAdapter: MusicServiceAdapter & OAuthLinkableAdapter;
   appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
   youtubeMusicAdapter: MusicServiceAdapter & YouTubeMusicLinkableAdapter;
+  bandcampAdapter: EmbedOnlyMusicServiceAdapter;
 }
 
 export function createApp(deps: AppDeps): Express {

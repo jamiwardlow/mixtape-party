@@ -79,6 +79,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       artist: row.artist,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
+      excludedFromExport: row.service === 'bandcamp',
     }));
 
     const scoreList = membersResult.rows.map((row) => ({

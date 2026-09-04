@@ -8,7 +8,9 @@ export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
 
 function parseService(value: unknown): ServiceName | null {
   if (value === undefined) return 'spotify'; // back-compat default for clients predating Apple Music support
-  if (value === 'spotify' || value === 'apple_music' || value === 'youtube_music') return value;
+  if (value === 'spotify' || value === 'apple_music' || value === 'youtube_music' || value === 'bandcamp') {
+    return value;
+  }
   return null;
 }
 
@@ -26,6 +28,10 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       res.status(400).json({ error: 'unsupported service' });
       return;
     }
+    if (service === 'bandcamp') {
+      res.status(400).json({ error: 'bandcamp has no search; submit a track by pasting its URL' });
+      return;
+    }
 
     try {
       const results = await adapterFor(deps, service).search(query);
@@ -41,10 +47,20 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
 
   router.post('/rounds/:roundId/submissions', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const { externalId, title, artist, isrc } = req.body ?? {};
-    const service = parseService((req.body ?? {}).service);
-    if (
-      !service ||
+    const body = req.body ?? {};
+    const service = parseService(body.service);
+    if (!service) {
+      res.status(400).json({ error: 'unsupported service' });
+      return;
+    }
+
+    const { externalId, title, artist, isrc, url } = body;
+    if (service === 'bandcamp') {
+      if (typeof url !== 'string') {
+        res.status(400).json({ error: 'url is required' });
+        return;
+      }
+    } else if (
       typeof externalId !== 'string' ||
       typeof title !== 'string' ||
       typeof artist !== 'string' ||
@@ -70,26 +86,45 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    let matched;
-    try {
-      matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
-    } catch (err) {
-      if (err instanceof ServiceUnavailableError) {
-        res.status(503).json({ error: 'search unavailable' });
+    let resolved: { externalId: string; title: string; artist: string; isrc: string | null };
+    if (service === 'bandcamp') {
+      let submitted;
+      try {
+        submitted = await deps.bandcampAdapter.submit(url);
+      } catch (err) {
+        if (err instanceof ServiceUnavailableError) {
+          res.status(503).json({ error: 'bandcamp unavailable' });
+          return;
+        }
+        throw err;
+      }
+      if (!submitted) {
+        res.status(400).json({ error: 'could not resolve that bandcamp url' });
         return;
       }
-      throw err;
-    }
-    if (!matched) {
-      res.status(400).json({ error: 'track not found in catalog' });
-      return;
+      resolved = { externalId: submitted.externalId, title: submitted.title, artist: submitted.artist, isrc: null };
+    } else {
+      try {
+        const matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
+        if (!matched) {
+          res.status(400).json({ error: 'track not found in catalog' });
+          return;
+        }
+      } catch (err) {
+        if (err instanceof ServiceUnavailableError) {
+          res.status(503).json({ error: 'search unavailable' });
+          return;
+        }
+        throw err;
+      }
+      resolved = { externalId, title, artist, isrc: isrc ?? null };
     }
 
     try {
       const submission = await deps.pool.query<{ id: string }>(
         `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [req.params.roundId, accountId, service, externalId, title, artist, isrc ?? null],
+        [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc],
       );
       res.status(201).json({ submissionId: submission.rows[0].id });
     } catch (err) {

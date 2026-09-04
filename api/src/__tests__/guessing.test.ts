@@ -1,7 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { startTestDb, type TestDb } from './testDb.js';
-import { buildApp as buildTestApp, closeSubmissionWindow as closeSubmissionWindowFor, createLeagueWithPlayers, signUp } from './testHelpers.js';
+import {
+  buildApp as buildTestApp,
+  closeSubmissionWindow as closeSubmissionWindowFor,
+  createLeagueWithPlayers,
+  linkFakeSpotify,
+  signUp,
+} from './testHelpers.js';
+import { FAKE_BANDCAMP_URL } from '../adapters/fakeAdapter.js';
 
 let testDb: TestDb;
 
@@ -121,6 +128,51 @@ describe('GET /rounds/:roundId/guessing', () => {
       .get(`/rounds/${roundId}/guessing`)
       .set('Authorization', `Bearer ${members[0].token}`);
     expect(res.status).toBe(403);
+  });
+
+  it('flags a bandcamp track as excluded from export and still resolves its playback handle', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const host = await signUp(app, `host-${Date.now()}@example.com`);
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Bandcamp League',
+        seasonLength: 8,
+        theme: 'One-hit wonders',
+        submissionDeadline: '2030-01-10T00:00:00.000Z',
+        guessingDeadline: '2030-01-17T00:00:00.000Z',
+      });
+    const roundId = created.body.round.id as string;
+    const players = [];
+    for (let i = 0; i < 3; i++) {
+      const player = await signUp(app, `bcplayer-${i}-${Date.now()}@example.com`);
+      await linkFakeSpotify(app, spotifyAdapter, player.token);
+      await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+      players.push(player);
+    }
+    await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ service: 'bandcamp', url: FAKE_BANDCAMP_URL });
+    for (const player of players) {
+      await request(app)
+        .post(`/rounds/${roundId}/submissions`)
+        .set('Authorization', `Bearer ${player.token}`)
+        .send({ externalId: `track-${player.accountId}`, title: `Song by ${player.accountId}`, artist: 'Artist' });
+    }
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${players[0].token}`);
+
+    expect(res.status).toBe(200);
+    const bandcampTrack = res.body.tracks.find((t: { service: string }) => t.service === 'bandcamp');
+    expect(bandcampTrack.excludedFromExport).toBe(true);
+    expect(bandcampTrack.playback.deepLink).toBeTruthy();
+    const spotifyTrack = res.body.tracks.find((t: { service: string }) => t.service === 'spotify');
+    expect(spotifyTrack.excludedFromExport).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../app.js';
-import { FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
+import { FAKE_BANDCAMP_URL, FakeBandcampAdapter, FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
 import { linkFakeAppleMusic, linkFakeYouTubeMusic } from './testHelpers.js';
 
@@ -24,14 +24,16 @@ function buildApp() {
   const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+  const bandcampAdapter = new FakeBandcampAdapter();
   const app = createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
     spotifyAdapter,
     appleMusicAdapter,
     youtubeMusicAdapter,
+    bandcampAdapter,
   });
-  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter };
+  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter };
 }
 
 async function signUp(app: Express, email: string) {
@@ -149,6 +151,18 @@ describe('GET /search', () => {
 
     expect(res.status).toBe(503);
     expect(res.body.error).toBe('search unavailable');
+  });
+
+  it('rejects a bandcamp search since bandcamp has no search API', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'searcher6@example.com');
+
+    const res = await request(app)
+      .get('/search')
+      .query({ q: 'never gonna give you up', service: 'bandcamp' })
+      .set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -288,5 +302,51 @@ describe('POST /rounds/:roundId/submissions', () => {
 
     const row = await testDb.pool.query('SELECT service FROM submissions WHERE id = $1', [res.body.submissionId]);
     expect(row.rows[0].service).toBe('youtube_music');
+  });
+
+  it('a player submits a bandcamp track by pasting its URL', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, spotifyAdapter);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ service: 'bandcamp', url: FAKE_BANDCAMP_URL });
+
+    expect(res.status).toBe(201);
+    expect(res.body.submissionId).toBeTruthy();
+
+    const row = await testDb.pool.query('SELECT service, title, artist FROM submissions WHERE id = $1', [
+      res.body.submissionId,
+    ]);
+    expect(row.rows[0]).toMatchObject({
+      service: 'bandcamp',
+      title: 'Fake Bandcamp Song',
+      artist: 'Fake Bandcamp Artist',
+    });
+  });
+
+  it('rejects a bandcamp submission missing a url', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, spotifyAdapter);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ service: 'bandcamp' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a bandcamp submission whose url cannot be resolved', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, spotifyAdapter);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ service: 'bandcamp', url: 'https://notbandcamp.example.com/track/1' });
+
+    expect(res.status).toBe(400);
   });
 });
