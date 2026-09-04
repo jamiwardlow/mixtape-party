@@ -32,7 +32,7 @@ export class FakeMusicServiceAdapter
   constructor(readonly service: ServiceName = 'spotify') {}
 
   /** Test hook: authorization codes this fake will accept, mapped to the profile they resolve to. */
-  readonly validAuthCodes = new Map<string, { serviceUserId: string; email?: string }>();
+  readonly validAuthCodes = new Map<string, { serviceUserId: string; email?: string; product?: string }>();
 
   /** Test hook: Music User Tokens this fake will accept, mapped to the profile they resolve to. */
   readonly validMusicUserTokens = new Map<string, { serviceUserId: string }>();

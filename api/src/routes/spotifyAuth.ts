@@ -5,7 +5,7 @@ import type { MusicServiceAdapter, OAuthLinkableAdapter } from '../adapters/type
 import { signState, verifyState } from '../auth.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 
-const SPOTIFY_LINK_SCOPE = 'playlist-modify-public playlist-modify-private user-read-email';
+const SPOTIFY_LINK_SCOPE = 'playlist-modify-public playlist-modify-private user-read-email user-read-private';
 
 export interface SpotifyAuthDeps extends AccountsDeps {
   spotifyAdapter: MusicServiceAdapter & OAuthLinkableAdapter;
@@ -69,15 +69,24 @@ export function createSpotifyAuthRouter(deps: SpotifyAuthDeps): Router {
     const profile = await deps.spotifyAdapter.getProfile(tokens.accessToken);
 
     await deps.pool.query(
-      `INSERT INTO service_links (account_id, service, service_user_id, access_token, refresh_token, expires_at, scope)
-       VALUES ($1, 'spotify', $2, $3, $4, now() + ($5 || ' seconds')::interval, $6)
+      `INSERT INTO service_links (account_id, service, service_user_id, access_token, refresh_token, expires_at, scope, metadata)
+       VALUES ($1, 'spotify', $2, $3, $4, now() + ($5 || ' seconds')::interval, $6, $7::jsonb)
        ON CONFLICT (account_id, service) DO UPDATE SET
          service_user_id = EXCLUDED.service_user_id,
          access_token = EXCLUDED.access_token,
          refresh_token = EXCLUDED.refresh_token,
          expires_at = EXCLUDED.expires_at,
-         scope = EXCLUDED.scope`,
-      [accountId, profile.serviceUserId, tokens.accessToken, tokens.refreshToken, tokens.expiresIn, tokens.scope],
+         scope = EXCLUDED.scope,
+         metadata = EXCLUDED.metadata`,
+      [
+        accountId,
+        profile.serviceUserId,
+        tokens.accessToken,
+        tokens.refreshToken,
+        tokens.expiresIn,
+        tokens.scope,
+        JSON.stringify({ product: profile.product ?? null }),
+      ],
     );
 
     res.status(201).json({ linked: true, service: 'spotify', serviceUserId: profile.serviceUserId });

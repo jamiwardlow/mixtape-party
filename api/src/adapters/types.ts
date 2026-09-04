@@ -52,7 +52,7 @@ export interface OAuthLinkableAdapter {
     codeVerifier: string;
     redirectUri: string;
   }): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; scope: string }>;
-  getProfile(accessToken: string): Promise<{ serviceUserId: string; email?: string }>;
+  getProfile(accessToken: string): Promise<{ serviceUserId: string; email?: string; product?: string }>;
 }
 
 /**

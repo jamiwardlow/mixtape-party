@@ -145,7 +145,7 @@ export class SpotifyAdapter implements MusicServiceAdapter, OAuthLinkableAdapter
   async getProfile(accessToken: string) {
     const res = await fetch(`${API_BASE}/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`spotify /me failed: ${res.status}`);
-    const body = (await res.json()) as { id: string; email?: string };
-    return { serviceUserId: body.id, email: body.email };
+    const body = (await res.json()) as { id: string; email?: string; product?: string };
+    return { serviceUserId: body.id, email: body.email, product: body.product };
   }
 }

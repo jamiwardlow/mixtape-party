@@ -174,6 +174,129 @@ describe('GET /rounds/:roundId/guessing', () => {
     const spotifyTrack = res.body.tracks.find((t: { service: string }) => t.service === 'spotify');
     expect(spotifyTrack.excludedFromExport).toBe(false);
   });
+
+  it('flags a track as not playable in-app for a guesser with no link to its service, but still returns a deep link', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    // members[0] (the host) never links Spotify in this fixture.
+    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    expect(res.status).toBe(200);
+    for (const track of res.body.tracks) {
+      expect(track.canPlayInApp).toBe(false);
+      expect(track.playback.deepLink).toBeTruthy();
+    }
+
+    const unplayableTrack = res.body.tracks[0];
+    const guessRes = await request(app)
+      .post(`/rounds/${roundId}/submissions/${unplayableTrack.submissionId}/guesses`)
+      .set('Authorization', `Bearer ${members[0].token}`)
+      .send({ guessedAccountId: members[1].accountId });
+    expect(guessRes.status).toBe(201);
+  });
+
+  it('flags a track as playable in-app for a guesser with a premium-linked account for its service', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${members[1].token}`);
+
+    expect(res.status).toBe(200);
+    for (const track of res.body.tracks) {
+      expect(track.canPlayInApp).toBe(true);
+    }
+  });
+
+  it('flags a spotify track as not playable in-app for a guesser linked on a free account', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const host = await signUp(app, `host-free-${Date.now()}@example.com`);
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Free Tier League',
+        seasonLength: 8,
+        theme: 'One-hit wonders',
+        submissionDeadline: '2030-01-10T00:00:00.000Z',
+        guessingDeadline: '2030-01-17T00:00:00.000Z',
+      });
+    const roundId = created.body.round.id as string;
+    const freeGuesser = await signUp(app, `free-tier-${Date.now()}@example.com`);
+    await linkFakeSpotify(app, spotifyAdapter, freeGuesser.token, 'free');
+    await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${freeGuesser.token}`);
+    const players = [host, freeGuesser];
+    for (let i = 0; i < 2; i++) {
+      const player = await signUp(app, `freeleagueplayer-${i}-${Date.now()}@example.com`);
+      await linkFakeSpotify(app, spotifyAdapter, player.token);
+      await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+      players.push(player);
+    }
+    for (const player of players) {
+      await request(app)
+        .post(`/rounds/${roundId}/submissions`)
+        .set('Authorization', `Bearer ${player.token}`)
+        .send({ externalId: `track-${player.accountId}`, title: `Song by ${player.accountId}`, artist: 'Artist' });
+    }
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${freeGuesser.token}`);
+
+    expect(res.status).toBe(200);
+    for (const track of res.body.tracks) {
+      expect(track.canPlayInApp).toBe(false);
+    }
+  });
+
+  it('flags bandcamp and youtube_music tracks as playable in-app even without a personal link', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const host = await signUp(app, `host-embed-${Date.now()}@example.com`);
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Embed League',
+        seasonLength: 8,
+        theme: 'One-hit wonders',
+        submissionDeadline: '2030-01-10T00:00:00.000Z',
+        guessingDeadline: '2030-01-17T00:00:00.000Z',
+      });
+    const roundId = created.body.round.id as string;
+    const players = [];
+    for (let i = 0; i < 3; i++) {
+      const player = await signUp(app, `embedplayer-${i}-${Date.now()}@example.com`);
+      await linkFakeSpotify(app, spotifyAdapter, player.token);
+      await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+      players.push(player);
+    }
+    await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ service: 'bandcamp', url: FAKE_BANDCAMP_URL });
+    for (const player of players) {
+      await request(app)
+        .post(`/rounds/${roundId}/submissions`)
+        .set('Authorization', `Bearer ${player.token}`)
+        .send({ externalId: `track-${player.accountId}`, title: `Song by ${player.accountId}`, artist: 'Artist' });
+    }
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${players[0].token}`);
+
+    expect(res.status).toBe(200);
+    const bandcampTrack = res.body.tracks.find((t: { service: string }) => t.service === 'bandcamp');
+    expect(bandcampTrack.canPlayInApp).toBe(true);
+  });
 });
 
 describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {

@@ -25,13 +25,18 @@ export async function signUp(app: Express, email: string) {
   return { accountId: res.body.accountId as string, token: res.body.token as string };
 }
 
-export async function linkFakeSpotify(app: Express, spotifyAdapter: FakeMusicServiceAdapter, token: string) {
+export async function linkFakeSpotify(
+  app: Express,
+  spotifyAdapter: FakeMusicServiceAdapter,
+  token: string,
+  product: string = 'premium',
+) {
   const authorize = await request(app)
     .get('/auth/spotify/authorize-url')
     .query({ redirectUri: 'mixtapeparty://spotify-callback' })
     .set('Authorization', `Bearer ${token}`);
   const code = `code-${token}`;
-  spotifyAdapter.validAuthCodes.set(code, { serviceUserId: `spotify-${token}` });
+  spotifyAdapter.validAuthCodes.set(code, { serviceUserId: `spotify-${token}`, product });
   await request(app)
     .post('/auth/spotify/callback')
     .set('Authorization', `Bearer ${token}`)
