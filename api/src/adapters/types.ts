@@ -42,3 +42,12 @@ export interface OAuthLinkableAdapter {
   }): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; scope: string }>;
   getProfile(accessToken: string): Promise<{ serviceUserId: string; email?: string }>;
 }
+
+/**
+ * Music User Token account-linking, implemented by adapters whose service hands the client an
+ * opaque per-user token directly (e.g. Apple Music via MusicKit), with no OAuth code exchange.
+ */
+export interface AppleMusicLinkableAdapter {
+  getDeveloperToken(): Promise<string>;
+  linkMusicUserToken(musicUserToken: string): Promise<{ serviceUserId: string }>;
+}

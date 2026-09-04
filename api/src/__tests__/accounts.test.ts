@@ -22,7 +22,8 @@ function buildApp() {
   return createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
-    spotifyAdapter: new FakeMusicServiceAdapter(),
+    spotifyAdapter: new FakeMusicServiceAdapter('spotify'),
+    appleMusicAdapter: new FakeMusicServiceAdapter('apple_music'),
   });
 }
 

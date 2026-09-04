@@ -1,8 +1,10 @@
 import type {
+  AppleMusicLinkableAdapter,
   MusicServiceAdapter,
   OAuthLinkableAdapter,
   PlaybackLaunchHandle,
   PlaylistRef,
+  ServiceName,
   TrackRef,
   TrackResult,
 } from './types.js';
@@ -11,15 +13,18 @@ import type {
  * In-memory stand-in for a real music-service adapter, used to exercise the
  * backend API (Seam 1) without hitting a real third-party service.
  */
-export class FakeMusicServiceAdapter implements MusicServiceAdapter, OAuthLinkableAdapter {
-  readonly service = 'spotify' as const;
-
+export class FakeMusicServiceAdapter implements MusicServiceAdapter, OAuthLinkableAdapter, AppleMusicLinkableAdapter {
   private nextTrackId = 1;
   private nextPlaylistId = 1;
   readonly playlists = new Map<string, TrackResult[]>();
 
+  constructor(readonly service: ServiceName = 'spotify') {}
+
   /** Test hook: authorization codes this fake will accept, mapped to the profile they resolve to. */
   readonly validAuthCodes = new Map<string, { serviceUserId: string; email?: string }>();
+
+  /** Test hook: Music User Tokens this fake will accept, mapped to the profile they resolve to. */
+  readonly validMusicUserTokens = new Map<string, { serviceUserId: string }>();
 
   async search(query: string): Promise<TrackResult[]> {
     return [
@@ -79,6 +84,16 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter, OAuthLinkab
     const code = accessToken.replace('fake-access-', '');
     const profile = this.validAuthCodes.get(code);
     if (!profile) throw new Error('invalid_token');
+    return profile;
+  }
+
+  async getDeveloperToken(): Promise<string> {
+    return 'fake-developer-token';
+  }
+
+  async linkMusicUserToken(musicUserToken: string): Promise<{ serviceUserId: string }> {
+    const profile = this.validMusicUserTokens.get(musicUserToken);
+    if (!profile) throw new Error('invalid_music_user_token');
     return profile;
   }
 }

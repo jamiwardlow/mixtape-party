@@ -1,12 +1,10 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import type { MusicServiceAdapter } from '../adapters/types.js';
+import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
-export interface GuessingDeps extends AccountsDeps {
-  spotifyAdapter: MusicServiceAdapter;
-}
+export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
 
 const MIN_PLAYERS = 4;
 
@@ -78,7 +76,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const tracks = await Promise.all(
       submissions.rows.map(async (row) => {
-        const playback = await deps.spotifyAdapter.getPlaybackLaunchHandle({
+        const playback = await adapterFor(deps, row.service).getPlaybackLaunchHandle({
           externalId: row.external_id,
           title: row.title,
           artist: row.artist,

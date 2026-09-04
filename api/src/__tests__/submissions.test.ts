@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import { createApp } from '../app.js';
 import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
+import { linkFakeAppleMusic } from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -20,9 +21,10 @@ afterAll(async () => {
 });
 
 function buildApp() {
-  const spotifyAdapter = new FakeMusicServiceAdapter();
-  const app = createApp({ pool: testDb.pool, sessionSecret: 'test-secret', spotifyAdapter });
-  return { app, spotifyAdapter };
+  const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
+  const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
+  const app = createApp({ pool: testDb.pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter });
+  return { app, spotifyAdapter, appleMusicAdapter };
 }
 
 async function signUp(app: Express, email: string) {
@@ -97,6 +99,21 @@ describe('GET /search', () => {
     const host = await signUp(app, 'searcher2@example.com');
     const res = await request(app).get('/search').set('Authorization', `Bearer ${host.token}`);
     expect(res.status).toBe(400);
+  });
+
+  it('searches Apple Music catalog when service=apple_music', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'searcher3@example.com');
+
+    const res = await request(app)
+      .get('/search')
+      .query({ q: 'never gonna give you up', service: 'apple_music' })
+      .set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual([
+      expect.objectContaining({ title: 'never gonna give you up', service: 'apple_music' }),
+    ]);
   });
 });
 
@@ -202,5 +219,22 @@ describe('POST /rounds/:roundId/submissions', () => {
       .send({ ...track, title: 'NO_MATCH' });
 
     expect(res.status).toBe(400);
+  });
+
+  it('a player with both services linked chooses Apple Music for this submission', async () => {
+    const { app, spotifyAdapter, appleMusicAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, spotifyAdapter);
+    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ ...track, service: 'apple_music' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.submissionId).toBeTruthy();
+
+    const row = await testDb.pool.query('SELECT service FROM submissions WHERE id = $1', [res.body.submissionId]);
+    expect(row.rows[0].service).toBe('apple_music');
   });
 });

@@ -1,8 +1,9 @@
 import cors from 'cors';
 import express, { type Express } from 'express';
 import type { Pool } from 'pg';
-import type { MusicServiceAdapter, OAuthLinkableAdapter } from './adapters/types.js';
+import type { AppleMusicLinkableAdapter, MusicServiceAdapter, OAuthLinkableAdapter } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
+import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createLeaguesRouter } from './routes/leagues.js';
 import { createResultsRouter } from './routes/results.js';
@@ -13,6 +14,7 @@ export interface AppDeps {
   pool: Pool;
   sessionSecret: string;
   spotifyAdapter: MusicServiceAdapter & OAuthLinkableAdapter;
+  appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -22,6 +24,7 @@ export function createApp(deps: AppDeps): Express {
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use(createAccountsRouter(deps));
   app.use(createSpotifyAuthRouter(deps));
+  app.use(createAppleMusicAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
   app.use(createSubmissionsRouter(deps));
   app.use(createGuessingRouter(deps));

@@ -1,10 +1,15 @@
 import { Router } from 'express';
-import type { MusicServiceAdapter } from '../adapters/types.js';
+import type { ServiceName } from '../adapters/types.js';
+import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
-export interface SubmissionsDeps extends AccountsDeps {
-  spotifyAdapter: MusicServiceAdapter;
+export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
+
+function parseService(value: unknown): ServiceName | null {
+  if (value === undefined) return 'spotify'; // back-compat default for clients predating Apple Music support
+  if (value === 'spotify' || value === 'apple_music') return value;
+  return null;
 }
 
 export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
@@ -16,14 +21,22 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       res.status(400).json({ error: 'q is required' });
       return;
     }
-    const results = await deps.spotifyAdapter.search(query);
+    const service = parseService(req.query.service);
+    if (!service) {
+      res.status(400).json({ error: 'unsupported service' });
+      return;
+    }
+
+    const results = await adapterFor(deps, service).search(query);
     res.json({ results });
   });
 
   router.post('/rounds/:roundId/submissions', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const { externalId, title, artist, isrc } = req.body ?? {};
+    const service = parseService((req.body ?? {}).service);
     if (
+      !service ||
       typeof externalId !== 'string' ||
       typeof title !== 'string' ||
       typeof artist !== 'string' ||
@@ -49,17 +62,17 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    const matched = await deps.spotifyAdapter.match({ title, artist, isrc: isrc ?? undefined });
+    const matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
     if (!matched) {
-      res.status(400).json({ error: 'track not found in Spotify catalog' });
+      res.status(400).json({ error: 'track not found in catalog' });
       return;
     }
 
     try {
       const submission = await deps.pool.query<{ id: string }>(
         `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc)
-         VALUES ($1, $2, 'spotify', $3, $4, $5, $6) RETURNING id`,
-        [req.params.roundId, accountId, externalId, title, artist, isrc ?? null],
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [req.params.roundId, accountId, service, externalId, title, artist, isrc ?? null],
       );
       res.status(201).json({ submissionId: submission.rows[0].id });
     } catch (err) {

@@ -5,9 +5,10 @@ import { createApp } from '../app.js';
 import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 
 export function buildApp(pool: Pool) {
-  const spotifyAdapter = new FakeMusicServiceAdapter();
-  const app = createApp({ pool, sessionSecret: 'test-secret', spotifyAdapter });
-  return { app, spotifyAdapter };
+  const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
+  const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
+  const app = createApp({ pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter });
+  return { app, spotifyAdapter, appleMusicAdapter };
 }
 
 export async function signUp(app: Express, email: string) {
@@ -26,6 +27,15 @@ export async function linkFakeSpotify(app: Express, spotifyAdapter: FakeMusicSer
     .post('/auth/spotify/callback')
     .set('Authorization', `Bearer ${token}`)
     .send({ code, state: authorize.body.state });
+}
+
+export async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMusicServiceAdapter, token: string) {
+  const musicUserToken = `mut-${token}`;
+  appleMusicAdapter.validMusicUserTokens.set(musicUserToken, { serviceUserId: `apple-music-${token}` });
+  await request(app)
+    .post('/auth/apple-music/callback')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ musicUserToken });
 }
 
 export const round1 = {
