@@ -18,6 +18,7 @@ interface LeagueRow {
 }
 
 interface RoundRow {
+  id: string;
   round_number: number;
   theme: string;
   submission_deadline: string;
@@ -34,6 +35,7 @@ async function findLeagueByInviteCode(pool: Pool, inviteCode: string): Promise<L
 
 function serializeRound(round: RoundRow) {
   return {
+    id: round.id,
     number: round.round_number,
     theme: round.theme,
     submissionDeadline: round.submission_deadline,
@@ -84,7 +86,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
 
       const round = await client.query<RoundRow>(
         `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline)
-         VALUES ($1, 1, $2, $3, $4) RETURNING round_number, theme, submission_deadline, guessing_deadline`,
+         VALUES ($1, 1, $2, $3, $4) RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
         [leagueId, theme.trim(), submissionAt.toISOString(), guessingAt.toISOString()],
       );
 
@@ -121,7 +123,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         league.host_account_id,
       ]),
       deps.pool.query<RoundRow>(
-        'SELECT round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE league_id = $1 ORDER BY round_number DESC LIMIT 1',
+        'SELECT id, round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE league_id = $1 ORDER BY round_number DESC LIMIT 1',
         [league.id],
       ),
       deps.pool.query<{ display_name: string | null }>(

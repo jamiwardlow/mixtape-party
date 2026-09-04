@@ -33,6 +33,7 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter, OAuthLinkab
   }
 
   async match(track: TrackRef): Promise<TrackResult | null> {
+    if (track.title === 'NO_MATCH') return null;
     return {
       externalId: `fake-match-${track.title}`,
       title: track.title,

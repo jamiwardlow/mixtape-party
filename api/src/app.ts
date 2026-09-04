@@ -5,6 +5,7 @@ import type { MusicServiceAdapter, OAuthLinkableAdapter } from './adapters/types
 import { createAccountsRouter } from './routes/accounts.js';
 import { createLeaguesRouter } from './routes/leagues.js';
 import { createSpotifyAuthRouter } from './routes/spotifyAuth.js';
+import { createSubmissionsRouter } from './routes/submissions.js';
 
 export interface AppDeps {
   pool: Pool;
@@ -20,5 +21,6 @@ export function createApp(deps: AppDeps): Express {
   app.use(createAccountsRouter(deps));
   app.use(createSpotifyAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
+  app.use(createSubmissionsRouter(deps));
   return app;
 }
