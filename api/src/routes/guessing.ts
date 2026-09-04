@@ -2,34 +2,13 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { MusicServiceAdapter } from '../adapters/types.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { isLeagueMember, loadRound } from './rounds.js';
 
 export interface GuessingDeps extends AccountsDeps {
   spotifyAdapter: MusicServiceAdapter;
 }
 
 const MIN_PLAYERS = 4;
-
-interface RoundContext {
-  leagueId: string;
-  submissionDeadline: string;
-}
-
-async function loadRoundContext(pool: Pool, roundId: string): Promise<RoundContext | null> {
-  const result = await pool.query<{ league_id: string; submission_deadline: string }>(
-    'SELECT league_id, submission_deadline FROM rounds WHERE id = $1',
-    [roundId],
-  );
-  const round = result.rows[0];
-  return round ? { leagueId: round.league_id, submissionDeadline: round.submission_deadline } : null;
-}
-
-async function isLeagueMember(pool: Pool, leagueId: string, accountId: string): Promise<boolean> {
-  const result = await pool.query('SELECT 1 FROM league_members WHERE league_id = $1 AND account_id = $2', [
-    leagueId,
-    accountId,
-  ]);
-  return (result.rowCount ?? 0) > 0;
-}
 
 async function countLeagueMembers(pool: Pool, leagueId: string): Promise<number> {
   const result = await pool.query('SELECT count(*)::int AS count FROM league_members WHERE league_id = $1', [
@@ -61,7 +40,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
   router.get('/rounds/:roundId/guessing', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const round = await loadRoundContext(deps.pool, req.params.roundId);
+    const round = await loadRound(deps.pool, req.params.roundId);
     if (!round) {
       res.status(404).json({ error: 'round not found' });
       return;
