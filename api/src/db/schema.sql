@@ -64,3 +64,12 @@ CREATE TABLE IF NOT EXISTS submissions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (round_id, account_id)
 );
+
+CREATE TABLE IF NOT EXISTS guesses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  submission_id UUID NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+  guesser_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  guessed_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (submission_id, guesser_account_id)
+);
