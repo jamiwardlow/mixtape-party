@@ -2,9 +2,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../app.js';
-import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
+import { FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
-import { linkFakeAppleMusic } from './testHelpers.js';
+import { linkFakeAppleMusic, linkFakeYouTubeMusic } from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -23,8 +23,15 @@ afterAll(async () => {
 function buildApp() {
   const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
-  const app = createApp({ pool: testDb.pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter });
-  return { app, spotifyAdapter, appleMusicAdapter };
+  const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+  const app = createApp({
+    pool: testDb.pool,
+    sessionSecret: 'test-secret',
+    spotifyAdapter,
+    appleMusicAdapter,
+    youtubeMusicAdapter,
+  });
+  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter };
 }
 
 async function signUp(app: Express, email: string) {
@@ -114,6 +121,34 @@ describe('GET /search', () => {
     expect(res.body.results).toEqual([
       expect.objectContaining({ title: 'never gonna give you up', service: 'apple_music' }),
     ]);
+  });
+
+  it('searches YouTube Music catalog when service=youtube_music', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'searcher4@example.com');
+
+    const res = await request(app)
+      .get('/search')
+      .query({ q: 'never gonna give you up', service: 'youtube_music' })
+      .set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual([
+      expect.objectContaining({ title: 'never gonna give you up', service: 'youtube_music' }),
+    ]);
+  });
+
+  it('surfaces a search-unavailable error instead of crashing when YouTube Music is unreachable', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'searcher5@example.com');
+
+    const res = await request(app)
+      .get('/search')
+      .query({ q: SEARCH_UNAVAILABLE_QUERY, service: 'youtube_music' })
+      .set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('search unavailable');
   });
 });
 
@@ -236,5 +271,22 @@ describe('POST /rounds/:roundId/submissions', () => {
 
     const row = await testDb.pool.query('SELECT service FROM submissions WHERE id = $1', [res.body.submissionId]);
     expect(row.rows[0].service).toBe('apple_music');
+  });
+
+  it('a player with all three services linked chooses YouTube Music for this submission', async () => {
+    const { app, spotifyAdapter, youtubeMusicAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, spotifyAdapter);
+    await linkFakeYouTubeMusic(app, youtubeMusicAdapter, player.token);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ ...track, service: 'youtube_music' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.submissionId).toBeTruthy();
+
+    const row = await testDb.pool.query('SELECT service FROM submissions WHERE id = $1', [res.body.submissionId]);
+    expect(row.rows[0].service).toBe('youtube_music');
   });
 });

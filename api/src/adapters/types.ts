@@ -51,3 +51,28 @@ export interface AppleMusicLinkableAdapter {
   getDeveloperToken(): Promise<string>;
   linkMusicUserToken(musicUserToken: string): Promise<{ serviceUserId: string }>;
 }
+
+/**
+ * Cookie-based account-linking, implemented by adapters whose service has no public
+ * login/OAuth surface at all (e.g. YouTube Music's unofficial API), so the client supplies
+ * a raw browser session cookie captured from a logged-in music.youtube.com session.
+ */
+export interface YouTubeMusicLinkableAdapter {
+  linkCookie(cookie: string): Promise<{ serviceUserId: string }>;
+}
+
+/**
+ * Thrown by an adapter whose underlying API is unauthenticated/unofficial and can go down or
+ * change shape without notice (currently only YouTube Music). Callers must catch this
+ * specifically and surface an explicit "unavailable" state rather than a generic 500.
+ */
+export class ServiceUnavailableError extends Error {
+  constructor(
+    readonly service: ServiceName,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'ServiceUnavailableError';
+  }
+}

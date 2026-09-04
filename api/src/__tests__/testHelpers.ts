@@ -7,8 +7,9 @@ import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 export function buildApp(pool: Pool) {
   const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
-  const app = createApp({ pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter });
-  return { app, spotifyAdapter, appleMusicAdapter };
+  const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+  const app = createApp({ pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter });
+  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter };
 }
 
 export async function signUp(app: Express, email: string) {
@@ -36,6 +37,15 @@ export async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMu
     .post('/auth/apple-music/callback')
     .set('Authorization', `Bearer ${token}`)
     .send({ musicUserToken });
+}
+
+export async function linkFakeYouTubeMusic(app: Express, youtubeMusicAdapter: FakeMusicServiceAdapter, token: string) {
+  const cookie = `cookie-${token}`;
+  youtubeMusicAdapter.validCookies.set(cookie, { serviceUserId: `youtube-music-${token}` });
+  await request(app)
+    .post('/auth/youtube-music/callback')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ cookie });
 }
 
 export const round1 = {

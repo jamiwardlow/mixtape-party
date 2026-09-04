@@ -21,7 +21,14 @@ afterAll(async () => {
 function buildApp() {
   const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
-  const app = createApp({ pool: testDb.pool, sessionSecret: 'test-secret', spotifyAdapter, appleMusicAdapter });
+  const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+  const app = createApp({
+    pool: testDb.pool,
+    sessionSecret: 'test-secret',
+    spotifyAdapter,
+    appleMusicAdapter,
+    youtubeMusicAdapter,
+  });
   return { app, spotifyAdapter };
 }
 

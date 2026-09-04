@@ -12,3 +12,9 @@ runMusicServiceAdapterContractTests(
   () => new FakeMusicServiceAdapter('apple_music'),
   () => 'fake-access-token',
 );
+
+runMusicServiceAdapterContractTests(
+  'fake youtube_music',
+  () => new FakeMusicServiceAdapter('youtube_music'),
+  () => 'fake-access-token',
+);

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { ServiceName } from '../adapters/types.js';
+import { ServiceUnavailableError, type ServiceName } from '../adapters/types.js';
 import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
@@ -8,7 +8,7 @@ export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
 
 function parseService(value: unknown): ServiceName | null {
   if (value === undefined) return 'spotify'; // back-compat default for clients predating Apple Music support
-  if (value === 'spotify' || value === 'apple_music') return value;
+  if (value === 'spotify' || value === 'apple_music' || value === 'youtube_music') return value;
   return null;
 }
 
@@ -27,8 +27,16 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    const results = await adapterFor(deps, service).search(query);
-    res.json({ results });
+    try {
+      const results = await adapterFor(deps, service).search(query);
+      res.json({ results });
+    } catch (err) {
+      if (err instanceof ServiceUnavailableError) {
+        res.status(503).json({ error: 'search unavailable' });
+        return;
+      }
+      throw err;
+    }
   });
 
   router.post('/rounds/:roundId/submissions', requireAuth(deps), async (req, res) => {
@@ -62,7 +70,16 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    const matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
+    let matched;
+    try {
+      matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
+    } catch (err) {
+      if (err instanceof ServiceUnavailableError) {
+        res.status(503).json({ error: 'search unavailable' });
+        return;
+      }
+      throw err;
+    }
     if (!matched) {
       res.status(400).json({ error: 'track not found in catalog' });
       return;

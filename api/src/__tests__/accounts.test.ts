@@ -24,6 +24,7 @@ function buildApp() {
     sessionSecret: 'test-secret',
     spotifyAdapter: new FakeMusicServiceAdapter('spotify'),
     appleMusicAdapter: new FakeMusicServiceAdapter('apple_music'),
+    youtubeMusicAdapter: new FakeMusicServiceAdapter('youtube_music'),
   });
 }
 
