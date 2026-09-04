@@ -36,6 +36,10 @@ interface SessionContextValue {
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  // ponytail: kept in memory only (lost if the app is killed mid sign-up); persist to
+  // SecureStore alongside the session token if that gap turns out to matter.
+  pendingInviteCode: string | null;
+  setPendingInviteCode: (code: string | null) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -44,6 +48,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null);
 
   async function loadProfile(currentToken: string): Promise<void> {
     const res = await fetchApi('/accounts/me', { token: currentToken });
@@ -78,7 +83,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }
 
   return (
-    <SessionContext.Provider value={{ token, profile, isLoading, signIn, signOut, refreshProfile }}>
+    <SessionContext.Provider
+      value={{ token, profile, isLoading, signIn, signOut, refreshProfile, pendingInviteCode, setPendingInviteCode }}
+    >
       {children}
     </SessionContext.Provider>
   );

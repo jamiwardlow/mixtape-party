@@ -1,0 +1,203 @@
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import type { Express } from 'express';
+import { createApp } from '../app.js';
+import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
+import { startTestDb, type TestDb } from './testDb.js';
+
+let testDb: TestDb;
+
+beforeAll(async () => {
+  testDb = await startTestDb();
+}, 60_000);
+
+afterEach(async () => {
+  await testDb.reset();
+});
+
+afterAll(async () => {
+  await testDb.teardown();
+});
+
+function buildApp() {
+  const spotifyAdapter = new FakeMusicServiceAdapter();
+  const app = createApp({ pool: testDb.pool, sessionSecret: 'test-secret', spotifyAdapter });
+  return { app, spotifyAdapter };
+}
+
+async function signUp(app: Express, email: string) {
+  const res = await request(app).post('/accounts').send({ email, password: 'password123' });
+  return { accountId: res.body.accountId as string, token: res.body.token as string };
+}
+
+async function linkFakeSpotify(app: Express, spotifyAdapter: FakeMusicServiceAdapter, token: string) {
+  const authorize = await request(app)
+    .get('/auth/spotify/authorize-url')
+    .query({ redirectUri: 'mixtapeparty://spotify-callback' })
+    .set('Authorization', `Bearer ${token}`);
+  const code = `code-${token}`;
+  spotifyAdapter.validAuthCodes.set(code, { serviceUserId: `spotify-${token}` });
+  await request(app)
+    .post('/auth/spotify/callback')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ code, state: authorize.body.state });
+}
+
+const round1 = {
+  theme: 'One-hit wonders',
+  submissionDeadline: '2026-01-10T00:00:00.000Z',
+  guessingDeadline: '2026-01-17T00:00:00.000Z',
+};
+
+describe('POST /leagues', () => {
+  it('creates a league with its first round and an invite code in one call', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host@example.com');
+
+    const res = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 8, ...round1 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.leagueId).toBeTruthy();
+    expect(res.body.inviteCode).toBeTruthy();
+    expect(res.body.round).toMatchObject({ number: 1, theme: round1.theme });
+  });
+
+  it('rejects requests without a session', async () => {
+    const { app } = buildApp();
+    const res = await request(app).post('/leagues').send({ name: 'Office League', seasonLength: 8, ...round1 });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a missing name or season length', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host2@example.com');
+
+    const res = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ seasonLength: 8, ...round1 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a guessing deadline that is not after the submission deadline', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host3@example.com');
+
+    const res = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Office League',
+        seasonLength: 8,
+        theme: round1.theme,
+        submissionDeadline: '2026-01-17T00:00:00.000Z',
+        guessingDeadline: '2026-01-10T00:00:00.000Z',
+      });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /leagues/invite/:code', () => {
+  it('shows a preview without requiring auth', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host4@example.com');
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 8, ...round1 });
+
+    const res = await request(app).get(`/leagues/invite/${created.body.inviteCode}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.league.name).toBe('Office League');
+    expect(res.body.currentRound.theme).toBe(round1.theme);
+    expect(res.body.playerCount).toBe(1);
+  });
+
+  it('404s for an unknown invite code', async () => {
+    const { app } = buildApp();
+    const res = await request(app).get('/leagues/invite/does-not-exist');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /leagues/invite/:code/join', () => {
+  async function createLeague(app: Express, host: { token: string }) {
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 8, ...round1 });
+    return created.body.inviteCode as string;
+  }
+
+  it('rejects requests without a session', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host5@example.com');
+    const inviteCode = await createLeague(app, host);
+
+    const res = await request(app).post(`/leagues/invite/${inviteCode}/join`);
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects joining without a linked music service', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host6@example.com');
+    const inviteCode = await createLeague(app, host);
+    const player = await signUp(app, 'player@example.com');
+
+    const res = await request(app)
+      .post(`/leagues/invite/${inviteCode}/join`)
+      .set('Authorization', `Bearer ${player.token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('joins immediately once a music service is linked, with no host approval step', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const host = await signUp(app, 'host7@example.com');
+    const inviteCode = await createLeague(app, host);
+    const player = await signUp(app, 'player2@example.com');
+    await linkFakeSpotify(app, spotifyAdapter, player.token);
+
+    const res = await request(app)
+      .post(`/leagues/invite/${inviteCode}/join`)
+      .set('Authorization', `Bearer ${player.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.leagueId).toBeTruthy();
+
+    const preview = await request(app).get(`/leagues/invite/${inviteCode}`);
+    expect(preview.body.playerCount).toBe(2);
+  });
+
+  it('is idempotent when the same player joins twice', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const host = await signUp(app, 'host8@example.com');
+    const inviteCode = await createLeague(app, host);
+    const player = await signUp(app, 'player3@example.com');
+    await linkFakeSpotify(app, spotifyAdapter, player.token);
+
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+
+    const preview = await request(app).get(`/leagues/invite/${inviteCode}`);
+    expect(preview.body.playerCount).toBe(2);
+  });
+
+  it('404s for an unknown invite code', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const player = await signUp(app, 'player4@example.com');
+    await linkFakeSpotify(app, spotifyAdapter, player.token);
+
+    const res = await request(app)
+      .post('/leagues/invite/does-not-exist/join')
+      .set('Authorization', `Bearer ${player.token}`);
+
+    expect(res.status).toBe(404);
+  });
+});

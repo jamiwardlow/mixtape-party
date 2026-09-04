@@ -23,3 +23,31 @@ CREATE TABLE IF NOT EXISTS service_links (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (account_id, service)
 );
+
+CREATE TABLE IF NOT EXISTS leagues (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  season_length INTEGER NOT NULL CHECK (season_length > 0),
+  host_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  invite_code TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS rounds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  round_number INTEGER NOT NULL,
+  theme TEXT NOT NULL,
+  submission_deadline TIMESTAMPTZ NOT NULL,
+  guessing_deadline TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (league_id, round_number)
+);
+
+CREATE TABLE IF NOT EXISTS league_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (league_id, account_id)
+);

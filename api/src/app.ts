@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import type { Pool } from 'pg';
 import type { MusicServiceAdapter, OAuthLinkableAdapter } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
+import { createLeaguesRouter } from './routes/leagues.js';
 import { createSpotifyAuthRouter } from './routes/spotifyAuth.js';
 
 export interface AppDeps {
@@ -18,5 +19,6 @@ export function createApp(deps: AppDeps): Express {
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use(createAccountsRouter(deps));
   app.use(createSpotifyAuthRouter(deps));
+  app.use(createLeaguesRouter(deps));
   return app;
 }
