@@ -2,18 +2,31 @@ import type { Pool } from 'pg';
 
 export interface RoundInfo {
   leagueId: string;
+  roundNumber: number;
+  theme: string;
   submissionDeadline: string;
   guessingDeadline: string;
 }
 
 export async function loadRound(pool: Pool, roundId: string): Promise<RoundInfo | null> {
-  const result = await pool.query<{ league_id: string; submission_deadline: string; guessing_deadline: string }>(
-    'SELECT league_id, submission_deadline, guessing_deadline FROM rounds WHERE id = $1',
-    [roundId],
-  );
+  const result = await pool.query<{
+    league_id: string;
+    round_number: number;
+    theme: string;
+    submission_deadline: string;
+    guessing_deadline: string;
+  }>('SELECT league_id, round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE id = $1', [
+    roundId,
+  ]);
   const round = result.rows[0];
   return round
-    ? { leagueId: round.league_id, submissionDeadline: round.submission_deadline, guessingDeadline: round.guessing_deadline }
+    ? {
+        leagueId: round.league_id,
+        roundNumber: round.round_number,
+        theme: round.theme,
+        submissionDeadline: round.submission_deadline,
+        guessingDeadline: round.guessing_deadline,
+      }
     : null;
 }
 

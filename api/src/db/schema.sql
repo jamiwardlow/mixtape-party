@@ -73,3 +73,31 @@ CREATE TABLE IF NOT EXISTS guesses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (submission_id, guesser_account_id)
 );
+
+-- Global, permanent cross-service match cache (#29): a track is only ever searched for once per
+-- service, keyed by ISRC when known else normalized artist+title. A NULL external_id records a
+-- confirmed no-match so it's never re-searched either.
+CREATE TABLE IF NOT EXISTS track_matches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  match_key TEXT NOT NULL,
+  service TEXT NOT NULL CHECK (service IN ('spotify', 'apple_music', 'youtube_music')),
+  external_id TEXT,
+  title TEXT,
+  artist TEXT,
+  isrc TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (match_key, service)
+);
+
+-- Tracks that a round's cross-service export has already run for a given player+service, so it
+-- runs at most once per round rather than re-matching/re-appending on every request.
+CREATE TABLE IF NOT EXISTS round_exports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  round_id UUID NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  service TEXT NOT NULL CHECK (service IN ('spotify', 'apple_music', 'youtube_music')),
+  playlist_external_id TEXT,
+  matched_submission_ids UUID[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (round_id, account_id, service)
+);

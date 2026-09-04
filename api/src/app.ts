@@ -10,6 +10,7 @@ import type {
 } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
 import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
+import { createExportRouter } from './routes/export.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createLeaguesRouter } from './routes/leagues.js';
 import { createResultsRouter } from './routes/results.js';
@@ -39,5 +40,6 @@ export function createApp(deps: AppDeps): Express {
   app.use(createSubmissionsRouter(deps));
   app.use(createGuessingRouter(deps));
   app.use(createResultsRouter(deps));
+  app.use(createExportRouter(deps));
   return app;
 }

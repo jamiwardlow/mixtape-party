@@ -40,6 +40,9 @@ export class FakeMusicServiceAdapter
   /** Test hook: session cookies this fake will accept, mapped to the profile they resolve to. */
   readonly validCookies = new Map<string, { serviceUserId: string }>();
 
+  /** Test hook: titles that this specific adapter instance (i.e. this one service) will fail to match, to exercise cross-service export fallback. */
+  readonly forcedNoMatchTitles = new Set<string>();
+
   async search(query: string): Promise<TrackResult[]> {
     if (this.service === 'youtube_music' && query === SEARCH_UNAVAILABLE_QUERY) {
       throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable');
@@ -55,7 +58,7 @@ export class FakeMusicServiceAdapter
   }
 
   async match(track: TrackRef): Promise<TrackResult | null> {
-    if (track.title === 'NO_MATCH') return null;
+    if (track.title === 'NO_MATCH' || this.forcedNoMatchTitles.has(track.title)) return null;
     return {
       externalId: `fake-match-${track.title}`,
       title: track.title,
