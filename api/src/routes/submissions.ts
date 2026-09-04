@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { MusicServiceAdapter } from '../adapters/types.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { isLeagueMember, loadRound } from './rounds.js';
 
 export interface SubmissionsDeps extends AccountsDeps {
   spotifyAdapter: MusicServiceAdapter;
@@ -32,25 +33,18 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    const round = await deps.pool.query<{ league_id: string; submission_deadline: string }>(
-      'SELECT league_id, submission_deadline FROM rounds WHERE id = $1',
-      [req.params.roundId],
-    );
-    if (round.rowCount === 0) {
+    const round = await loadRound(deps.pool, req.params.roundId);
+    if (!round) {
       res.status(404).json({ error: 'round not found' });
       return;
     }
 
-    const membership = await deps.pool.query(
-      'SELECT 1 FROM league_members WHERE league_id = $1 AND account_id = $2',
-      [round.rows[0].league_id, accountId],
-    );
-    if (membership.rowCount === 0) {
+    if (!(await isLeagueMember(deps.pool, round.leagueId, accountId))) {
       res.status(403).json({ error: 'join the league before submitting to this round' });
       return;
     }
 
-    if (new Date(round.rows[0].submission_deadline) <= new Date()) {
+    if (new Date(round.submissionDeadline) <= new Date()) {
       res.status(403).json({ error: 'the submission window for this round has closed' });
       return;
     }
