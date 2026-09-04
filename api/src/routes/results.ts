@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadRound } from './rounds.js';
+import { isLeagueMember, loadLatestRound, loadLeague, loadRound } from './rounds.js';
 
 export type ResultsDeps = AccountsDeps;
 
@@ -90,6 +90,58 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const winners = topScore > 0 ? scoreList.filter((s) => s.score === topScore) : [];
 
     res.json({ tracks, scores: scoreList, winners });
+  });
+
+  router.get('/leagues/:leagueId/standings', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const league = await loadLeague(deps.pool, req.params.leagueId);
+    if (!league) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (!(await isLeagueMember(deps.pool, req.params.leagueId, accountId))) {
+      res.status(403).json({ error: 'join the league before viewing final standings' });
+      return;
+    }
+
+    const latest = (await loadLatestRound(deps.pool, req.params.leagueId))!;
+    const concluded = latest.roundNumber >= league.seasonLength && new Date(latest.guessingDeadline) <= new Date();
+    if (!concluded) {
+      res.status(403).json({ error: 'final standings are not available until the season concludes' });
+      return;
+    }
+
+    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null }>(
+      `SELECT a.id AS account_id, a.display_name FROM league_members lm
+       JOIN accounts a ON a.id = lm.account_id
+       WHERE lm.league_id = $1`,
+      [req.params.leagueId],
+    );
+
+    const correctGuessesResult = await deps.pool.query<{ guesser_account_id: string; correct_count: string }>(
+      `SELECT g.guesser_account_id, count(*) AS correct_count
+       FROM guesses g
+       JOIN submissions s ON s.id = g.submission_id
+       JOIN rounds r ON r.id = s.round_id
+       WHERE r.league_id = $1 AND g.guessed_account_id = s.account_id
+       GROUP BY g.guesser_account_id`,
+      [req.params.leagueId],
+    );
+
+    const scores = new Map<string, number>(membersResult.rows.map((row) => [row.account_id, 0]));
+    for (const row of correctGuessesResult.rows) {
+      scores.set(row.guesser_account_id, Number(row.correct_count));
+    }
+
+    const scoreList = membersResult.rows.map((row) => ({
+      accountId: row.account_id,
+      displayName: row.display_name,
+      score: scores.get(row.account_id) ?? 0,
+    }));
+    const topScore = Math.max(0, ...scoreList.map((s) => s.score));
+    const winners = topScore > 0 ? scoreList.filter((s) => s.score === topScore) : [];
+
+    res.json({ scores: scoreList, winners });
   });
 
   return router;

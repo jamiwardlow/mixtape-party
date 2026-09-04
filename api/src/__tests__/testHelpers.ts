@@ -38,13 +38,13 @@ export async function createLeagueWithPlayers(
   app: Express,
   spotifyAdapter: FakeMusicServiceAdapter,
   playerCount: number,
-  roundOverrides: Partial<typeof round1> = {},
+  overrides: Partial<typeof round1 & { seasonLength: number }> = {},
 ) {
   const host = await signUp(app, `host-${Date.now()}-${Math.random()}@example.com`);
   const created = await request(app)
     .post('/leagues')
     .set('Authorization', `Bearer ${host.token}`)
-    .send({ name: 'Office League', seasonLength: 8, ...round1, ...roundOverrides });
+    .send({ name: 'Office League', seasonLength: 8, ...round1, ...overrides });
   const roundId = created.body.round.id as string;
   const inviteCode = created.body.inviteCode as string;
 

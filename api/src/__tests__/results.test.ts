@@ -167,3 +167,63 @@ describe('GET /rounds/:roundId/results', () => {
     expect(res.body.winners).toEqual([]);
   });
 });
+
+describe('GET /leagues/:leagueId/standings', () => {
+  it('404s for an unknown league', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, spotifyAdapter, 4, { seasonLength: 1 });
+
+    const res = await request(app)
+      .get('/leagues/00000000-0000-0000-0000-000000000000/standings')
+      .set('Authorization', `Bearer ${members[0].token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects a requester who has not joined the league', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { leagueId, roundId } = await createLeagueWithPlayers(app, spotifyAdapter, 4, { seasonLength: 1 });
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+    const outsider = await signUp(app, 'standings-outsider@example.com');
+
+    const res = await request(app)
+      .get(`/leagues/${leagueId}/standings`)
+      .set('Authorization', `Bearer ${outsider.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects standings before the season concludes', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4, {
+      seasonLength: 1,
+    });
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .get(`/leagues/${leagueId}/standings`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('aggregates correct guesses across the season once concluded', async () => {
+    const { app, spotifyAdapter } = buildApp();
+    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4, {
+      seasonLength: 1,
+    });
+    await closeSubmissionWindow(roundId);
+
+    const track1 = submissions.find((s) => s.accountId === members[1].accountId)!;
+    await guess(app, roundId, track1.submissionId, members[0].token, members[1].accountId);
+    await closeGuessingWindow(roundId);
+
+    const res = await request(app)
+      .get(`/leagues/${leagueId}/standings`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    expect(res.status).toBe(200);
+    const scoreFor = (accountId: string) =>
+      res.body.scores.find((s: { accountId: string }) => s.accountId === accountId).score;
+    expect(scoreFor(members[0].accountId)).toBe(1);
+    expect(res.body.winners.map((w: { accountId: string }) => w.accountId)).toEqual([members[0].accountId]);
+  });
+});

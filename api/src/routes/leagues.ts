@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { loadLeague, loadLatestRound } from './rounds.js';
 
 export type LeaguesDeps = AccountsDeps;
 
@@ -43,12 +44,30 @@ function serializeRound(round: RoundRow) {
   };
 }
 
+function parseRoundInput(
+  body: unknown,
+): { theme: string; submissionAt: Date; guessingAt: Date } | { error: string } {
+  const { theme, submissionDeadline, guessingDeadline } = (body ?? {}) as Record<string, unknown>;
+  if (typeof theme !== 'string' || theme.trim().length === 0) {
+    return { error: 'theme is required' };
+  }
+  const submissionAt = new Date(submissionDeadline as string);
+  const guessingAt = new Date(guessingDeadline as string);
+  if (Number.isNaN(submissionAt.getTime()) || Number.isNaN(guessingAt.getTime())) {
+    return { error: 'submissionDeadline and guessingDeadline must be valid dates' };
+  }
+  if (guessingAt <= submissionAt) {
+    return { error: 'guessingDeadline must be after submissionDeadline' };
+  }
+  return { theme: theme.trim(), submissionAt, guessingAt };
+}
+
 export function createLeaguesRouter(deps: LeaguesDeps): Router {
   const router = Router();
 
   router.post('/leagues', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const { name, seasonLength, theme, submissionDeadline, guessingDeadline } = req.body ?? {};
+    const { name, seasonLength } = req.body ?? {};
 
     if (typeof name !== 'string' || name.trim().length === 0) {
       res.status(400).json({ error: 'name is required' });
@@ -58,20 +77,12 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(400).json({ error: 'seasonLength must be a positive integer' });
       return;
     }
-    if (typeof theme !== 'string' || theme.trim().length === 0) {
-      res.status(400).json({ error: 'theme is required' });
+    const parsed = parseRoundInput(req.body);
+    if ('error' in parsed) {
+      res.status(400).json({ error: parsed.error });
       return;
     }
-    const submissionAt = new Date(submissionDeadline);
-    const guessingAt = new Date(guessingDeadline);
-    if (Number.isNaN(submissionAt.getTime()) || Number.isNaN(guessingAt.getTime())) {
-      res.status(400).json({ error: 'submissionDeadline and guessingDeadline must be valid dates' });
-      return;
-    }
-    if (guessingAt <= submissionAt) {
-      res.status(400).json({ error: 'guessingDeadline must be after submissionDeadline' });
-      return;
-    }
+    const { theme, submissionAt, guessingAt } = parsed;
 
     const client = await deps.pool.connect();
     try {
@@ -87,7 +98,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const round = await client.query<RoundRow>(
         `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline)
          VALUES ($1, 1, $2, $3, $4) RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
-        [leagueId, theme.trim(), submissionAt.toISOString(), guessingAt.toISOString()],
+        [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString()],
       );
 
       await client.query('INSERT INTO league_members (league_id, account_id) VALUES ($1, $2)', [
@@ -169,6 +180,49 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     );
 
     res.json({ leagueId: league.id });
+  });
+
+  router.post('/leagues/:leagueId/rounds', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const league = await loadLeague(deps.pool, req.params.leagueId);
+    if (!league) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (league.hostAccountId !== accountId) {
+      res.status(403).json({ error: 'only the host can start the next round' });
+      return;
+    }
+
+    const latest = (await loadLatestRound(deps.pool, req.params.leagueId))!;
+    if (new Date(latest.guessingDeadline) > new Date()) {
+      res.status(403).json({ error: 'wait for the current round to be revealed before starting the next round' });
+      return;
+    }
+    if (latest.roundNumber >= league.seasonLength) {
+      res.status(409).json({ error: 'the season has concluded' });
+      return;
+    }
+
+    const parsed = parseRoundInput(req.body);
+    if ('error' in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+
+    const round = await deps.pool.query<RoundRow>(
+      `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
+      [
+        req.params.leagueId,
+        latest.roundNumber + 1,
+        parsed.theme,
+        parsed.submissionAt.toISOString(),
+        parsed.guessingAt.toISOString(),
+      ],
+    );
+
+    res.status(201).json({ round: serializeRound(round.rows[0]) });
   });
 
   return router;
