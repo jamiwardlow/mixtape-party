@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS leagues (
   season_length INTEGER NOT NULL CHECK (season_length > 0),
   host_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   invite_code TEXT NOT NULL UNIQUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  concluded_notified_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS rounds (
@@ -41,6 +42,9 @@ CREATE TABLE IF NOT EXISTS rounds (
   submission_deadline TIMESTAMPTZ NOT NULL,
   guessing_deadline TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  submission_reminder_sent_at TIMESTAMPTZ,
+  guessing_reminder_sent_at TIMESTAMPTZ,
+  results_notified_at TIMESTAMPTZ,
   UNIQUE (league_id, round_number)
 );
 
@@ -100,4 +104,37 @@ CREATE TABLE IF NOT EXISTS round_exports (
   matched_submission_ids UUID[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (round_id, account_id, service)
+);
+
+-- Per-account on/off toggle for each notification delivery channel (#30). No per-league or
+-- per-notification-type granularity; a missing row means both channels default to enabled.
+CREATE TABLE IF NOT EXISTS notification_settings (
+  account_id UUID PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  push_enabled BOOLEAN NOT NULL DEFAULT true,
+  email_enabled BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Device push tokens/subscriptions an account has registered, so a reminder or alert can reach them.
+CREATE TABLE IF NOT EXISTS push_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('expo', 'web')),
+  token TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (account_id, platform, token)
+);
+
+-- In-app notification inbox. Always populated regardless of the push/email toggles above, since
+-- the inbox itself has no channel toggle per #30's acceptance criteria.
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('submission_reminder', 'guessing_reminder', 'results_ready', 'season_concluded')),
+  round_id UUID REFERENCES rounds(id) ON DELETE CASCADE,
+  league_id UUID REFERENCES leagues(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

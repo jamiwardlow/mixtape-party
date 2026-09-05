@@ -3,6 +3,7 @@ import request from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../app.js';
 import { FAKE_BANDCAMP_URL, FakeBandcampAdapter, FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
+import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 import { startTestDb, type TestDb } from './testDb.js';
 import { linkFakeAppleMusic, linkFakeYouTubeMusic } from './testHelpers.js';
 
@@ -32,6 +33,8 @@ function buildApp() {
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter,
+    pushChannel: new FakePushChannel(),
+    emailChannel: new FakeEmailChannel(),
   });
   return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter };
 }

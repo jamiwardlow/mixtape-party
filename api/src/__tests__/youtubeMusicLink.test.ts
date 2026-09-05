@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { FakeBandcampAdapter, FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
+import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 import { startTestDb, type TestDb } from './testDb.js';
 
 let testDb: TestDb;
@@ -29,6 +30,8 @@ function buildApp() {
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter: new FakeBandcampAdapter(),
+    pushChannel: new FakePushChannel(),
+    emailChannel: new FakeEmailChannel(),
   });
   return { app, spotifyAdapter, youtubeMusicAdapter };
 }

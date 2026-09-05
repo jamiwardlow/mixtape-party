@@ -13,10 +13,12 @@ import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
 import { createExportRouter } from './routes/export.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createLeaguesRouter } from './routes/leagues.js';
+import { createNotificationsRouter } from './routes/notifications.js';
 import { createResultsRouter } from './routes/results.js';
 import { createSpotifyAuthRouter } from './routes/spotifyAuth.js';
 import { createSubmissionsRouter } from './routes/submissions.js';
 import { createYouTubeMusicAuthRouter } from './routes/youtubeMusicAuth.js';
+import type { EmailChannel, PushChannel } from './notifications/types.js';
 
 export interface AppDeps {
   pool: Pool;
@@ -25,6 +27,8 @@ export interface AppDeps {
   appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
   youtubeMusicAdapter: MusicServiceAdapter & YouTubeMusicLinkableAdapter;
   bandcampAdapter: EmbedOnlyMusicServiceAdapter;
+  pushChannel: PushChannel;
+  emailChannel: EmailChannel;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -41,5 +45,6 @@ export function createApp(deps: AppDeps): Express {
   app.use(createGuessingRouter(deps));
   app.use(createResultsRouter(deps));
   app.use(createExportRouter(deps));
+  app.use(createNotificationsRouter(deps));
   return app;
 }
