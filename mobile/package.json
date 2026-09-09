@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo-google-fonts/courier-prime": "^0.4.1",
     "@expo-google-fonts/homemade-apple": "^0.4.1",
+    "@lomray/react-native-apple-music": "^1.4.0",
     "expo": "~57.0.20",
     "expo-constants": "~57.0.17",
     "expo-linking": "~57.0.9",
@@ -22,12 +23,13 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "patch-package": "^8.0.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit"
   },
