@@ -219,6 +219,75 @@ describe('POST /leagues/invite/:code/join', () => {
   });
 });
 
+describe('GET /leagues/mine', () => {
+  it('rejects requests without a session', async () => {
+    const { app } = buildApp();
+    const res = await request(app).get('/leagues/mine');
+    expect(res.status).toBe(401);
+  });
+
+  it('lists the caller\'s leagues with the current round phase', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host@example.com');
+    await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Office League',
+        seasonLength: 8,
+        theme: round1.theme,
+        submissionDeadline: '2030-01-10T00:00:00.000Z',
+        guessingDeadline: '2030-01-17T00:00:00.000Z',
+      });
+
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.leagues).toHaveLength(1);
+    expect(res.body.leagues[0]).toMatchObject({
+      name: 'Office League',
+      round: { number: 1, theme: round1.theme, phase: 'submission' },
+    });
+  });
+
+  it('reports guessing and results phases once their deadlines pass', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host2@example.com');
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Guessing League',
+        seasonLength: 8,
+        theme: round1.theme,
+        submissionDeadline: '2000-01-01T00:00:00.000Z',
+        guessingDeadline: '2030-01-17T00:00:00.000Z',
+      });
+
+    const guessingRes = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+    expect(guessingRes.body.leagues[0].round.phase).toBe('guessing');
+
+    await closeGuessingWindow(created.body.round.id);
+    const resultsRes = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+    expect(resultsRes.body.leagues[0].round.phase).toBe('results');
+  });
+
+  it('omits leagues the caller is not a member of', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host3@example.com');
+    await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Other League', seasonLength: 8, ...round1 });
+    const other = await signUp(app, 'mine-other@example.com');
+
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${other.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.leagues).toHaveLength(0);
+  });
+});
+
 describe('POST /leagues/:leagueId/rounds', () => {
   const futureRound1 = {
     theme: 'One-hit wonders',

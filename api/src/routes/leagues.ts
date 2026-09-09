@@ -182,6 +182,51 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     res.json({ leagueId: league.id });
   });
 
+  router.get('/leagues/mine', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const result = await deps.pool.query<{
+      league_id: string;
+      league_name: string;
+      round_id: string | null;
+      round_number: number | null;
+      theme: string | null;
+      submission_deadline: string | null;
+      guessing_deadline: string | null;
+    }>(
+      `SELECT l.id AS league_id, l.name AS league_name,
+              r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline
+       FROM leagues l
+       JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
+       LEFT JOIN LATERAL (
+         SELECT id, round_number, theme, submission_deadline, guessing_deadline
+         FROM rounds WHERE league_id = l.id ORDER BY round_number DESC LIMIT 1
+       ) r ON true
+       ORDER BY l.name`,
+      [accountId],
+    );
+
+    const now = new Date();
+    res.json({
+      leagues: result.rows.map((row) => ({
+        id: row.league_id,
+        name: row.league_name,
+        round: row.round_id
+          ? {
+              id: row.round_id,
+              number: row.round_number,
+              theme: row.theme,
+              phase:
+                now < new Date(row.submission_deadline!)
+                  ? 'submission'
+                  : now < new Date(row.guessing_deadline!)
+                    ? 'guessing'
+                    : 'results',
+            }
+          : null,
+      })),
+    });
+  });
+
   router.post('/leagues/:leagueId/rounds', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const league = await loadLeague(deps.pool, req.params.leagueId);
