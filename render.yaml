@@ -1,0 +1,53 @@
+databases:
+  - name: mixtape-party-db
+    databaseName: mixtape_party
+    user: mixtape_party
+    plan: free
+
+services:
+  - type: web
+    name: mixtape-party-api
+    runtime: node
+    rootDir: api
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run migrate && npm start
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mixtape-party-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PORT
+        value: 3000
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: APPLE_MUSIC_TEAM_ID
+        sync: false
+      - key: APPLE_MUSIC_KEY_ID
+        sync: false
+      - key: APPLE_MUSIC_PRIVATE_KEY
+        sync: false
+      - key: APPLE_MUSIC_STOREFRONT
+        value: us
+      # YouTube Music (api/src/adapters/youtubeMusicAdapter.ts) authenticates with a cookie the
+      # user supplies per-request, not a server-held credential, so there's no YOUTUBE_* var to
+      # set here. Add one if a Google Cloud YouTube Data API key ever replaces that adapter.
+
+  - type: web
+    name: mixtape-party-web
+    runtime: node
+    rootDir: mobile
+    plan: free
+    buildCommand: npm install && npx expo export -p web
+    # ponytail: `expo serve` is Expo's documented local-preview command, not a hardened prod
+    # server — it does not yet satisfy #36's Node/SSR requirement for real traffic. Replace
+    # with a custom Node/Express server on expo-server's adapter
+    # (docs.expo.dev/router/web/server-rendering) before this service takes real traffic.
+    startCommand: npx expo serve
+    envVars:
+      - key: EXPO_PUBLIC_API_URL
+        value: https://mixtape-party-api.onrender.com
