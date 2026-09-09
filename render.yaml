@@ -21,10 +21,6 @@ services:
         generateValue: true
       - key: PORT
         value: 3000
-      - key: SPOTIFY_CLIENT_ID
-        sync: false
-      - key: SPOTIFY_CLIENT_SECRET
-        sync: false
       - key: APPLE_MUSIC_TEAM_ID
         sync: false
       - key: APPLE_MUSIC_KEY_ID

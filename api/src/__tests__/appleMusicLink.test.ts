@@ -20,20 +20,18 @@ afterAll(async () => {
 });
 
 function buildApp() {
-  const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const app = createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
-    spotifyAdapter,
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter: new FakeBandcampAdapter(),
     pushChannel: new FakePushChannel(),
     emailChannel: new FakeEmailChannel(),
   });
-  return { app, spotifyAdapter, appleMusicAdapter };
+  return { app, appleMusicAdapter };
 }
 
 async function signUp(app: import('express').Express) {
@@ -73,30 +71,5 @@ describe('Apple Music account linking', () => {
       .send({ musicUserToken: 'never-issued' });
 
     expect(res.status).toBe(400);
-  });
-
-  it('a player can link both Spotify and Apple Music at once', async () => {
-    const { app, spotifyAdapter, appleMusicAdapter } = buildApp();
-    const { token } = await signUp(app);
-
-    const authorize = await request(app)
-      .get('/auth/spotify/authorize-url')
-      .query({ redirectUri: 'mixtapeparty://spotify-callback' })
-      .set('Authorization', `Bearer ${token}`);
-    spotifyAdapter.validAuthCodes.set('spotify-code', { serviceUserId: 'spotify-user-1' });
-    await request(app)
-      .post('/auth/spotify/callback')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ code: 'spotify-code', state: authorize.body.state });
-
-    appleMusicAdapter.validMusicUserTokens.set('apple-mut', { serviceUserId: 'apple-music-user-1' });
-    await request(app)
-      .post('/auth/apple-music/callback')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ musicUserToken: 'apple-mut' });
-
-    const me = await request(app).get('/accounts/me').set('Authorization', `Bearer ${token}`);
-    expect(me.body.services).toHaveLength(2);
-    expect(me.body.services.map((s: { service: string }) => s.service).sort()).toEqual(['apple_music', 'spotify']);
   });
 });

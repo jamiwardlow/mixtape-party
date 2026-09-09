@@ -7,8 +7,7 @@ import { isLeagueMember, loadRound } from './rounds.js';
 export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
 
 function parseService(value: unknown): ServiceName | null {
-  if (value === undefined) return 'spotify'; // back-compat default for clients predating Apple Music support
-  if (value === 'spotify' || value === 'apple_music' || value === 'youtube_music' || value === 'bandcamp') {
+  if (value === 'apple_music' || value === 'youtube_music' || value === 'bandcamp') {
     return value;
   }
   return null;

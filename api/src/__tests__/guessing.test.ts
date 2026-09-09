@@ -5,7 +5,7 @@ import {
   buildApp as buildTestApp,
   closeSubmissionWindow as closeSubmissionWindowFor,
   createLeagueWithPlayers,
-  linkFakeSpotify,
+  linkFakeAppleMusic,
   signUp,
 } from './testHelpers.js';
 import { FAKE_BANDCAMP_URL } from '../adapters/fakeAdapter.js';
@@ -34,8 +34,8 @@ async function closeSubmissionWindow(roundId: string) {
 
 describe('GET /rounds/:roundId/guessing', () => {
   it('lists every other submitted track, anonymized and tagged with service', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -45,7 +45,7 @@ describe('GET /rounds/:roundId/guessing', () => {
     expect(res.status).toBe(200);
     expect(res.body.tracks).toHaveLength(3);
     for (const track of res.body.tracks) {
-      expect(track.service).toBe('spotify');
+      expect(track.service).toBe('apple_music');
       expect(typeof track.title).toBe('string');
       expect(track.playback.deepLink).toBeTruthy();
       expect(track.accountId).toBeUndefined();
@@ -53,8 +53,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('includes the other league members as guessable players', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -66,8 +66,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('never includes the requester own submission', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const ownSubmissionId = submissions.find((s) => s.accountId === members[0].accountId)?.submissionId;
 
@@ -79,8 +79,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('rejects requests without a session', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app).get(`/rounds/${roundId}/guessing`);
@@ -88,8 +88,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('404s for an unknown round', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
 
     const res = await request(app)
       .get('/rounds/00000000-0000-0000-0000-000000000000/guessing')
@@ -98,8 +98,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('rejects a requester who has not joined the league', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const outsider = await signUp(app, 'outsider@example.com');
 
@@ -110,8 +110,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('rejects guessing before the submission window has closed', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
 
     const res = await request(app)
       .get(`/rounds/${roundId}/guessing`)
@@ -120,8 +120,8 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('rejects guessing when the round has fewer than 4 players', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 3);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 3);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -131,7 +131,7 @@ describe('GET /rounds/:roundId/guessing', () => {
   });
 
   it('flags a bandcamp track as excluded from export and still resolves its playback handle', async () => {
-    const { app, spotifyAdapter } = buildApp();
+    const { app, appleMusicAdapter } = buildApp();
     const host = await signUp(app, `host-${Date.now()}@example.com`);
     const created = await request(app)
       .post('/leagues')
@@ -147,7 +147,7 @@ describe('GET /rounds/:roundId/guessing', () => {
     const players = [];
     for (let i = 0; i < 3; i++) {
       const player = await signUp(app, `bcplayer-${i}-${Date.now()}@example.com`);
-      await linkFakeSpotify(app, spotifyAdapter, player.token);
+      await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
       await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
       players.push(player);
     }
@@ -159,7 +159,12 @@ describe('GET /rounds/:roundId/guessing', () => {
       await request(app)
         .post(`/rounds/${roundId}/submissions`)
         .set('Authorization', `Bearer ${player.token}`)
-        .send({ externalId: `track-${player.accountId}`, title: `Song by ${player.accountId}`, artist: 'Artist' });
+        .send({
+          externalId: `track-${player.accountId}`,
+          title: `Song by ${player.accountId}`,
+          artist: 'Artist',
+          service: 'apple_music',
+        });
     }
     await closeSubmissionWindow(roundId);
 
@@ -171,14 +176,14 @@ describe('GET /rounds/:roundId/guessing', () => {
     const bandcampTrack = res.body.tracks.find((t: { service: string }) => t.service === 'bandcamp');
     expect(bandcampTrack.excludedFromExport).toBe(true);
     expect(bandcampTrack.playback.deepLink).toBeTruthy();
-    const spotifyTrack = res.body.tracks.find((t: { service: string }) => t.service === 'spotify');
-    expect(spotifyTrack.excludedFromExport).toBe(false);
+    const appleMusicTrack = res.body.tracks.find((t: { service: string }) => t.service === 'apple_music');
+    expect(appleMusicTrack.excludedFromExport).toBe(false);
   });
 
   it('flags a track as not playable in-app for a guesser with no link to its service, but still returns a deep link', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    // members[0] (the host) never links Spotify in this fixture.
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    // members[0] (the host) never links Apple Music in this fixture.
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -199,9 +204,9 @@ describe('GET /rounds/:roundId/guessing', () => {
     expect(guessRes.status).toBe(201);
   });
 
-  it('flags a track as playable in-app for a guesser with a premium-linked account for its service', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+  it('flags a track as playable in-app for a guesser with a linked account for its service', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -214,50 +219,8 @@ describe('GET /rounds/:roundId/guessing', () => {
     }
   });
 
-  it('flags a spotify track as not playable in-app for a guesser linked on a free account', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const host = await signUp(app, `host-free-${Date.now()}@example.com`);
-    const created = await request(app)
-      .post('/leagues')
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({
-        name: 'Free Tier League',
-        seasonLength: 8,
-        theme: 'One-hit wonders',
-        submissionDeadline: '2030-01-10T00:00:00.000Z',
-        guessingDeadline: '2030-01-17T00:00:00.000Z',
-      });
-    const roundId = created.body.round.id as string;
-    const freeGuesser = await signUp(app, `free-tier-${Date.now()}@example.com`);
-    await linkFakeSpotify(app, spotifyAdapter, freeGuesser.token, 'free');
-    await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${freeGuesser.token}`);
-    const players = [host, freeGuesser];
-    for (let i = 0; i < 2; i++) {
-      const player = await signUp(app, `freeleagueplayer-${i}-${Date.now()}@example.com`);
-      await linkFakeSpotify(app, spotifyAdapter, player.token);
-      await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
-      players.push(player);
-    }
-    for (const player of players) {
-      await request(app)
-        .post(`/rounds/${roundId}/submissions`)
-        .set('Authorization', `Bearer ${player.token}`)
-        .send({ externalId: `track-${player.accountId}`, title: `Song by ${player.accountId}`, artist: 'Artist' });
-    }
-    await closeSubmissionWindow(roundId);
-
-    const res = await request(app)
-      .get(`/rounds/${roundId}/guessing`)
-      .set('Authorization', `Bearer ${freeGuesser.token}`);
-
-    expect(res.status).toBe(200);
-    for (const track of res.body.tracks) {
-      expect(track.canPlayInApp).toBe(false);
-    }
-  });
-
   it('flags bandcamp and youtube_music tracks as playable in-app even without a personal link', async () => {
-    const { app, spotifyAdapter } = buildApp();
+    const { app, appleMusicAdapter } = buildApp();
     const host = await signUp(app, `host-embed-${Date.now()}@example.com`);
     const created = await request(app)
       .post('/leagues')
@@ -273,7 +236,7 @@ describe('GET /rounds/:roundId/guessing', () => {
     const players = [];
     for (let i = 0; i < 3; i++) {
       const player = await signUp(app, `embedplayer-${i}-${Date.now()}@example.com`);
-      await linkFakeSpotify(app, spotifyAdapter, player.token);
+      await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
       await request(app).post(`/leagues/invite/${created.body.inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
       players.push(player);
     }
@@ -285,7 +248,12 @@ describe('GET /rounds/:roundId/guessing', () => {
       await request(app)
         .post(`/rounds/${roundId}/submissions`)
         .set('Authorization', `Bearer ${player.token}`)
-        .send({ externalId: `track-${player.accountId}`, title: `Song by ${player.accountId}`, artist: 'Artist' });
+        .send({
+          externalId: `track-${player.accountId}`,
+          title: `Song by ${player.accountId}`,
+          artist: 'Artist',
+          service: 'apple_music',
+        });
     }
     await closeSubmissionWindow(roundId);
 
@@ -301,8 +269,8 @@ describe('GET /rounds/:roundId/guessing', () => {
 
 describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   it('records a guess', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
 
@@ -316,8 +284,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('rejects a guesser guessing their own submission', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const own = submissions.find((s) => s.accountId === members[0].accountId)!;
 
@@ -330,8 +298,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('rejects a second guess on the same track by the same guesser', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
 
@@ -348,8 +316,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('rejects requests without a session', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -359,8 +327,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('404s for an unknown submission', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -371,8 +339,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('rejects a missing guessedAccountId', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
 
@@ -384,8 +352,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('rejects a guessedAccountId that is not a member of the league', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
     const outsider = await signUp(app, 'outsider2@example.com');
@@ -398,8 +366,8 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
   });
 
   it('rejects guessing when the round has fewer than 4 players', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 3);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 3);
     await closeSubmissionWindow(roundId);
     const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
 

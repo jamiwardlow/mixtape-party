@@ -40,7 +40,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
 
     const submissionsResult = await deps.pool.query<{
       id: string;
-      service: 'spotify' | 'apple_music' | 'youtube_music' | 'bandcamp';
+      service: 'apple_music' | 'youtube_music' | 'bandcamp';
       title: string;
       artist: string;
       account_id: string;

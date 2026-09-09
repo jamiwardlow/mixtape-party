@@ -12,19 +12,16 @@ const MIN_PLAYERS = 4;
 /**
  * Whether this guesser can play a track on its native service without leaving the app.
  * Bandcamp and YouTube Music play through a public embed that needs no personal account.
- * Spotify additionally requires Premium (App Remote refuses to drive playback otherwise);
  * Apple Music's subscription gate is enforced natively via MusicSubscription.canPlayCatalogContent
  * at actual playback time, so a link is the most this backend can confirm for it.
  */
 async function canPlayInApp(pool: Pool, accountId: string, service: ServiceName): Promise<boolean> {
   if (service === 'bandcamp' || service === 'youtube_music') return true;
-  const link = await pool.query<{ metadata: { product?: string } }>(
-    'SELECT metadata FROM service_links WHERE account_id = $1 AND service = $2',
-    [accountId, service],
-  );
-  const metadata = link.rows[0]?.metadata;
-  if (!metadata) return false;
-  return service === 'spotify' ? metadata.product === 'premium' : true;
+  const link = await pool.query('SELECT 1 FROM service_links WHERE account_id = $1 AND service = $2', [
+    accountId,
+    service,
+  ]);
+  return (link.rowCount ?? 0) > 0;
 }
 
 async function countLeagueMembers(pool: Pool, leagueId: string): Promise<number> {
@@ -78,7 +75,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const submissions = await deps.pool.query<{
       id: string;
-      service: 'spotify' | 'apple_music' | 'youtube_music' | 'bandcamp';
+      service: 'apple_music' | 'youtube_music' | 'bandcamp';
       external_id: string;
       title: string;
       artist: string;

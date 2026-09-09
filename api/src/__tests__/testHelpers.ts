@@ -6,7 +6,6 @@ import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAd
 import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 
 export function buildApp(pool: Pool) {
-  const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const bandcampAdapter = new FakeBandcampAdapter();
@@ -15,37 +14,18 @@ export function buildApp(pool: Pool) {
   const app = createApp({
     pool,
     sessionSecret: 'test-secret',
-    spotifyAdapter,
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter,
     pushChannel,
     emailChannel,
   });
-  return { app, spotifyAdapter, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel };
+  return { app, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel };
 }
 
 export async function signUp(app: Express, email: string) {
   const res = await request(app).post('/accounts').send({ email, password: 'password123' });
   return { accountId: res.body.accountId as string, token: res.body.token as string };
-}
-
-export async function linkFakeSpotify(
-  app: Express,
-  spotifyAdapter: FakeMusicServiceAdapter,
-  token: string,
-  product: string = 'premium',
-) {
-  const authorize = await request(app)
-    .get('/auth/spotify/authorize-url')
-    .query({ redirectUri: 'mixtapeparty://spotify-callback' })
-    .set('Authorization', `Bearer ${token}`);
-  const code = `code-${token}`;
-  spotifyAdapter.validAuthCodes.set(code, { serviceUserId: `spotify-${token}`, product });
-  await request(app)
-    .post('/auth/spotify/callback')
-    .set('Authorization', `Bearer ${token}`)
-    .send({ code, state: authorize.body.state });
 }
 
 export async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMusicServiceAdapter, token: string) {
@@ -74,7 +54,7 @@ export const round1 = {
 
 export async function createLeagueWithPlayers(
   app: Express,
-  spotifyAdapter: FakeMusicServiceAdapter,
+  appleMusicAdapter: FakeMusicServiceAdapter,
   playerCount: number,
   overrides: Partial<typeof round1 & { seasonLength: number }> = {},
 ) {
@@ -89,7 +69,7 @@ export async function createLeagueWithPlayers(
   const members = [host];
   for (let i = 1; i < playerCount; i++) {
     const player = await signUp(app, `player-${i}-${Date.now()}-${Math.random()}@example.com`);
-    await linkFakeSpotify(app, spotifyAdapter, player.token);
+    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
     members.push(player);
   }
@@ -99,7 +79,12 @@ export async function createLeagueWithPlayers(
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
       .set('Authorization', `Bearer ${member.token}`)
-      .send({ externalId: `track-${member.accountId}`, title: `Song by ${member.accountId}`, artist: 'Artist' });
+      .send({
+        externalId: `track-${member.accountId}`,
+        title: `Song by ${member.accountId}`,
+        artist: 'Artist',
+        service: 'apple_music',
+      });
     submissions.push({ accountId: member.accountId, submissionId: res.body.submissionId });
   }
 

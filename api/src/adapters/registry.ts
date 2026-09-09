@@ -1,7 +1,6 @@
 import type { EmbedOnlyMusicServiceAdapter, MusicServiceAdapter, ServiceName } from './types.js';
 
 export interface AdapterRegistry {
-  spotifyAdapter: MusicServiceAdapter;
   appleMusicAdapter: MusicServiceAdapter;
   youtubeMusicAdapter: MusicServiceAdapter;
   bandcampAdapter: EmbedOnlyMusicServiceAdapter;
@@ -13,8 +12,6 @@ export function adapterFor(
   service: Exclude<ServiceName, 'bandcamp'>,
 ): MusicServiceAdapter {
   switch (service) {
-    case 'spotify':
-      return deps.spotifyAdapter;
     case 'apple_music':
       return deps.appleMusicAdapter;
     case 'youtube_music':

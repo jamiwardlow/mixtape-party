@@ -3,7 +3,6 @@ import {
   type AppleMusicLinkableAdapter,
   type EmbedOnlyMusicServiceAdapter,
   type MusicServiceAdapter,
-  type OAuthLinkableAdapter,
   type PlaybackLaunchHandle,
   type PlaylistRef,
   type ServiceName,
@@ -23,16 +22,13 @@ export const SEARCH_UNAVAILABLE_QUERY = 'SEARCH_UNAVAILABLE';
  * backend API (Seam 1) without hitting a real third-party service.
  */
 export class FakeMusicServiceAdapter
-  implements MusicServiceAdapter, OAuthLinkableAdapter, AppleMusicLinkableAdapter, YouTubeMusicLinkableAdapter
+  implements MusicServiceAdapter, AppleMusicLinkableAdapter, YouTubeMusicLinkableAdapter
 {
   private nextTrackId = 1;
   private nextPlaylistId = 1;
   readonly playlists = new Map<string, TrackResult[]>();
 
-  constructor(readonly service: ServiceName = 'spotify') {}
-
-  /** Test hook: authorization codes this fake will accept, mapped to the profile they resolve to. */
-  readonly validAuthCodes = new Map<string, { serviceUserId: string; email?: string; product?: string }>();
+  constructor(readonly service: ServiceName = 'apple_music') {}
 
   /** Test hook: Music User Tokens this fake will accept, mapped to the profile they resolve to. */
   readonly validMusicUserTokens = new Map<string, { serviceUserId: string }>();
@@ -82,29 +78,6 @@ export class FakeMusicServiceAdapter
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `fake://play/${track.externalId}` };
-  }
-
-  getAuthorizeUrl(params: { redirectUri: string; state: string }): string {
-    return `https://fake-spotify.test/authorize?redirect_uri=${encodeURIComponent(params.redirectUri)}&state=${encodeURIComponent(params.state)}`;
-  }
-
-  async exchangeAuthorizationCode(params: { code: string }) {
-    if (!this.validAuthCodes.has(params.code)) {
-      throw new Error('invalid_grant');
-    }
-    return {
-      accessToken: `fake-access-${params.code}`,
-      refreshToken: `fake-refresh-${params.code}`,
-      expiresIn: 3600,
-      scope: 'playlist-modify-private',
-    };
-  }
-
-  async getProfile(accessToken: string) {
-    const code = accessToken.replace('fake-access-', '');
-    const profile = this.validAuthCodes.get(code);
-    if (!profile) throw new Error('invalid_token');
-    return profile;
   }
 
   async getDeveloperToken(): Promise<string> {

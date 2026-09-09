@@ -1,47 +1,25 @@
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 
 export default function Onboarding() {
   const { token, refreshProfile } = useSession();
+  const [cookie, setCookie] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
 
-  async function linkSpotify() {
-    if (!token) return;
+  async function linkYouTubeMusic() {
+    if (!token || cookie.trim().length === 0) return;
     setError(null);
     setLinking(true);
     try {
-      const redirectUri = Linking.createURL('spotify-callback');
-      const authorize = await fetchApi(
-        `/auth/spotify/authorize-url?redirectUri=${encodeURIComponent(redirectUri)}`,
-        { token },
-      );
-      if (!authorize.ok) throw new Error('Could not start Spotify link');
-      const { url } = await authorize.json();
-
-      const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-      if (result.type !== 'success' || !result.url) {
-        setError('Spotify linking was cancelled');
-        return;
-      }
-
-      const { queryParams } = Linking.parse(result.url);
-      const code = queryParams?.code;
-      const state = queryParams?.state;
-      if (typeof code !== 'string' || typeof state !== 'string') {
-        throw new Error('Spotify did not return a valid response');
-      }
-
-      const callback = await fetchApi('/auth/spotify/callback', {
+      const callback = await fetchApi('/auth/youtube-music/callback', {
         method: 'POST',
         token,
-        body: { code, state },
+        body: { cookie: cookie.trim() },
       });
-      if (!callback.ok) throw new Error('Could not finish linking Spotify');
+      if (!callback.ok) throw new Error('Could not link YouTube Music');
 
       await refreshProfile();
     } catch (err) {
@@ -54,9 +32,24 @@ export default function Onboarding() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Link a music service</Text>
-      <Text style={styles.body}>Connect Spotify to start making mixtapes with friends.</Text>
+      <Text style={styles.body}>
+        Paste your YouTube Music session cookie to start making mixtapes with friends.
+      </Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Session cookie"
+        value={cookie}
+        onChangeText={setCookie}
+        autoCapitalize="none"
+        autoCorrect={false}
+        multiline
+      />
       {error && <Text style={styles.error}>{error}</Text>}
-      <Button title={linking ? 'Linking…' : 'Link Spotify'} onPress={linkSpotify} disabled={linking} />
+      <Button
+        title={linking ? 'Linking…' : 'Link YouTube Music'}
+        onPress={linkYouTubeMusic}
+        disabled={linking || cookie.trim().length === 0}
+      />
     </View>
   );
 }
@@ -65,5 +58,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
   title: { fontSize: 24, fontWeight: '600' },
   body: { color: '#555' },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, minHeight: 80 },
   error: { color: 'red' },
 });

@@ -1,4 +1,4 @@
-export type ServiceName = 'spotify' | 'apple_music' | 'youtube_music' | 'bandcamp';
+export type ServiceName = 'apple_music' | 'youtube_music' | 'bandcamp';
 
 export interface TrackRef {
   isrc?: string;
@@ -42,17 +42,6 @@ export interface EmbedOnlyMusicServiceAdapter {
   /** Resolves a pasted track/album URL into a track, or null if the URL isn't a valid/resolvable link. */
   submit(url: string): Promise<TrackResult | null>;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
-}
-
-/** OAuth account-linking, implemented by adapters whose service supports user-scoped linking (e.g. Spotify). */
-export interface OAuthLinkableAdapter {
-  getAuthorizeUrl(params: { codeChallenge: string; redirectUri: string; state: string; scope: string }): string;
-  exchangeAuthorizationCode(params: {
-    code: string;
-    codeVerifier: string;
-    redirectUri: string;
-  }): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; scope: string }>;
-  getProfile(accessToken: string): Promise<{ serviceUserId: string; email?: string; product?: string }>;
 }
 
 /**

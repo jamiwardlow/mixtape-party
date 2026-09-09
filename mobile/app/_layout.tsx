@@ -61,8 +61,6 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* Always reachable: the web OAuth popup lands here in its own window/session state. */}
-      <Stack.Screen name="spotify-callback" />
       {/* Always reachable: an invite link should show its preview before gating on sign-up. */}
       <Stack.Screen name="join/[code]" />
       <Stack.Protected guard={!signedIn}>

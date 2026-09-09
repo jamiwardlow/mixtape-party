@@ -22,20 +22,18 @@ afterAll(async () => {
 });
 
 function buildApp() {
-  const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const app = createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
-    spotifyAdapter,
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter: new FakeBandcampAdapter(),
     pushChannel: new FakePushChannel(),
     emailChannel: new FakeEmailChannel(),
   });
-  return { app, spotifyAdapter };
+  return { app, appleMusicAdapter };
 }
 
 async function closeGuessingWindow(roundId: string) {
@@ -47,17 +45,13 @@ async function signUp(app: Express, email: string) {
   return { accountId: res.body.accountId as string, token: res.body.token as string };
 }
 
-async function linkFakeSpotify(app: Express, spotifyAdapter: FakeMusicServiceAdapter, token: string) {
-  const authorize = await request(app)
-    .get('/auth/spotify/authorize-url')
-    .query({ redirectUri: 'mixtapeparty://spotify-callback' })
-    .set('Authorization', `Bearer ${token}`);
-  const code = `code-${token}`;
-  spotifyAdapter.validAuthCodes.set(code, { serviceUserId: `spotify-${token}` });
+async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMusicServiceAdapter, token: string) {
+  const musicUserToken = `mut-${token}`;
+  appleMusicAdapter.validMusicUserTokens.set(musicUserToken, { serviceUserId: `apple-music-${token}` });
   await request(app)
-    .post('/auth/spotify/callback')
+    .post('/auth/apple-music/callback')
     .set('Authorization', `Bearer ${token}`)
-    .send({ code, state: authorize.body.state });
+    .send({ musicUserToken });
 }
 
 const round1 = {
@@ -175,11 +169,11 @@ describe('POST /leagues/invite/:code/join', () => {
   });
 
   it('joins immediately once a music service is linked, with no host approval step', async () => {
-    const { app, spotifyAdapter } = buildApp();
+    const { app, appleMusicAdapter } = buildApp();
     const host = await signUp(app, 'host7@example.com');
     const inviteCode = await createLeague(app, host);
     const player = await signUp(app, 'player2@example.com');
-    await linkFakeSpotify(app, spotifyAdapter, player.token);
+    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     const res = await request(app)
       .post(`/leagues/invite/${inviteCode}/join`)
@@ -193,11 +187,11 @@ describe('POST /leagues/invite/:code/join', () => {
   });
 
   it('is idempotent when the same player joins twice', async () => {
-    const { app, spotifyAdapter } = buildApp();
+    const { app, appleMusicAdapter } = buildApp();
     const host = await signUp(app, 'host8@example.com');
     const inviteCode = await createLeague(app, host);
     const player = await signUp(app, 'player3@example.com');
-    await linkFakeSpotify(app, spotifyAdapter, player.token);
+    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
@@ -207,9 +201,9 @@ describe('POST /leagues/invite/:code/join', () => {
   });
 
   it('404s for an unknown invite code', async () => {
-    const { app, spotifyAdapter } = buildApp();
+    const { app, appleMusicAdapter } = buildApp();
     const player = await signUp(app, 'player4@example.com');
-    await linkFakeSpotify(app, spotifyAdapter, player.token);
+    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     const res = await request(app)
       .post('/leagues/invite/does-not-exist/join')
@@ -329,11 +323,11 @@ describe('POST /leagues/:leagueId/rounds', () => {
   });
 
   it('rejects a non-host member', async () => {
-    const { app, spotifyAdapter } = buildApp();
+    const { app, appleMusicAdapter } = buildApp();
     const host = await signUp(app, 'rounds-host3@example.com');
     const { leagueId } = await createLeague(app, host);
     const player = await signUp(app, 'rounds-player3@example.com');
-    await linkFakeSpotify(app, spotifyAdapter, player.token);
+    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     const res = await request(app)
       .post(`/leagues/${leagueId}/rounds`)

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE TABLE IF NOT EXISTS service_links (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  service TEXT NOT NULL CHECK (service IN ('spotify', 'apple_music', 'youtube_music', 'bandcamp')),
+  service TEXT NOT NULL CHECK (service IN ('apple_music', 'youtube_music', 'bandcamp')),
   service_user_id TEXT NOT NULL,
   -- ponytail: tokens stored plaintext, relying on the managed Postgres provider's at-rest encryption.
   -- Upgrade to app-level column encryption if that guarantee isn't sufficient before storing real user tokens.
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id UUID NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  service TEXT NOT NULL CHECK (service IN ('spotify', 'apple_music', 'youtube_music', 'bandcamp')),
+  service TEXT NOT NULL CHECK (service IN ('apple_music', 'youtube_music', 'bandcamp')),
   external_id TEXT NOT NULL,
   title TEXT NOT NULL,
   artist TEXT NOT NULL,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS guesses (
 CREATE TABLE IF NOT EXISTS track_matches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   match_key TEXT NOT NULL,
-  service TEXT NOT NULL CHECK (service IN ('spotify', 'apple_music', 'youtube_music')),
+  service TEXT NOT NULL CHECK (service IN ('apple_music', 'youtube_music')),
   external_id TEXT,
   title TEXT,
   artist TEXT,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS round_exports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id UUID NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  service TEXT NOT NULL CHECK (service IN ('spotify', 'apple_music', 'youtube_music')),
+  service TEXT NOT NULL CHECK (service IN ('apple_music', 'youtube_music')),
   playlist_external_id TEXT,
   matched_submission_ids UUID[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

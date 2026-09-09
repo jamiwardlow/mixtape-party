@@ -20,20 +20,18 @@ afterAll(async () => {
 });
 
 function buildApp() {
-  const spotifyAdapter = new FakeMusicServiceAdapter('spotify');
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const app = createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
-    spotifyAdapter,
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter: new FakeBandcampAdapter(),
     pushChannel: new FakePushChannel(),
     emailChannel: new FakeEmailChannel(),
   });
-  return { app, spotifyAdapter, youtubeMusicAdapter };
+  return { app, youtubeMusicAdapter };
 }
 
 async function signUp(app: import('express').Express) {
@@ -90,30 +88,5 @@ describe('YouTube Music account linking', () => {
 
     expect(res.status).toBe(503);
     expect(res.body.error).toBe('search unavailable');
-  });
-
-  it('a player can link Spotify, Apple Music, and YouTube Music all at once', async () => {
-    const { app, spotifyAdapter, youtubeMusicAdapter } = buildApp();
-    const { token } = await signUp(app);
-
-    const authorize = await request(app)
-      .get('/auth/spotify/authorize-url')
-      .query({ redirectUri: 'mixtapeparty://spotify-callback' })
-      .set('Authorization', `Bearer ${token}`);
-    spotifyAdapter.validAuthCodes.set('spotify-code', { serviceUserId: 'spotify-user-1' });
-    await request(app)
-      .post('/auth/spotify/callback')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ code: 'spotify-code', state: authorize.body.state });
-
-    youtubeMusicAdapter.validCookies.set('ytm-cookie', { serviceUserId: 'youtube-music-user-1' });
-    await request(app)
-      .post('/auth/youtube-music/callback')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ cookie: 'ytm-cookie' });
-
-    const me = await request(app).get('/accounts/me').set('Authorization', `Bearer ${token}`);
-    expect(me.body.services).toHaveLength(2);
-    expect(me.body.services.map((s: { service: string }) => s.service).sort()).toEqual(['spotify', 'youtube_music']);
   });
 });

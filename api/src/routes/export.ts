@@ -8,7 +8,7 @@ import { isLeagueMember, loadRound } from './rounds.js';
 export interface ExportDeps extends AccountsDeps, AdapterRegistry {}
 
 type ExportableService = Exclude<ServiceName, 'bandcamp'>;
-const EXPORTABLE_SERVICES: ExportableService[] = ['spotify', 'apple_music', 'youtube_music'];
+const EXPORTABLE_SERVICES: ExportableService[] = ['apple_music', 'youtube_music'];
 
 interface SubmissionRow {
   id: string;
