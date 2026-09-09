@@ -28,6 +28,9 @@ export async function resolveMatch(pool: Pool, adapter: MusicServiceAdapter, tra
   try {
     result = await adapter.match(track);
   } catch (err) {
+    // ponytail: callers (export.ts) can't tell this "unavailable, try again later" null apart from a
+    // genuine no-match — both land in the same skipped-with-fallback bucket for this export attempt.
+    // Add a `reason` field to the resolved result if callers ever need to surface that distinction.
     if (err instanceof ServiceUnavailableError) return null;
     throw err;
   }
