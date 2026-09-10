@@ -14,7 +14,7 @@ interface InvitePreview {
 
 export default function JoinLeague() {
   const { code } = useLocalSearchParams<{ code: string }>();
-  const { token, profile, setPendingInviteCode } = useSession();
+  const { token, setPendingInviteCode } = useSession();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -31,7 +31,7 @@ export default function JoinLeague() {
     })();
   }, [code]);
 
-  const canJoin = token !== null && profile?.onboarded === true;
+  const canJoin = token !== null;
 
   async function join() {
     if (!token) return;
@@ -51,7 +51,7 @@ export default function JoinLeague() {
 
   function continueToJoin() {
     setPendingInviteCode(code);
-    router.push(token ? '/onboarding' : '/sign-in');
+    router.push('/sign-in');
   }
 
   if (joined) {
@@ -86,7 +86,7 @@ export default function JoinLeague() {
       {canJoin ? (
         <Button title={joining ? 'Joining…' : 'Join league'} onPress={join} disabled={joining} />
       ) : (
-        <Button title={token ? 'Link a music service to join' : 'Sign up to join'} onPress={continueToJoin} />
+        <Button title="Sign up to join" onPress={continueToJoin} />
       )}
     </View>
   );

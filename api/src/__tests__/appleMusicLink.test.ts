@@ -55,7 +55,6 @@ describe('Apple Music account linking', () => {
     expect(callback.body).toMatchObject({ linked: true, service: 'apple_music', serviceUserId: 'apple-music-user-1' });
 
     const me = await request(app).get('/accounts/me').set('Authorization', `Bearer ${token}`);
-    expect(me.body.onboarded).toBe(true);
     expect(me.body.services).toEqual([
       expect.objectContaining({ service: 'apple_music', serviceUserId: 'apple-music-user-1' }),
     ]);

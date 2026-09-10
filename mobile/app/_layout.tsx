@@ -52,12 +52,11 @@ export default function RootLayout() {
 }
 
 function RootNavigator() {
-  const { token, profile, isLoading } = useSession();
+  const { token, isLoading } = useSession();
 
   if (isLoading) return null;
 
   const signedIn = token !== null;
-  const onboarded = profile?.onboarded === true;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -66,10 +65,7 @@ function RootNavigator() {
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
-      <Stack.Protected guard={signedIn && !onboarded}>
-        <Stack.Screen name="onboarding" />
-      </Stack.Protected>
-      <Stack.Protected guard={signedIn && onboarded}>
+      <Stack.Protected guard={signedIn}>
         <Stack.Screen name="home" />
         <Stack.Screen name="create-league" />
         <Stack.Screen name="round/[roundId]/submit" />

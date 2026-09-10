@@ -96,7 +96,6 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
         serviceUserId: row.service_user_id,
         linkedAt: row.created_at,
       })),
-      onboarded: linksResult.rows.length > 0,
     });
   });
 
