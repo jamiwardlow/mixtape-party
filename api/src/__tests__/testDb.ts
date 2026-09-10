@@ -1,9 +1,6 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import EmbeddedPostgres from 'embedded-postgres';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { migrate } from '../db/migrate.js';
+import { startEmbeddedPg } from './embeddedPg.js';
 
 export interface TestDb {
   pool: Pool;
@@ -12,26 +9,7 @@ export interface TestDb {
 }
 
 export async function startTestDb(): Promise<TestDb> {
-  const dataDir = mkdtempSync(path.join(tmpdir(), 'mixtape-party-pg-'));
-  const port = 40000 + Math.floor(Math.random() * 10000);
-  const pg = new EmbeddedPostgres({
-    databaseDir: dataDir,
-    user: 'postgres',
-    password: 'postgres',
-    port,
-    persistent: false,
-  });
-  await pg.initialise();
-  await pg.start();
-  await pg.createDatabase('mixtape_party_test');
-
-  const pool = new Pool({
-    host: 'localhost',
-    port,
-    user: 'postgres',
-    password: 'postgres',
-    database: 'mixtape_party_test',
-  });
+  const { pool, teardown } = await startEmbeddedPg('mixtape_party_test');
   await migrate(pool);
 
   return {
@@ -41,10 +19,6 @@ export async function startTestDb(): Promise<TestDb> {
         'TRUNCATE auth_tokens, notifications, push_tokens, notification_settings, guesses, submissions, league_members, rounds, leagues, service_links, accounts RESTART IDENTITY CASCADE',
       );
     },
-    async teardown() {
-      await pool.end();
-      await pg.stop();
-      rmSync(dataDir, { recursive: true, force: true });
-    },
+    teardown,
   };
 }
