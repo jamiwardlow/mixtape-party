@@ -38,7 +38,7 @@ export async function startTestDb(): Promise<TestDb> {
     pool,
     async reset() {
       await pool.query(
-        'TRUNCATE notifications, push_tokens, notification_settings, guesses, submissions, league_members, rounds, leagues, service_links, accounts RESTART IDENTITY CASCADE',
+        'TRUNCATE auth_tokens, notifications, push_tokens, notification_settings, guesses, submissions, league_members, rounds, leagues, service_links, accounts RESTART IDENTITY CASCADE',
       );
     },
     async teardown() {
