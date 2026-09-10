@@ -30,7 +30,8 @@ export async function issueAuthToken(
      VALUES ($1, $2, $3, now() + make_interval(secs => $4))`,
     [hashToken(token), accountId, purpose, ttlMs / 1000],
   );
-  // Opportunistic sweep so the table doesn't grow forever. No cron needed.
+  // ponytail: opportunistic sweep on the write path so the table doesn't grow forever — costs every
+  // issue an extra round trip. Move it into runNotificationSweep's interval if that shows up.
   await pool.query("DELETE FROM auth_tokens WHERE expires_at < now() - interval '1 day'");
   return token;
 }
