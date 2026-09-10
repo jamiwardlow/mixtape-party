@@ -27,7 +27,9 @@ interface SongRun {
   text: string;
 }
 interface MusicResponsiveListItemRenderer {
-  videoId?: string;
+  // Not a top-level `videoId`: YouTube Music moved it under playlistItemData. A renderer without
+  // one is a non-track row (an album or artist shelf entry), which search drops.
+  playlistItemData?: { videoId: string };
   flexColumns: Array<{ musicResponsiveListItemFlexColumnRenderer: { text: { runs: SongRun[] } } }>;
 }
 interface SearchResponseShape {
@@ -107,9 +109,11 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
     const items = sections.flatMap((section) => section.musicShelfRenderer?.contents ?? []);
     return items
       .map((item) => item.musicResponsiveListItemRenderer)
-      .filter((renderer): renderer is MusicResponsiveListItemRenderer & { videoId: string } => Boolean(renderer.videoId))
+      .filter((renderer): renderer is MusicResponsiveListItemRenderer & { playlistItemData: { videoId: string } } =>
+        Boolean(renderer.playlistItemData?.videoId),
+      )
       .map((renderer) => ({
-        externalId: renderer.videoId,
+        externalId: renderer.playlistItemData.videoId,
         title: renderer.flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer.text.runs[0]?.text ?? '',
         artist: renderer.flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer.text.runs[0]?.text ?? '',
         service: this.service,
