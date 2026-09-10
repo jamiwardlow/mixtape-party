@@ -3,10 +3,16 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   display_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Repeat-safe fixes for accounts tables created before #46. A magic-link or Google user never
+-- sets a password, so password_hash is nullable; google_sub is a column rather than an
+-- identities table because there is exactly one provider and an account has at most one login.
+ALTER TABLE accounts ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;
 
 CREATE TABLE IF NOT EXISTS service_links (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -138,3 +144,15 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Single-use, hashed tokens backing password reset, magic-link sign-in and the Google handoff
+-- (#46). Only the sha256 of the token is stored, so a database dump is not a pile of usable links.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  token_hash TEXT PRIMARY KEY,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL CHECK (purpose IN ('password_reset', 'sign_in')),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_tokens_account_created_idx ON auth_tokens (account_id, created_at);
