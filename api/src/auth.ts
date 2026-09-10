@@ -28,8 +28,11 @@ function signPayload<T extends object>(payload: T, secret: string, ttlMs: number
 function verifyPayload<T>(token: string, secret: string): T | null {
   const [encoded, signature] = token.split('.');
   if (!encoded || !signature) return null;
-  const expected = createHmac('sha256', secret).update(encoded).digest('base64url');
-  if (expected.length !== signature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {
+  const expected = Buffer.from(createHmac('sha256', secret).update(encoded).digest('base64url'));
+  const actual = Buffer.from(signature);
+  // Byte lengths, not string lengths: a multi-byte character makes these differ, and
+  // timingSafeEqual throws RangeError rather than returning false on a length mismatch.
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
     return null;
   }
   const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as T & { exp: number };

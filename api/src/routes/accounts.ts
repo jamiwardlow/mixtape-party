@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import type { Pool } from 'pg';
 import { hashPassword, signSessionToken, verifyPassword, verifySessionToken } from '../auth.js';
 
@@ -11,7 +11,10 @@ export interface AuthedRequest extends Request {
   accountId: string;
 }
 
-export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret'>) {
+// Params typed as plain strings, not Express 5's default `string | string[]` (which exists only for
+// wildcard routes, of which this app has none). Left at the default, this guard would widen
+// req.params to `string | string[]` on every route it protects.
+export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret'>): RequestHandler<Record<string, string>> {
   return (req: Request, res: Response, next: NextFunction) => {
     const header = req.header('authorization');
     const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
@@ -59,12 +62,12 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
       res.status(400).json({ error: 'email and password are required' });
       return;
     }
-    const result = await deps.pool.query<{ id: string; password_hash: string }>(
+    const result = await deps.pool.query<{ id: string; password_hash: string | null }>(
       'SELECT id, password_hash FROM accounts WHERE email = $1',
       [email.toLowerCase()],
     );
     const account = result.rows[0];
-    if (!account || !verifyPassword(password, account.password_hash)) {
+    if (!account?.password_hash || !verifyPassword(password, account.password_hash)) {
       res.status(401).json({ error: 'invalid email or password' });
       return;
     }
