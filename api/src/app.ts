@@ -1,5 +1,5 @@
 import cors from 'cors';
-import express, { type Express } from 'express';
+import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import type { Pool } from 'pg';
 import type {
   AppleMusicLinkableAdapter,
@@ -41,5 +41,11 @@ export function createApp(deps: AppDeps): Express {
   app.use(createResultsRouter(deps));
   app.use(createExportRouter(deps));
   app.use(createNotificationsRouter(deps));
+  // Must be last and 4-arity for Express to treat it as error middleware. Express 5 routes
+  // rejected handler promises here, so a rejection is a 500 rather than a dead process.
+  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    console.error(err);
+    res.status(500).json({ error: 'internal' });
+  });
   return app;
 }
