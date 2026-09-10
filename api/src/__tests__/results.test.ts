@@ -45,8 +45,8 @@ async function guess(app: Express, roundId: string, submissionId: string, token:
 
 describe('GET /rounds/:roundId/results', () => {
   it('404s for an unknown round', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
 
     const res = await request(app)
       .get('/rounds/00000000-0000-0000-0000-000000000000/results')
@@ -55,8 +55,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('rejects requests without a session', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
@@ -65,8 +65,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('rejects a requester who has not joined the league', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
     const outsider = await signUp(app, 'outsider@example.com');
@@ -78,8 +78,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('rejects results before the guessing deadline passes', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await request(app)
@@ -89,8 +89,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('reveals every track with its true submitter and who guessed correctly', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const target = submissions.find((s) => s.accountId === members[1].accountId)!;
@@ -110,8 +110,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('scores guessers per correct guess and does not score submitters for being guessed correctly', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     // members[0] correctly guesses members[1]'s and members[2]'s tracks.
@@ -133,8 +133,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('shares the win on exact score ties with no tiebreaker', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
 
     const track2 = submissions.find((s) => s.accountId === members[2].accountId)!;
@@ -153,8 +153,8 @@ describe('GET /rounds/:roundId/results', () => {
   });
 
   it('declares no winners when nobody guessed correctly', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4);
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
@@ -170,8 +170,8 @@ describe('GET /rounds/:roundId/results', () => {
 
 describe('GET /leagues/:leagueId/standings', () => {
   it('404s for an unknown league', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { members } = await createLeagueWithPlayers(app, spotifyAdapter, 4, { seasonLength: 1 });
+    const { app, appleMusicAdapter } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4, { seasonLength: 1 });
 
     const res = await request(app)
       .get('/leagues/00000000-0000-0000-0000-000000000000/standings')
@@ -180,8 +180,8 @@ describe('GET /leagues/:leagueId/standings', () => {
   });
 
   it('rejects a requester who has not joined the league', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { leagueId, roundId } = await createLeagueWithPlayers(app, spotifyAdapter, 4, { seasonLength: 1 });
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4, { seasonLength: 1 });
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
     const outsider = await signUp(app, 'standings-outsider@example.com');
@@ -193,8 +193,8 @@ describe('GET /leagues/:leagueId/standings', () => {
   });
 
   it('rejects standings before the season concludes', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, spotifyAdapter, 4, {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4, {
       seasonLength: 1,
     });
     await closeSubmissionWindow(roundId);
@@ -206,8 +206,8 @@ describe('GET /leagues/:leagueId/standings', () => {
   });
 
   it('aggregates correct guesses across the season once concluded', async () => {
-    const { app, spotifyAdapter } = buildApp();
-    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, spotifyAdapter, 4, {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4, {
       seasonLength: 1,
     });
     await closeSubmissionWindow(roundId);

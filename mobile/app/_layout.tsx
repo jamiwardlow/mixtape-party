@@ -52,26 +52,20 @@ export default function RootLayout() {
 }
 
 function RootNavigator() {
-  const { token, profile, isLoading } = useSession();
+  const { token, isLoading } = useSession();
 
   if (isLoading) return null;
 
   const signedIn = token !== null;
-  const onboarded = profile?.onboarded === true;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* Always reachable: the web OAuth popup lands here in its own window/session state. */}
-      <Stack.Screen name="spotify-callback" />
       {/* Always reachable: an invite link should show its preview before gating on sign-up. */}
       <Stack.Screen name="join/[code]" />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
-      <Stack.Protected guard={signedIn && !onboarded}>
-        <Stack.Screen name="onboarding" />
-      </Stack.Protected>
-      <Stack.Protected guard={signedIn && onboarded}>
+      <Stack.Protected guard={signedIn}>
         <Stack.Screen name="home" />
         <Stack.Screen name="create-league" />
         <Stack.Screen name="round/[roundId]/submit" />

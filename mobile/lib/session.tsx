@@ -26,7 +26,6 @@ async function setStoredToken(value: string | null): Promise<void> {
 export interface Profile {
   id: string;
   email: string;
-  onboarded: boolean;
 }
 
 interface SessionContextValue {

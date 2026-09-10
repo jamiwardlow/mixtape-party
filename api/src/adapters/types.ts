@@ -1,4 +1,4 @@
-export type ServiceName = 'spotify' | 'apple_music' | 'youtube_music' | 'bandcamp';
+export type ServiceName = 'apple_music' | 'youtube_music' | 'bandcamp';
 
 export interface TrackRef {
   isrc?: string;
@@ -44,17 +44,6 @@ export interface EmbedOnlyMusicServiceAdapter {
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
 }
 
-/** OAuth account-linking, implemented by adapters whose service supports user-scoped linking (e.g. Spotify). */
-export interface OAuthLinkableAdapter {
-  getAuthorizeUrl(params: { codeChallenge: string; redirectUri: string; state: string; scope: string }): string;
-  exchangeAuthorizationCode(params: {
-    code: string;
-    codeVerifier: string;
-    redirectUri: string;
-  }): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; scope: string }>;
-  getProfile(accessToken: string): Promise<{ serviceUserId: string; email?: string; product?: string }>;
-}
-
 /**
  * Music User Token account-linking, implemented by adapters whose service hands the client an
  * opaque per-user token directly (e.g. Apple Music via MusicKit), with no OAuth code exchange.
@@ -62,15 +51,6 @@ export interface OAuthLinkableAdapter {
 export interface AppleMusicLinkableAdapter {
   getDeveloperToken(): Promise<string>;
   linkMusicUserToken(musicUserToken: string): Promise<{ serviceUserId: string }>;
-}
-
-/**
- * Cookie-based account-linking, implemented by adapters whose service has no public
- * login/OAuth surface at all (e.g. YouTube Music's unofficial API), so the client supplies
- * a raw browser session cookie captured from a logged-in music.youtube.com session.
- */
-export interface YouTubeMusicLinkableAdapter {
-  linkCookie(cookie: string): Promise<{ serviceUserId: string }>;
 }
 
 /**

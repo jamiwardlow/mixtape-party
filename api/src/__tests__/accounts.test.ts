@@ -23,7 +23,6 @@ function buildApp() {
   return createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
-    spotifyAdapter: new FakeMusicServiceAdapter('spotify'),
     appleMusicAdapter: new FakeMusicServiceAdapter('apple_music'),
     youtubeMusicAdapter: new FakeMusicServiceAdapter('youtube_music'),
     bandcampAdapter: new FakeBandcampAdapter(),
@@ -79,8 +78,8 @@ describe('POST /sessions', () => {
   });
 });
 
-describe('GET /accounts/me — onboarding gate', () => {
-  it('reports onboarded: false for a new account with zero linked services', async () => {
+describe('GET /accounts/me', () => {
+  it('reports an empty services list for a new account with zero linked services', async () => {
     const app = buildApp();
     const signup = await request(app).post('/accounts').send({ email: 'fresh@example.com', password: 'password123' });
 
@@ -88,7 +87,6 @@ describe('GET /accounts/me — onboarding gate', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.services).toEqual([]);
-    expect(res.body.onboarded).toBe(false);
   });
 
   it('rejects requests without a valid session token', async () => {

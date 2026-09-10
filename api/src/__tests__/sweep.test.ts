@@ -55,7 +55,7 @@ async function createRound(
 async function submit(roundId: string, accountId: string) {
   await testDb.pool.query(
     `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist)
-     VALUES ($1, $2, 'spotify', 'x', 'Song', 'Artist')`,
+     VALUES ($1, $2, 'apple_music', 'x', 'Song', 'Artist')`,
     [roundId, accountId],
   );
 }
@@ -134,7 +134,7 @@ describe('runNotificationSweep', () => {
     );
     const hostSub = await testDb.pool.query<{ id: string }>(
       `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist)
-       VALUES ($1, $2, 'spotify', 'x', 'Song', 'Artist') RETURNING id`,
+       VALUES ($1, $2, 'apple_music', 'x', 'Song', 'Artist') RETURNING id`,
       [roundId, host],
     );
     await testDb.pool.query(

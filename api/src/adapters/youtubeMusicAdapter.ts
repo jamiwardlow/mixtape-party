@@ -6,7 +6,6 @@ import {
   type PlaylistRef,
   type TrackRef,
   type TrackResult,
-  type YouTubeMusicLinkableAdapter,
 } from './types.js';
 
 const ORIGIN = 'https://music.youtube.com';
@@ -59,7 +58,7 @@ interface SearchResponseShape {
  * {@link ServiceUnavailableError} rather than letting a silent upstream change produce garbage
  * results or a hung request.
  */
-export class YouTubeMusicAdapter implements MusicServiceAdapter, YouTubeMusicLinkableAdapter {
+export class YouTubeMusicAdapter implements MusicServiceAdapter {
   readonly service = 'youtube_music' as const;
 
   private async post(endpoint: string, body: Record<string, unknown>, cookie?: string): Promise<unknown> {
@@ -93,15 +92,6 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter, YouTubeMusicLin
     }
   }
 
-  async linkCookie(cookie: string): Promise<{ serviceUserId: string }> {
-    // Confirms the cookie actually authenticates before we store it, same as a health check.
-    await this.post('account/account_menu', {}, cookie);
-    // ponytail: the unofficial API exposes no stable per-user id endpoint; hash the session's
-    // SAPISID like the Apple Music adapter hashes its Music User Token. Upgrade if that changes.
-    const sapisid = cookie.match(/(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)/)?.[1] ?? cookie;
-    return { serviceUserId: createHash('sha256').update(sapisid).digest('hex').slice(0, 32) };
-  }
-
   async search(query: string): Promise<TrackResult[]> {
     const body = (await this.post('search', {
       query,
@@ -132,7 +122,9 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter, YouTubeMusicLin
   }
 
   async createPlaylist(accessToken: string, name: string): Promise<PlaylistRef> {
-    const body = (await this.post('playlist/create', { title: name, privacyStatus: 'PRIVATE' }, accessToken)) as {
+    // UNLISTED, not PRIVATE: this playlist is built under one shared, server-held account (see
+    // createPlaylist's accessToken) and shared to arbitrary listeners via its watch link.
+    const body = (await this.post('playlist/create', { title: name, privacyStatus: 'UNLISTED' }, accessToken)) as {
       playlistId: string;
     };
     return { externalId: body.playlistId, service: this.service };
