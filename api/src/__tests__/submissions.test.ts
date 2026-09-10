@@ -5,7 +5,7 @@ import { createApp } from '../app.js';
 import { FAKE_BANDCAMP_URL, FakeBandcampAdapter, FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
 import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 import { startTestDb, type TestDb } from './testDb.js';
-import { linkFakeAppleMusic, linkFakeYouTubeMusic } from './testHelpers.js';
+import { linkFakeAppleMusic } from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -275,10 +275,9 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect(row.rows[0].service).toBe('apple_music');
   });
 
-  it('a player with both Apple Music and YouTube Music linked chooses YouTube Music for this submission', async () => {
-    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
+  it('a player chooses YouTube Music for this submission', async () => {
+    const { app, appleMusicAdapter } = buildApp();
     const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
-    await linkFakeYouTubeMusic(app, youtubeMusicAdapter, player.token);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)

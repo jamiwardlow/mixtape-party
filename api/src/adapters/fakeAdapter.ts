@@ -8,7 +8,6 @@ import {
   type ServiceName,
   type TrackRef,
   type TrackResult,
-  type YouTubeMusicLinkableAdapter,
 } from './types.js';
 
 /** A pasted URL this fake resolves successfully, for exercising the Bandcamp submit-by-URL flow in tests. */
@@ -21,9 +20,7 @@ export const SEARCH_UNAVAILABLE_QUERY = 'SEARCH_UNAVAILABLE';
  * In-memory stand-in for a real music-service adapter, used to exercise the
  * backend API (Seam 1) without hitting a real third-party service.
  */
-export class FakeMusicServiceAdapter
-  implements MusicServiceAdapter, AppleMusicLinkableAdapter, YouTubeMusicLinkableAdapter
-{
+export class FakeMusicServiceAdapter implements MusicServiceAdapter, AppleMusicLinkableAdapter {
   private nextTrackId = 1;
   private nextPlaylistId = 1;
   readonly playlists = new Map<string, TrackResult[]>();
@@ -32,9 +29,6 @@ export class FakeMusicServiceAdapter
 
   /** Test hook: Music User Tokens this fake will accept, mapped to the profile they resolve to. */
   readonly validMusicUserTokens = new Map<string, { serviceUserId: string }>();
-
-  /** Test hook: session cookies this fake will accept, mapped to the profile they resolve to. */
-  readonly validCookies = new Map<string, { serviceUserId: string }>();
 
   /** Test hook: titles that this specific adapter instance (i.e. this one service) will fail to match, to exercise cross-service export fallback. */
   readonly forcedNoMatchTitles = new Set<string>();
@@ -87,15 +81,6 @@ export class FakeMusicServiceAdapter
   async linkMusicUserToken(musicUserToken: string): Promise<{ serviceUserId: string }> {
     const profile = this.validMusicUserTokens.get(musicUserToken);
     if (!profile) throw new Error('invalid_music_user_token');
-    return profile;
-  }
-
-  async linkCookie(cookie: string): Promise<{ serviceUserId: string }> {
-    if (cookie === SEARCH_UNAVAILABLE_QUERY) {
-      throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable');
-    }
-    const profile = this.validCookies.get(cookie);
-    if (!profile) throw new Error('invalid_cookie');
     return profile;
   }
 }

@@ -8,7 +8,6 @@ import {
   closeSubmissionWindow as closeSubmissionWindowFor,
   createLeagueWithPlayers,
   linkFakeAppleMusic,
-  linkFakeYouTubeMusic,
   round1,
   signUp,
 } from './testHelpers.js';
@@ -28,8 +27,8 @@ afterAll(async () => {
   await testDb.teardown();
 });
 
-function buildApp() {
-  return buildTestApp(testDb.pool);
+function buildApp(options?: { youtubeMusicCookie?: string }) {
+  return buildTestApp(testDb.pool, options);
 }
 
 async function closeSubmissionWindow(roundId: string) {
@@ -73,11 +72,10 @@ describe('POST /rounds/:roundId/export', () => {
     expect(res.status).toBe(403);
   });
 
-  it('builds a playlist on every service the player has linked, matching every non-bandcamp submission', async () => {
-    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
+  it('builds a playlist on apple_music (per-user linked) and youtube_music (shared server-held account), matching every non-bandcamp submission', async () => {
+    const { app, appleMusicAdapter } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
-    await linkFakeYouTubeMusic(app, youtubeMusicAdapter, members[0].token);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
@@ -95,6 +93,21 @@ describe('POST /rounds/:roundId/export', () => {
     expect(appleMusicExport.skipped).toEqual([]);
     expect(appleMusicExport.playlistExternalId).toBeTruthy();
     expect(appleMusicAdapter.playlists.get(appleMusicExport.playlistExternalId)).toHaveLength(4);
+  });
+
+  it('excludes youtube_music from export when no server-held cookie is configured', async () => {
+    const { app, appleMusicAdapter } = buildApp({ youtubeMusicCookie: '' });
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const services = res.body.services.map((s: { service: string }) => s.service);
+    expect(services).toContain('apple_music');
+    expect(services).not.toContain('youtube_music');
   });
 
   it('never includes a bandcamp submission in an exported playlist', async () => {

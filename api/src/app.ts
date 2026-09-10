@@ -5,7 +5,6 @@ import type {
   AppleMusicLinkableAdapter,
   EmbedOnlyMusicServiceAdapter,
   MusicServiceAdapter,
-  YouTubeMusicLinkableAdapter,
 } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
 import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
@@ -15,14 +14,15 @@ import { createLeaguesRouter } from './routes/leagues.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createResultsRouter } from './routes/results.js';
 import { createSubmissionsRouter } from './routes/submissions.js';
-import { createYouTubeMusicAuthRouter } from './routes/youtubeMusicAuth.js';
 import type { EmailChannel, PushChannel } from './notifications/types.js';
 
 export interface AppDeps {
   pool: Pool;
   sessionSecret: string;
   appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
-  youtubeMusicAdapter: MusicServiceAdapter & YouTubeMusicLinkableAdapter;
+  youtubeMusicAdapter: MusicServiceAdapter;
+  // App-owned music.youtube.com session cookie shared by all users' exports — see youtubeMusicAdapter.ts.
+  youtubeMusicCookie?: string;
   bandcampAdapter: EmbedOnlyMusicServiceAdapter;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
@@ -35,7 +35,6 @@ export function createApp(deps: AppDeps): Express {
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use(createAccountsRouter(deps));
   app.use(createAppleMusicAuthRouter(deps));
-  app.use(createYouTubeMusicAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
   app.use(createSubmissionsRouter(deps));
   app.use(createGuessingRouter(deps));

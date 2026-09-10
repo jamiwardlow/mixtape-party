@@ -29,9 +29,10 @@ services:
         sync: false
       - key: APPLE_MUSIC_STOREFRONT
         value: us
-      # YouTube Music (api/src/adapters/youtubeMusicAdapter.ts) authenticates with a cookie the
-      # user supplies per-request, not a server-held credential, so there's no YOUTUBE_* var to
-      # set here. Add one if a Google Cloud YouTube Data API key ever replaces that adapter.
+      # Session cookie for one app-owned music.youtube.com account, shared across all users'
+      # exports (see api/src/adapters/youtubeMusicAdapter.ts).
+      - key: YOUTUBE_MUSIC_COOKIE
+        sync: false
 
   - type: web
     name: mixtape-party-web

@@ -5,7 +5,7 @@ import { createApp } from '../app.js';
 import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 
-export function buildApp(pool: Pool) {
+export function buildApp(pool: Pool, { youtubeMusicCookie = 'fake-youtube-music-cookie' }: { youtubeMusicCookie?: string } = {}) {
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const bandcampAdapter = new FakeBandcampAdapter();
@@ -16,6 +16,7 @@ export function buildApp(pool: Pool) {
     sessionSecret: 'test-secret',
     appleMusicAdapter,
     youtubeMusicAdapter,
+    youtubeMusicCookie,
     bandcampAdapter,
     pushChannel,
     emailChannel,
@@ -35,15 +36,6 @@ export async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMu
     .post('/auth/apple-music/callback')
     .set('Authorization', `Bearer ${token}`)
     .send({ musicUserToken });
-}
-
-export async function linkFakeYouTubeMusic(app: Express, youtubeMusicAdapter: FakeMusicServiceAdapter, token: string) {
-  const cookie = `cookie-${token}`;
-  youtubeMusicAdapter.validCookies.set(cookie, { serviceUserId: `youtube-music-${token}` });
-  await request(app)
-    .post('/auth/youtube-music/callback')
-    .set('Authorization', `Bearer ${token}`)
-    .send({ cookie });
 }
 
 export const round1 = {

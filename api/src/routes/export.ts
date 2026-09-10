@@ -5,7 +5,9 @@ import type { PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
-export interface ExportDeps extends AccountsDeps, AdapterRegistry {}
+export interface ExportDeps extends AccountsDeps, AdapterRegistry {
+  youtubeMusicCookie?: string;
+}
 
 type ExportableService = Exclude<ServiceName, 'bandcamp'>;
 const EXPORTABLE_SERVICES: ExportableService[] = ['apple_music', 'youtube_music'];
@@ -134,10 +136,16 @@ export function createExportRouter(deps: ExportDeps): Router {
     );
 
     const linksResult = await deps.pool.query<{ service: ExportableService; access_token: string }>(
-      'SELECT service, access_token FROM service_links WHERE account_id = $1 AND service = ANY($2)',
-      [accountId, EXPORTABLE_SERVICES],
+      'SELECT service, access_token FROM service_links WHERE account_id = $1 AND service = $2',
+      [accountId, 'apple_music'],
     );
-    const accessTokenByService = new Map(linksResult.rows.map((row) => [row.service, row.access_token]));
+    const accessTokenByService = new Map<ExportableService, string>(
+      linksResult.rows.map((row) => [row.service, row.access_token]),
+    );
+    // youtube_music has no per-user link: every export uses the one server-held account cookie.
+    if (deps.youtubeMusicCookie) {
+      accessTokenByService.set('youtube_music', deps.youtubeMusicCookie);
+    }
 
     const playlistName = `Mixtape Party — Round ${round.roundNumber}: ${round.theme}`;
     const services = await Promise.all(

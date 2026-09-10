@@ -27,6 +27,7 @@ const app = createApp({
   sessionSecret,
   appleMusicAdapter,
   youtubeMusicAdapter,
+  youtubeMusicCookie: process.env.YOUTUBE_MUSIC_COOKIE,
   bandcampAdapter,
   pushChannel,
   emailChannel,
