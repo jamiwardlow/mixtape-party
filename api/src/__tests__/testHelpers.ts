@@ -4,17 +4,45 @@ import type { Pool } from 'pg';
 import { createApp } from '../app.js';
 import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
+import type { GoogleProfile } from '../routes/googleAuth.js';
 
-export function buildApp(pool: Pool, { youtubeMusicCookie = 'fake-youtube-music-cookie' }: { youtubeMusicCookie?: string } = {}) {
+/** In-memory stand-in for Google's token endpoint: hand it a code, get back the profile it maps to. */
+export class FakeGoogleTokenExchange {
+  private readonly profiles = new Map<string, GoogleProfile>();
+
+  /** Registers an authorization code. Verified and nameless unless the test says otherwise. */
+  issue(code: string, profile: Pick<GoogleProfile, 'sub' | 'email'> & Partial<GoogleProfile>): void {
+    this.profiles.set(code, { emailVerified: true, name: null, ...profile });
+  }
+
+  exchange = async (code: string): Promise<GoogleProfile> => {
+    const profile = this.profiles.get(code);
+    if (!profile) throw new Error(`no fake google profile registered for code ${code}`);
+    return profile;
+  };
+}
+
+export function buildApp(
+  pool: Pool,
+  {
+    youtubeMusicCookie = 'fake-youtube-music-cookie',
+    googleConfigured = true,
+  }: { youtubeMusicCookie?: string; googleConfigured?: boolean } = {},
+) {
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const bandcampAdapter = new FakeBandcampAdapter();
   const pushChannel = new FakePushChannel();
   const emailChannel = new FakeEmailChannel();
+  const googleTokenExchange = new FakeGoogleTokenExchange();
   const app = createApp({
     pool,
     sessionSecret: 'test-secret',
     appBaseUrl: 'https://app.test',
+    // Left genuinely undefined when opted out, matching an unset env var rather than a blank one.
+    googleClientId: googleConfigured ? 'test-google-client-id' : undefined,
+    googleRedirectUri: googleConfigured ? 'https://api.test/auth/google/callback' : undefined,
+    googleTokenExchange: googleTokenExchange.exchange,
     appleMusicAdapter,
     youtubeMusicAdapter,
     youtubeMusicCookie,
@@ -22,7 +50,7 @@ export function buildApp(pool: Pool, { youtubeMusicCookie = 'fake-youtube-music-
     pushChannel,
     emailChannel,
   });
-  return { app, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel };
+  return { app, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange };
 }
 
 export async function signUp(app: Express, email: string) {

@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { createGoogleTokenExchange } from './routes/googleAuth.js';
 import { createPool } from './db/pool.js';
 import { AppleMusicAdapter } from './adapters/appleMusicAdapter.js';
 import { YouTubeMusicAdapter } from './adapters/youtubeMusicAdapter.js';
@@ -20,6 +21,20 @@ const appleMusicAdapter = new AppleMusicAdapter({
   storefront: process.env.APPLE_MUSIC_STOREFRONT,
 });
 
+// Google sign-in is optional, so a missing variable disables it rather than throwing. All three
+// or nothing, decided here: a half-configured client would still redirect users to Google and only
+// fail at the callback, where the secret is finally needed. The redirect URI comes from config so
+// a forged Host header can never send an authorization code somewhere else.
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && googleClientSecret && process.env.GOOGLE_REDIRECT_URI);
+const googleClientId = googleConfigured ? process.env.GOOGLE_CLIENT_ID : undefined;
+const googleRedirectUri = googleConfigured ? process.env.GOOGLE_REDIRECT_URI : undefined;
+const googleTokenExchange = createGoogleTokenExchange({
+  clientId: googleClientId ?? '',
+  clientSecret: googleClientSecret ?? '',
+  redirectUri: googleRedirectUri ?? '',
+});
+
 const youtubeMusicAdapter = new YouTubeMusicAdapter();
 const bandcampAdapter = new BandcampAdapter();
 const pushChannel = new ExpoWebPushChannel();
@@ -34,6 +49,9 @@ const app = createApp({
   pool,
   sessionSecret,
   appBaseUrl,
+  googleClientId,
+  googleRedirectUri,
+  googleTokenExchange,
   appleMusicAdapter,
   youtubeMusicAdapter,
   youtubeMusicCookie: process.env.YOUTUBE_MUSIC_COOKIE,

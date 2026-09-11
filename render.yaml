@@ -38,8 +38,18 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
-      # The mixtape-party-web URL — emailed reset/sign-in links point at the client, not the API.
+      # The mixtape-party-web URL — emailed reset/sign-in links and the Google sign-in handoff
+      # point at the client, not the API.
       - key: APP_BASE_URL
+        sync: false
+      # Google OAuth client. GOOGLE_REDIRECT_URI is this API's own callback and must match an
+      # authorised redirect URI on the client exactly; it is never derived from the Host header.
+      # Unset, Google sign-in is simply off rather than broken.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
         sync: false
 
   - type: web

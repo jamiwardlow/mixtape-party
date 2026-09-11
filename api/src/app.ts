@@ -10,6 +10,7 @@ import { createAccountsRouter } from './routes/accounts.js';
 import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createExportRouter } from './routes/export.js';
+import { createGoogleAuthRouter, type GoogleProfile } from './routes/googleAuth.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createLeaguesRouter } from './routes/leagues.js';
 import { createNotificationsRouter } from './routes/notifications.js';
@@ -22,6 +23,12 @@ export interface AppDeps {
   sessionSecret: string;
   /** Origin of the web client, where emailed password-reset and sign-in links land. */
   appBaseUrl: string;
+  /** Google OAuth client id and the redirect URI registered against it. Unset leaves the routes
+   *  inert: /auth/google/start answers 503 rather than sending users to a malformed Google URL. */
+  googleClientId?: string;
+  googleRedirectUri?: string;
+  /** Injected so the callback — the most security-sensitive route here — is testable without Google. */
+  googleTokenExchange: (code: string) => Promise<GoogleProfile>;
   appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
   youtubeMusicAdapter: MusicServiceAdapter;
   // App-owned music.youtube.com session cookie shared by all users' exports — see youtubeMusicAdapter.ts.
@@ -38,6 +45,7 @@ export function createApp(deps: AppDeps): Express {
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use(createAccountsRouter(deps));
   app.use(createAuthRouter(deps));
+  app.use(createGoogleAuthRouter(deps));
   app.use(createAppleMusicAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
   app.use(createSubmissionsRouter(deps));
