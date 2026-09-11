@@ -8,6 +8,7 @@ import type {
 } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
 import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
+import { createAuthRouter } from './routes/auth.js';
 import { createExportRouter } from './routes/export.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createLeaguesRouter } from './routes/leagues.js';
@@ -19,6 +20,8 @@ import type { EmailChannel, PushChannel } from './notifications/types.js';
 export interface AppDeps {
   pool: Pool;
   sessionSecret: string;
+  /** Origin of the web client, where emailed password-reset and sign-in links land. */
+  appBaseUrl: string;
   appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
   youtubeMusicAdapter: MusicServiceAdapter;
   // App-owned music.youtube.com session cookie shared by all users' exports — see youtubeMusicAdapter.ts.
@@ -34,6 +37,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(express.json());
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use(createAccountsRouter(deps));
+  app.use(createAuthRouter(deps));
   app.use(createAppleMusicAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
   app.use(createSubmissionsRouter(deps));

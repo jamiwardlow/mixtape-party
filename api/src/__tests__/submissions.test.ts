@@ -28,6 +28,7 @@ function buildApp() {
   const app = createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
+    appBaseUrl: 'https://app.test',
     appleMusicAdapter,
     youtubeMusicAdapter,
     bandcampAdapter,

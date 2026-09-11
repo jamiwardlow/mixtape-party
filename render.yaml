@@ -33,6 +33,14 @@ services:
       # exports (see api/src/adapters/youtubeMusicAdapter.ts).
       - key: YOUTUBE_MUSIC_COOKIE
         sync: false
+      # Resend API key and verified from-address; without them the API sends no mail at all.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # The mixtape-party-web URL — emailed reset/sign-in links point at the client, not the API.
+      - key: APP_BASE_URL
+        sync: false
 
   - type: web
     name: mixtape-party-web

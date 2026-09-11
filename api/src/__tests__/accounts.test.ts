@@ -23,6 +23,7 @@ function buildApp() {
   return createApp({
     pool: testDb.pool,
     sessionSecret: 'test-secret',
+    appBaseUrl: 'https://app.test',
     appleMusicAdapter: new FakeMusicServiceAdapter('apple_music'),
     youtubeMusicAdapter: new FakeMusicServiceAdapter('youtube_music'),
     bandcampAdapter: new FakeBandcampAdapter(),

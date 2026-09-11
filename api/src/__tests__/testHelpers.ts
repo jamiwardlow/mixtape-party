@@ -14,6 +14,7 @@ export function buildApp(pool: Pool, { youtubeMusicCookie = 'fake-youtube-music-
   const app = createApp({
     pool,
     sessionSecret: 'test-secret',
+    appBaseUrl: 'https://app.test',
     appleMusicAdapter,
     youtubeMusicAdapter,
     youtubeMusicCookie,
@@ -90,3 +91,15 @@ export async function closeSubmissionWindow(pool: Pool, roundId: string) {
 export async function closeGuessingWindow(pool: Pool, roundId: string) {
   await pool.query("UPDATE rounds SET guessing_deadline = '2000-01-01T00:00:00Z' WHERE id = $1", [roundId]);
 }
+
+function tokenFrom(body: string, pattern: RegExp): string {
+  const match = pattern.exec(body);
+  if (!match) throw new Error(`no token matching ${pattern} in emailed body: ${body}`);
+  return match[1];
+}
+
+/** Reset links carry the token as a query param... */
+export const resetTokenFrom = (body: string) => tokenFrom(body, /\?token=([A-Za-z0-9_-]+)/);
+/** ...and sign-in links as a fragment, never a query param — see #49. Kept strict so a link that
+ *  switched form fails the test rather than quietly passing. */
+export const signInTokenFrom = (body: string) => tokenFrom(body, /#t=([A-Za-z0-9_-]+)/);

@@ -53,3 +53,29 @@ export async function consumeAuthToken(
   );
   return rows[0]?.account_id ?? null;
 }
+
+export const PER_ACCOUNT_TOKEN_LIMIT = 3;
+export const PER_ACCOUNT_TOKEN_WINDOW_MINUTES = 15;
+// Resend's free tier is 100 emails/day, and the per-account limit does nothing against someone
+// spraying 10,000 distinct addresses. Without this cap an attacker exhausts the quota and every
+// legitimate password reset silently stops arriving.
+export const GLOBAL_DAILY_TOKEN_LIMIT = 90;
+
+/**
+ * True when another token for this account would exceed the per-account or global cap.
+ * Counted in SQL against `auth_tokens`, never in memory — Render can run more than one instance,
+ * and an in-memory counter silently multiplies the limit by the instance count.
+ */
+export async function isAuthTokenRateLimited(pool: Pool, accountId: string): Promise<boolean> {
+  const { rows } = await pool.query<{ limited: boolean }>(
+    `SELECT
+       (SELECT count(*) FROM auth_tokens
+         WHERE account_id = $1 AND used_at IS NULL AND expires_at > now()
+           AND created_at > now() - make_interval(mins => $2)) >= $3
+       OR
+       (SELECT count(*) FROM auth_tokens WHERE created_at > now() - interval '1 day') >= $4
+       AS limited`,
+    [accountId, PER_ACCOUNT_TOKEN_WINDOW_MINUTES, PER_ACCOUNT_TOKEN_LIMIT, GLOBAL_DAILY_TOKEN_LIMIT],
+  );
+  return rows[0].limited;
+}
