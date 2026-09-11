@@ -15,6 +15,9 @@ export function runMusicServiceAdapterContractTests(
       const adapter = makeAdapter();
       const results = await adapter.search('test query');
       expect(Array.isArray(results)).toBe(true);
+      // A response-shape change shows up as an empty array, not an error (#54): every result gets
+      // filtered out and nothing throws. An empty result for a common query is the drift signal.
+      expect(results.length).toBeGreaterThan(0);
       for (const result of results) {
         expect(result.service).toBe(adapter.service);
         expect(typeof result.externalId).toBe('string');
@@ -28,6 +31,10 @@ export function runMusicServiceAdapterContractTests(
       const accessToken = await makeAccessToken();
       const playlist = await adapter.createPlaylist(accessToken, `contract-test-${Date.now()}`);
       expect(playlist.service).toBe(adapter.service);
+      // `service` is hardcoded by the adapter, so it proves nothing about the response. The id is
+      // the only field that comes from upstream: a rejected credential or a renamed field that
+      // still answers 200 leaves it undefined, and the drift would otherwise pass unnoticed.
+      expect(typeof playlist.externalId).toBe('string');
       const [track] = await adapter.search('test query');
       await expect(adapter.appendToPlaylist(accessToken, playlist, [track])).resolves.not.toThrow();
     });

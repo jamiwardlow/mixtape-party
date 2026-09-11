@@ -1,0 +1,64 @@
+# Runs the YouTube Music integration contract test against the real innertube API on a schedule,
+# so a response-shape change (like #54, which silently made search return []) or an expired
+# YOUTUBE_MUSIC_COOKIE fails loudly instead of going unnoticed in production.
+#
+# Requires one repo secret: YOUTUBE_MUSIC_COOKIE — the same app-account cookie the API runs on
+# (see render.yaml). Reusing it means this job also detects cookie expiry, the standing risk in
+# #53, and there is only one credential to rotate.
+#
+# Note: GitHub disables scheduled workflows in a repo with no commits for 60 days. If the repo
+# goes quiet, re-enable it in the Actions tab.
+name: Music service contract
+
+on:
+  schedule:
+    - cron: '17 9 * * *' # daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  youtube-music:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+        working-directory: api
+      # Only the YouTube Music contract test. Apple Music's needs a Music User Token that no
+      # environment holds (production only has the developer-token secrets), and Bandcamp's
+      # oEmbed endpoint is already broken (#59) — a job that is red on day one gets ignored.
+      # Add those paths here once each has a credential / a fix.
+      - id: contract
+        run: npm run test:integration -- youtubeMusicAdapter.integration
+        working-directory: api
+        env:
+          YOUTUBE_MUSIC_TEST_COOKIE: ${{ secrets.YOUTUBE_MUSIC_COOKIE }}
+
+      - name: Open an issue if the contract test failed
+        # Only for a real test failure — an npm ci or runner problem shouldn't file an adapter bug.
+        if: failure() && steps.contract.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='YouTube Music contract test is failing against the real API'
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Already tracked in #$existing"
+            exit 0
+          fi
+          gh issue create --title "$title" --label bug --body "The scheduled YouTube Music contract test failed: $RUN_URL
+
+          Two likely causes, in order:
+
+          1. \`YOUTUBE_MUSIC_COOKIE\` expired — the playlist assertions fail with an auth error and production exports are broken too. Re-capture the cookie from a logged-in music.youtube.com session and update both the repo secret and the Render env var.
+          2. YouTube changed the innertube response shape — search returns fewer/no results. Fix the parse path in \`api/src/adapters/youtubeMusicAdapter.ts\` and re-capture \`api/src/adapters/__tests__/fixtures/ytmSearchResponse.json\`.
+
+          Until this is green, assume submission (\`POST /rounds/:roundId/submissions\`) is broken."
