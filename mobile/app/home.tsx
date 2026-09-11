@@ -48,12 +48,15 @@ export default function Home() {
   useEffect(() => {
     if (!token || !pendingInviteCode) return;
     const code = pendingInviteCode;
-    setPendingInviteCode(null);
     (async () => {
       const res = await fetchApi(`/leagues/invite/${code}/join`, { method: 'POST', token });
+      // Cleared only once the server has answered — the code is persisted now, so a request that
+      // never lands (offline, API down) leaves it in place to retry on the next load instead of
+      // silently dropping the join the invite link was opened for.
+      setPendingInviteCode(null);
       setJoinMessage(res.ok ? "You're in! Check the invite to see your new league." : "Couldn't finish joining that league.");
       if (res.ok) await loadLeagues();
-    })();
+    })().catch(() => setJoinMessage("Couldn't reach the server to finish joining. We'll try again next time."));
   }, [token, pendingInviteCode]);
 
   return (

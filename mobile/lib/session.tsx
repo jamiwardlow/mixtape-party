@@ -4,23 +4,24 @@ import * as SecureStore from 'expo-secure-store';
 import { fetchApi } from './api';
 
 const TOKEN_KEY = 'session_token';
+const INVITE_KEY = 'pending_invite_code';
 
-async function getStoredToken(): Promise<string | null> {
+async function getStored(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {
-    return typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY);
+    return typeof localStorage === 'undefined' ? null : localStorage.getItem(key);
   }
-  return SecureStore.getItemAsync(TOKEN_KEY);
+  return SecureStore.getItemAsync(key);
 }
 
-async function setStoredToken(value: string | null): Promise<void> {
+async function setStored(key: string, value: string | null): Promise<void> {
   if (Platform.OS === 'web') {
     if (typeof localStorage === 'undefined') return;
-    if (value) localStorage.setItem(TOKEN_KEY, value);
-    else localStorage.removeItem(TOKEN_KEY);
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
     return;
   }
-  if (value) await SecureStore.setItemAsync(TOKEN_KEY, value);
-  else await SecureStore.deleteItemAsync(TOKEN_KEY);
+  if (value) await SecureStore.setItemAsync(key, value);
+  else await SecureStore.deleteItemAsync(key);
 }
 
 export interface Profile {
@@ -35,8 +36,15 @@ interface SessionContextValue {
   signIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  // ponytail: kept in memory only (lost if the app is killed mid sign-up); persist to
-  // SecureStore alongside the session token if that gap turns out to matter.
+  /**
+   * Persisted, not in-memory: Google sign-in navigates the whole page away and back, and a magic
+   * link opens a fresh page load, so an in-memory code is gone by the time /home tries the
+   * auto-join — and the user lands on an empty shelf with no idea the join was dropped.
+   *
+   * ponytail: a magic link opened in a *different* browser than it was requested from still loses
+   * the code. Fixing that means carrying the invite code in the emailed link itself; not worth it
+   * until someone reports it.
+   */
   pendingInviteCode: string | null;
   setPendingInviteCode: (code: string | null) => void;
 }
@@ -47,7 +55,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null);
+  const [pendingInviteCode, setPendingInviteCodeState] = useState<string | null>(null);
+
+  function setPendingInviteCode(code: string | null): void {
+    setPendingInviteCodeState(code);
+    void setStored(INVITE_KEY, code);
+  }
 
   async function loadProfile(currentToken: string): Promise<void> {
     const res = await fetchApi('/accounts/me', { token: currentToken });
@@ -56,7 +69,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     (async () => {
-      const stored = await getStoredToken();
+      setPendingInviteCodeState(await getStored(INVITE_KEY));
+      const stored = await getStored(TOKEN_KEY);
       if (stored) {
         setToken(stored);
         await loadProfile(stored);
@@ -66,13 +80,16 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, []);
 
   async function signIn(newToken: string): Promise<void> {
-    await setStoredToken(newToken);
+    await setStored(TOKEN_KEY, newToken);
     setToken(newToken);
     await loadProfile(newToken);
   }
 
   async function signOut(): Promise<void> {
-    await setStoredToken(null);
+    await setStored(TOKEN_KEY, null);
+    // Goes with the session: a code left behind outlives the account that opened the invite, and
+    // the next person to sign in on this browser would silently auto-join their league.
+    setPendingInviteCode(null);
     setToken(null);
     setProfile(null);
   }
