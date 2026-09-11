@@ -6,7 +6,7 @@ Issues live in this repo's GitHub Issues (uses the `gh` CLI). See `docs/agents/i
 
 ### Triage labels
 
-Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+Default canonical labels: `ready-for-agent`, `ready-for-human`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
