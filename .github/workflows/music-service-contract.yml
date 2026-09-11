@@ -1,10 +1,17 @@
-# Runs the YouTube Music integration contract test against the real innertube API on a schedule,
-# so a response-shape change (like #54, which silently made search return []) or an expired
-# YOUTUBE_MUSIC_COOKIE fails loudly instead of going unnoticed in production.
+# Runs the music-service integration contract tests against the real third-party APIs on a
+# schedule, so a response-shape change (like #54, which silently made search return [], or #59,
+# which silently broke Bandcamp submit) or an expired YOUTUBE_MUSIC_COOKIE fails loudly instead of
+# going unnoticed in production.
+#
+# One matrix leg per service, so a failure names the service that broke and files an issue with
+# that service's remediation steps. Apple Music has no leg: its contract test needs a Music User
+# Token that no environment holds (production only has the developer-token secrets). Add a leg
+# once it has a credential.
 #
 # Requires one repo secret: YOUTUBE_MUSIC_COOKIE — the same app-account cookie the API runs on
 # (see render.yaml). Reusing it means this job also detects cookie expiry, the standing risk in
-# #53, and there is only one credential to rotate.
+# #53, and there is only one credential to rotate. Bandcamp needs no credential: it resolves a
+# pasted link by reading the public track page.
 #
 # Note: GitHub disables scheduled workflows in a repo with no commits for 60 days. If the repo
 # goes quiet, re-enable it in the Actions tab.
@@ -20,8 +27,29 @@ permissions:
   issues: write
 
 jobs:
-  youtube-music:
+  contract:
+    name: ${{ matrix.service }}
     runs-on: ubuntu-latest
+    strategy:
+      # One service being down must not cancel the other's check.
+      fail-fast: false
+      matrix:
+        include:
+          - service: YouTube Music
+            test: youtubeMusicAdapter.integration
+            title: YouTube Music contract test is failing against the real API
+            causes: |
+              1. `YOUTUBE_MUSIC_COOKIE` expired — the playlist assertions fail with an auth error and production exports are broken too. Re-capture the cookie from a logged-in music.youtube.com session and update both the repo secret and the Render env var.
+              2. YouTube changed the innertube response shape — search returns fewer/no results. Fix the parse path in `api/src/adapters/youtubeMusicAdapter.ts` and re-capture `api/src/adapters/__tests__/fixtures/ytmSearchResponse.json`.
+            impact: assume submission (`POST /rounds/:roundId/submissions`) is broken.
+          - service: Bandcamp
+            test: bandcampAdapter.integration
+            title: Bandcamp contract test is failing against the real page
+            causes: |
+              1. Bandcamp changed the track page markup — the `data-tralbum` attribute that `api/src/adapters/bandcampAdapter.ts` parses moved or was renamed, so `submit()` returns null and every pasted Bandcamp link is rejected as invalid. Check the page source, fix the parse path, and re-capture `api/src/adapters/__tests__/fixtures/bandcampTrackPage.html`.
+              2. Bandcamp is bot-blocking the runner (403/429), which the adapter now surfaces as an outage rather than an invalid link. Check whether production is affected before changing the parse.
+              3. The default test URL was taken down, so the page 404s. Set a `BANDCAMP_TEST_URL` repo variable pointing at another long-lived streamable track.
+            impact: assume pasting a Bandcamp link into a round is broken.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,15 +59,13 @@ jobs:
           cache-dependency-path: api/package-lock.json
       - run: npm ci
         working-directory: api
-      # Only the YouTube Music contract test. Apple Music's needs a Music User Token that no
-      # environment holds (production only has the developer-token secrets), and Bandcamp's
-      # oEmbed endpoint is already broken (#59) — a job that is red on day one gets ignored.
-      # Add those paths here once each has a credential / a fix.
       - id: contract
-        run: npm run test:integration -- youtubeMusicAdapter.integration
+        run: npm run test:integration -- ${{ matrix.test }}
         working-directory: api
         env:
           YOUTUBE_MUSIC_TEST_COOKIE: ${{ secrets.YOUTUBE_MUSIC_COOKIE }}
+          # Lets the Bandcamp test URL be repointed from repo settings, without a commit.
+          BANDCAMP_TEST_URL: ${{ vars.BANDCAMP_TEST_URL }}
 
       - name: Open an issue if the contract test failed
         # Only for a real test failure — an npm ci or runner problem shouldn't file an adapter bug.
@@ -47,18 +73,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: ${{ matrix.title }}
+          CAUSES: ${{ matrix.causes }}
+          IMPACT: ${{ matrix.impact }}
+          SERVICE: ${{ matrix.service }}
         run: |
-          title='YouTube Music contract test is failing against the real API'
-          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             echo "Already tracked in #$existing"
             exit 0
           fi
-          gh issue create --title "$title" --label bug --body "The scheduled YouTube Music contract test failed: $RUN_URL
+          gh issue create --title "$TITLE" --label bug --body "The scheduled $SERVICE contract test failed: $RUN_URL
 
-          Two likely causes, in order:
+          Likely causes, in order:
 
-          1. \`YOUTUBE_MUSIC_COOKIE\` expired — the playlist assertions fail with an auth error and production exports are broken too. Re-capture the cookie from a logged-in music.youtube.com session and update both the repo secret and the Render env var.
-          2. YouTube changed the innertube response shape — search returns fewer/no results. Fix the parse path in \`api/src/adapters/youtubeMusicAdapter.ts\` and re-capture \`api/src/adapters/__tests__/fixtures/ytmSearchResponse.json\`.
-
-          Until this is green, assume submission (\`POST /rounds/:roundId/submissions\`) is broken."
+          $CAUSES
+          Until this is green, $IMPACT"

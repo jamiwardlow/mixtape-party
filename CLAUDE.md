@@ -52,9 +52,10 @@ re-points it on every `npm install`.
 | Run migrations | `api` | `npm run migrate` |
 
 Unit tests need no local database — each file boots a throwaway embedded Postgres
-(`api/src/__tests__/embeddedPg.ts`). Integration tests call real third-party APIs and need real
-credentials; only the YouTube Music contract test runs in CI, daily, via
-`.github/workflows/music-service-contract.yml`.
+(`api/src/__tests__/embeddedPg.ts`). Integration tests call real third-party APIs; most need real
+credentials. The YouTube Music and Bandcamp contract tests run in CI, daily, via
+`.github/workflows/music-service-contract.yml` (one matrix leg per service). Apple Music's is
+excluded — it needs a Music User Token no environment holds.
 
 `embeddedPg.ts` owns port selection and the timeouts around cluster start/stop — read its comment
 before touching it. Getting that wrong surfaces as an entire unrelated test file failing at
