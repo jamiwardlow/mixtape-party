@@ -1,9 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { createApp } from '../app.js';
-import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
-import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 import { startTestDb, type TestDb } from './testDb.js';
+import { buildApp as sharedBuildApp } from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -19,21 +17,8 @@ afterAll(async () => {
   await testDb.teardown();
 });
 
-function buildApp() {
-  const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
-  const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
-  const app = createApp({
-    pool: testDb.pool,
-    sessionSecret: 'test-secret',
-    appBaseUrl: 'https://app.test',
-    appleMusicAdapter,
-    youtubeMusicAdapter,
-    bandcampAdapter: new FakeBandcampAdapter(),
-    pushChannel: new FakePushChannel(),
-    emailChannel: new FakeEmailChannel(),
-  });
-  return { app, appleMusicAdapter };
-}
+// The shared helper is the single place AppDeps is assembled for tests.
+const buildApp = () => sharedBuildApp(testDb.pool);
 
 async function signUp(app: import('express').Express) {
   const res = await request(app).post('/accounts').send({ email: 'amlinker@example.com', password: 'password123' });

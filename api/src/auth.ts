@@ -24,16 +24,21 @@ function signPayload<T extends object>(payload: T, secret: string, ttlMs: number
   return `${encoded}.${signature}`;
 }
 
+/**
+ * Constant-time compare. Byte lengths, not string lengths: a multi-byte character makes the two
+ * differ, and timingSafeEqual throws RangeError rather than returning false on a length mismatch.
+ */
+export function timingSafeStringEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 function verifyPayload<T>(token: string, secret: string): T | null {
   const [encoded, signature] = token.split('.');
   if (!encoded || !signature) return null;
-  const expected = Buffer.from(createHmac('sha256', secret).update(encoded).digest('base64url'));
-  const actual = Buffer.from(signature);
-  // Byte lengths, not string lengths: a multi-byte character makes these differ, and
-  // timingSafeEqual throws RangeError rather than returning false on a length mismatch.
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
-    return null;
-  }
+  const expected = createHmac('sha256', secret).update(encoded).digest('base64url');
+  if (!timingSafeStringEqual(expected, signature)) return null;
   const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as T & { exp: number };
   if (Date.now() > decoded.exp) return null;
   return decoded;
@@ -45,4 +50,19 @@ export function signSessionToken(accountId: string, secret: string): string {
 
 export function verifySessionToken(token: string, secret: string): string | null {
   return verifyPayload<{ accountId: string }>(token, secret)?.accountId ?? null;
+}
+
+// Long enough to walk through Google's consent screen, short enough that a state token lifted from
+// a browser's history is dead by the time anyone replays it. Exported because the g_state cookie
+// must expire on the same clock — two separate constants would drift apart.
+export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+/** Signs the `state` for an OAuth round trip. Narrow wrapper on purpose: signPayload stays private. */
+export function signStateToken(nonce: string, secret: string): string {
+  return signPayload({ nonce }, secret, OAUTH_STATE_TTL_MS);
+}
+
+/** Returns the nonce the state was signed with, or null if the signature is bad or it has expired. */
+export function verifyStateToken(token: string, secret: string): string | null {
+  return verifyPayload<{ nonce: string }>(token, secret)?.nonce ?? null;
 }
