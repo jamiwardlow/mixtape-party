@@ -24,6 +24,24 @@ function rejectingPool(): Pool {
   return { query: () => Promise.reject(new Error('boom: secret connection string')) } as unknown as Pool;
 }
 
+describe('createApp appBaseUrl guard', () => {
+  it('refuses a schemeless value rather than emitting relative redirects', () => {
+    expect(() => buildApp(rejectingPool(), { appBaseUrl: 'mixtape-party.com' })).toThrow(/mixtape-party\.com/);
+  });
+
+  it('accepts an uppercase scheme, which is still absolute', () => {
+    expect(() => buildApp(rejectingPool(), { appBaseUrl: 'HTTPS://app.test' })).not.toThrow();
+  });
+
+  it('strips a trailing slash so redirects do not double up', async () => {
+    const { app } = buildApp(rejectingPool(), { appBaseUrl: 'https://app.test/' });
+
+    const res = await request(app).get('/auth/google/callback?error=access_denied');
+
+    expect(res.headers.location).toBe('https://app.test/sign-in?error=google_cancelled');
+  });
+});
+
 describe('error middleware', () => {
   it('turns a rejected handler into a 500 without leaking the error message', async () => {
     const { app } = buildApp(rejectingPool());

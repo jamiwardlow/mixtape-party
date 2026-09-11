@@ -39,6 +39,16 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps): Express {
+  // Both halves of "usable appBaseUrl" live here, the one place all three consumers read it from —
+  // and unlike server.ts, reachable from tests. A trailing slash would build //auth/complete; a
+  // schemeless value ("mixtape-party.com") makes every redirect relative, since res.redirect passes
+  // it through verbatim and the browser resolves it against /auth/google/, 404ing the callback and
+  // pointing emailed links nowhere. Named value over `new URL`'s bare "Invalid URL".
+  const appBaseUrl = deps.appBaseUrl.trim().replace(/\/$/, '');
+  if (!/^https?:\/\/[^/]/i.test(appBaseUrl)) {
+    throw new Error(`appBaseUrl must be absolute (http:// or https://), got "${deps.appBaseUrl}"`);
+  }
+  deps = { ...deps, appBaseUrl };
   const app = express();
   app.use(cors());
   app.use(express.json());

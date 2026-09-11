@@ -27,7 +27,8 @@ export function buildApp(
   {
     youtubeMusicCookie = 'fake-youtube-music-cookie',
     googleConfigured = true,
-  }: { youtubeMusicCookie?: string; googleConfigured?: boolean } = {},
+    appBaseUrl = 'https://app.test',
+  }: { youtubeMusicCookie?: string; googleConfigured?: boolean; appBaseUrl?: string } = {},
 ) {
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
@@ -38,7 +39,7 @@ export function buildApp(
   const app = createApp({
     pool,
     sessionSecret: 'test-secret',
-    appBaseUrl: 'https://app.test',
+    appBaseUrl,
     // Left genuinely undefined when opted out, matching an unset env var rather than a blank one.
     googleClientId: googleConfigured ? 'test-google-client-id' : undefined,
     googleRedirectUri: googleConfigured ? 'https://api.test/auth/google/callback' : undefined,
