@@ -56,9 +56,9 @@ Unit tests need no local database — each file boots a throwaway embedded Postg
 credentials; only the YouTube Music contract test runs in CI, daily, via
 `.github/workflows/music-service-contract.yml`.
 
-**Known flake:** `embeddedPg.ts` picks a random port with no collision-retry, so runs
-occasionally fail with an entire test file erroring at startup. Re-run before concluding your
-change broke something.
+`embeddedPg.ts` owns port selection and the timeouts around cluster start/stop — read its comment
+before touching it. Getting that wrong surfaces as an entire unrelated test file failing at
+startup, not as an obvious bug in that file.
 
 ### Config and secrets
 
