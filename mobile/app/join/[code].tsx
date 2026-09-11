@@ -21,13 +21,24 @@ export default function JoinLeague() {
   const [joined, setJoined] = useState(false);
 
   useEffect(() => {
+    // The param is not guaranteed to be populated on a pre-rendered route's first render, and
+    // fetching `/invite/undefined` would 404 and call a perfectly good invite invalid. Hold the
+    // spinner instead of latching an error: the effect re-runs when `code` arrives.
+    if (!code) return;
     (async () => {
-      const res = await fetchApi(`/leagues/invite/${code}`);
-      if (!res.ok) {
-        setError('This invite is no longer valid');
-        return;
+      try {
+        const res = await fetchApi(`/leagues/invite/${code}`);
+        if (!res.ok) {
+          // 404 is the API's only answer for "no such code" — an invite has no expiry to hit
+          // (schema.sql has no expires_at/used_at/revoked), so every other status is us failing,
+          // not the invite. One message for both is how a routing bug looked like an invite bug.
+          setError(res.status === 404 ? 'This invite is no longer valid' : "Couldn't load this invite. Try again.");
+          return;
+        }
+        setPreview(await res.json());
+      } catch {
+        setError("Couldn't reach the server. Try again.");
       }
-      setPreview(await res.json());
     })();
   }, [code]);
 
