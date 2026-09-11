@@ -1,0 +1,16 @@
+#!/bin/sh
+# Gate before anything reaches main, which auto-deploys to Render.
+set -e
+
+# Skip when every ref being pushed is a deletion — there is nothing to test,
+# and spinning up the test postgres for a branch delete just invites a collision.
+zero=0000000000000000000000000000000000000000
+pushing_content=
+while read -r _ local_sha _ _; do
+  [ "$local_sha" = "$zero" ] || pushing_content=1
+done
+[ -n "$pushing_content" ] || exit 0
+
+cd "$(git rev-parse --show-toplevel)"
+(cd api && npm run typecheck && npm test)
+(cd mobile && npm run typecheck)
