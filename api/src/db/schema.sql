@@ -156,3 +156,13 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS auth_tokens_account_created_idx ON auth_tokens (account_id, created_at);
+
+-- Sign-out's revocation list. Session tokens are stateless signed payloads, so signing out cannot
+-- un-sign one -- the only way to kill a token before its TTL is to record it here and have
+-- requireAuth check (#64). One row per revoked token, not a version on accounts: signing out on
+-- the phone must leave the laptop signed in. Stores the sha256, same as auth_tokens, so a database
+-- dump is not a pile of live bearer tokens.
+CREATE TABLE IF NOT EXISTS revoked_sessions (
+  token_hash TEXT PRIMARY KEY,
+  revoked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

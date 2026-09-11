@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
+import { SESSION_TTL_MS } from './auth.js';
 
 export type AuthTokenPurpose = 'password_reset' | 'sign_in';
 
@@ -78,4 +79,21 @@ export async function isAuthTokenRateLimited(pool: Pool, accountId: string): Pro
     [accountId, PER_ACCOUNT_TOKEN_WINDOW_MINUTES, PER_ACCOUNT_TOKEN_LIMIT, GLOBAL_DAILY_TOKEN_LIMIT],
   );
   return rows[0].limited;
+}
+
+/** Revokes exactly the token presented — sign-out on one device, not everywhere. See revoked_sessions in schema.sql. */
+export async function revokeSessionToken(pool: Pool, token: string): Promise<void> {
+  // ON CONFLICT DO NOTHING: two tabs signing out, or a retry after a flaky response, must not 500.
+  await pool.query('INSERT INTO revoked_sessions (token_hash) VALUES ($1) ON CONFLICT DO NOTHING', [hashToken(token)]);
+  // ponytail: opportunistic sweep on the (rare) sign-out path, same shape as issueAuthToken's. Once
+  // a row is older than a full session TTL the token it guards has certainly expired on its own.
+  await pool.query('DELETE FROM revoked_sessions WHERE revoked_at < now() - make_interval(secs => $1)', [
+    SESSION_TTL_MS / 1000,
+  ]);
+}
+
+/** True when this token has been signed out. Runs on every authenticated request. */
+export async function isSessionTokenRevoked(pool: Pool, token: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT 1 FROM revoked_sessions WHERE token_hash = $1', [hashToken(token)]);
+  return rows.length > 0;
 }

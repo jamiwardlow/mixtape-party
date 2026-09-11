@@ -14,7 +14,9 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(actual, expected);
 }
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+// Exported so the revocation sweep can size its retention window off the same number: a
+// revocation older than a full TTL is guarding a token that has certainly expired.
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /** Signs a payload with an expiry, HMAC'd with a server secret. No server-side session/state store needed. */
 function signPayload<T extends object>(payload: T, secret: string, ttlMs: number): string {
@@ -45,9 +47,15 @@ function verifyPayload<T>(token: string, secret: string): T | null {
 }
 
 export function signSessionToken(accountId: string, secret: string): string {
-  return signPayload({ accountId }, secret, SESSION_TTL_MS);
+  // The nonce is what makes two tokens for the same account distinguishable. Without it the payload
+  // is just {accountId, exp}, so two sign-ins landing in the same millisecond mint byte-identical
+  // tokens -- revoking one would revoke the other, and a sign-in in an already-revoked millisecond
+  // would be dead on arrival. Revocation is per-token (#64), which only means anything if tokens
+  // are unique. Never read back: it exists to make the bytes differ.
+  return signPayload({ accountId, nonce: randomBytes(12).toString('base64url') }, secret, SESSION_TTL_MS);
 }
 
+/** Signature and expiry only — revocation is a separate database check, and requireAuth does both. */
 export function verifySessionToken(token: string, secret: string): string | null {
   return verifyPayload<{ accountId: string }>(token, secret)?.accountId ?? null;
 }

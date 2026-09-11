@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import type { Pool } from 'pg';
 import { hashPassword, signSessionToken, verifyPassword, verifySessionToken } from '../auth.js';
+import { isSessionTokenRevoked, revokeSessionToken } from '../authTokens.js';
 
 export interface AccountsDeps {
   pool: Pool;
@@ -11,18 +12,24 @@ export interface AuthedRequest extends Request {
   accountId: string;
 }
 
+export function bearerToken(req: Request): string | null {
+  const header = req.header('authorization');
+  return header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
+}
+
 // Params typed as plain strings, not Express 5's default `string | string[]` (which exists only for
 // wildcard routes, of which this app has none). Left at the default, this guard would widen
 // req.params to `string | string[]` on every route it protects.
-export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret'>): RequestHandler<Record<string, string>> {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const header = req.header('authorization');
-    const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
-    const accountId = token ? verifySessionToken(token, deps.sessionSecret) : null;
-    if (!accountId) {
-      res.status(401).json({ error: 'unauthorized' });
-      return;
-    }
+export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret' | 'pool'>): RequestHandler<Record<string, string>> {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const unauthorized = () => void res.status(401).json({ error: 'unauthorized' });
+    const token = bearerToken(req);
+    if (!token) return unauthorized();
+    // A valid signature is no longer enough: signing out revokes a token that still verifies, so
+    // requireAuth also checks the revocation list -- it is the one chokepoint every authenticated
+    // route already passes through, which is what makes one check here cover all of them (#64).
+    const accountId = verifySessionToken(token, deps.sessionSecret);
+    if (!accountId || (await isSessionTokenRevoked(deps.pool, token))) return unauthorized();
     (req as unknown as AuthedRequest).accountId = accountId;
     next();
   };
@@ -73,6 +80,13 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
     }
     const token = signSessionToken(account.id, deps.sessionSecret);
     res.json({ accountId: account.id, token });
+  });
+
+  // Sign-out. Behind requireAuth like every other authenticated route, so signing out with an
+  // already-revoked token is a 401 -- harmless, since the client discards the token regardless.
+  router.delete('/sessions', requireAuth(deps), async (req, res) => {
+    await revokeSessionToken(deps.pool, bearerToken(req)!);
+    res.status(204).end();
   });
 
   router.get('/accounts/me', requireAuth(deps), async (req, res) => {

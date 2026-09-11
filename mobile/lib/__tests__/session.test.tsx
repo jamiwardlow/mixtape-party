@@ -81,4 +81,42 @@ describe('useSession', () => {
     expect(result.current.pendingInviteCode).toBeNull();
     expect(await storage.get('pending_invite_code')).toBeNull();
   });
+
+  // Without this the token stays valid server-side until its 30-day TTL, so signing out on a shared
+  // machine leaves a live credential behind (#64).
+  it('revokes the token server-side on signOut', async () => {
+    const result = await mountSession();
+    await act(async () => {
+      await result.current.signIn('tok-abc');
+    });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/sessions'),
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({ Authorization: 'Bearer tok-abc' }),
+      }),
+    );
+  });
+
+  // Offline, or the API asleep on Render's free plan: the local session must still be cleared, and
+  // the rejection must not surface -- otherwise the user is stranded in a signed-in app.
+  it('signs out locally even when the revoke call fails', async () => {
+    const result = await mountSession();
+    await act(async () => {
+      await result.current.signIn('tok-abc');
+    });
+    (fetch as jest.Mock).mockRejectedValue(new Error('network down'));
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.token).toBeNull();
+    expect(await storage.get('session_token')).toBeNull();
+  });
 });
