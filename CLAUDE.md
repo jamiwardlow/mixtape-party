@@ -34,7 +34,7 @@ change that could lock the owner out of the app.
 
 ### The gate
 
-`.githooks/pre-push` runs `api` typecheck + unit tests and `mobile` typecheck on every content
+`.githooks/pre-push` runs typecheck + unit tests in both `api` and `mobile` on every content
 push; delete-only pushes skip it. This hook is the *only* thing standing between a bad commit and
 production — treat a red hook as a blocked deploy, not a nuisance.
 
@@ -45,13 +45,16 @@ re-points it on every `npm install`.
 
 | What | Where | Command |
 | --- | --- | --- |
-| Unit tests | `api` | `npm test` |
+| Unit tests | `api`, `mobile` | `npm test` |
 | Integration tests | `api` | `npm run test:integration` |
 | Typecheck | `api`, `mobile` | `npm run typecheck` |
 | Dev server | `api` | `npm run dev` |
 | Run migrations | `api` | `npm run migrate` |
 
-Unit tests need no local database — each file boots a throwaway embedded Postgres
+Two runners, on purpose: `api` on vitest, `mobile` on jest-expo — only Expo's preset gets a test
+through React Native's untranspiled source.
+
+`api`'s unit tests need no local database — each file boots a throwaway embedded Postgres
 (`api/src/__tests__/embeddedPg.ts`). Integration tests call real third-party APIs; most need real
 credentials. The YouTube Music and Bandcamp contract tests run in CI, daily, via
 `.github/workflows/music-service-contract.yml` (one matrix leg per service). Apple Music's is

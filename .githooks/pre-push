@@ -13,4 +13,4 @@ done
 
 cd "$(git rev-parse --show-toplevel)"
 (cd api && npm run typecheck && npm test)
-(cd mobile && npm run typecheck)
+(cd mobile && npm run typecheck && npm test)

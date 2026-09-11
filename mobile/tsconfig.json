@@ -1,6 +1,10 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    // Expo's base leaves `types` unset, which doesn't pull in @types/jest on this toolchain, so
+    // jest's globals have to be named for `tsc --noEmit` to see the test files. This is the setup
+    // Expo's own testing guide prescribes.
+    "types": ["jest"]
   }
 }
