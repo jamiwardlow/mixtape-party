@@ -1,28 +1,9 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
-import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import { fetchApi } from './api';
+import { deviceStorage, type SessionStorage } from './storage';
 
 const TOKEN_KEY = 'session_token';
 const INVITE_KEY = 'pending_invite_code';
-
-async function getStored(key: string): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    return typeof localStorage === 'undefined' ? null : localStorage.getItem(key);
-  }
-  return SecureStore.getItemAsync(key);
-}
-
-async function setStored(key: string, value: string | null): Promise<void> {
-  if (Platform.OS === 'web') {
-    if (typeof localStorage === 'undefined') return;
-    if (value) localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
-    return;
-  }
-  if (value) await SecureStore.setItemAsync(key, value);
-  else await SecureStore.deleteItemAsync(key);
-}
 
 export interface Profile {
   id: string;
@@ -51,7 +32,7 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-export function SessionProvider({ children }: PropsWithChildren) {
+export function SessionProvider({ children, storage = deviceStorage }: PropsWithChildren<{ storage?: SessionStorage }>) {
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,7 +40,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   function setPendingInviteCode(code: string | null): void {
     setPendingInviteCodeState(code);
-    void setStored(INVITE_KEY, code);
+    void storage.set(INVITE_KEY, code);
   }
 
   async function loadProfile(currentToken: string): Promise<void> {
@@ -69,8 +50,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     (async () => {
-      setPendingInviteCodeState(await getStored(INVITE_KEY));
-      const stored = await getStored(TOKEN_KEY);
+      setPendingInviteCodeState(await storage.get(INVITE_KEY));
+      const stored = await storage.get(TOKEN_KEY);
       if (stored) {
         setToken(stored);
         await loadProfile(stored);
@@ -80,13 +61,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, []);
 
   async function signIn(newToken: string): Promise<void> {
-    await setStored(TOKEN_KEY, newToken);
+    await storage.set(TOKEN_KEY, newToken);
     setToken(newToken);
     await loadProfile(newToken);
   }
 
   async function signOut(): Promise<void> {
-    await setStored(TOKEN_KEY, null);
+    await storage.set(TOKEN_KEY, null);
     // Goes with the session: a code left behind outlives the account that opened the invite, and
     // the next person to sign in on this browser would silently auto-join their league.
     setPendingInviteCode(null);
