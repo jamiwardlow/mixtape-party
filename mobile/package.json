@@ -3,8 +3,6 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@expo-google-fonts/courier-prime": "^0.4.1",
-    "@expo-google-fonts/homemade-apple": "^0.4.1",
     "expo": "~57.0.20",
     "expo-constants": "~57.0.17",
     "expo-linking": "~57.0.9",

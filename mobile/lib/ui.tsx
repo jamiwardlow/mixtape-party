@@ -1,7 +1,6 @@
-import { useEffect, useRef } from 'react';
 import {
-  Animated,
-  Easing,
+  ActivityIndicator,
+  Button,
   Pressable,
   PressableProps,
   StyleProp,
@@ -14,54 +13,34 @@ import {
   ViewStyle,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ServiceName } from './rounds';
-import { fonts, SERVICE_META, useTheme } from './theme';
+import { SERVICE_META, useTheme } from './theme';
+
+// Deliberately undesigned: stock React Native primitives and system fonts while
+// the rest of the app is built out. The cassette/J-card look was removed, but
+// its component names stay so the screens are untouched and a real design can
+// land here without editing them again.
 
 export function Screen({ label, children }: { label: string; children: React.ReactNode }) {
   const t = useTheme();
-  const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.screen, { backgroundColor: t.bg }]}>
-      <View style={[styles.spine, { backgroundColor: t.shell, borderColor: t.hairline, paddingTop: insets.top + 14 }]}>
-        <ReelHoles color={t.reel} />
-        <Label style={styles.spineLabel}>{label}</Label>
+    <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
+      <View style={[styles.header, { borderBottomColor: t.hairline }]}>
+        <Text style={[styles.headerText, { color: t.ink }]}>{label}</Text>
       </View>
-      <View style={[styles.body, { paddingBottom: 20 + insets.bottom }]}>{children}</View>
-    </View>
+      <View style={styles.body}>{children}</View>
+    </SafeAreaView>
   );
 }
 
-export function ReelHoles({ color }: { color: string }) {
-  return (
-    <View style={styles.reelHoles} pointerEvents="none">
-      <View style={[styles.reelHole, { borderColor: color }]} />
-      <View style={[styles.reelHole, { borderColor: color }]} />
-    </View>
-  );
+// Cassette reel holes; nothing to draw without the cassette. Kept so callers compile.
+export function ReelHoles(_props: { color: string }) {
+  return null;
 }
 
 export function ReelSpinner({ color }: { color?: string }) {
-  const t = useTheme();
-  const spin = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 1200, easing: Easing.linear, useNativeDriver: true }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [spin]);
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const c = color ?? t.accent;
-  return (
-    <View style={styles.spinnerRow}>
-      {[0, 1].map((i) => (
-        <Animated.View key={i} style={[styles.spinnerHub, { borderColor: c, transform: [{ rotate }] }]}>
-          <View style={[styles.spinnerSpoke, { backgroundColor: c }]} />
-        </Animated.View>
-      ))}
-    </View>
-  );
+  return <ActivityIndicator color={color} style={styles.spinner} />;
 }
 
 export function JCard({ style, children }: { style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
@@ -72,7 +51,7 @@ export function JCard({ style, children }: { style?: StyleProp<ViewStyle>; child
 export function Label({ style, children, ...props }: TextProps) {
   const t = useTheme();
   return (
-    <Text {...props} style={[styles.label, { color: t.inkMuted, fontFamily: fonts.mono }, style]}>
+    <Text {...props} style={[styles.label, { color: t.inkMuted }, style]}>
       {children}
     </Text>
   );
@@ -81,7 +60,7 @@ export function Label({ style, children, ...props }: TextProps) {
 export function HandText({ style, children, ...props }: TextProps) {
   const t = useTheme();
   return (
-    <Text {...props} style={[{ color: t.ink, fontFamily: fonts.hand, fontSize: 26 }, style]}>
+    <Text {...props} style={[styles.heading, { color: t.ink }, style]}>
       {children}
     </Text>
   );
@@ -90,19 +69,14 @@ export function HandText({ style, children, ...props }: TextProps) {
 export function BodyText({ style, children, ...props }: TextProps) {
   const t = useTheme();
   return (
-    <Text {...props} style={[{ color: t.ink, fontFamily: fonts.mono, fontSize: 14 }, style]}>
+    <Text {...props} style={[styles.body_, { color: t.ink }, style]}>
       {children}
     </Text>
   );
 }
 
 export function ServiceBadge({ service }: { service: ServiceName }) {
-  const meta = SERVICE_META[service];
-  return (
-    <View style={[styles.badge, { backgroundColor: meta?.color ?? '#666' }]}>
-      <Label style={[styles.badgeText, { color: '#fff' }]}>{meta?.label ?? service}</Label>
-    </View>
-  );
+  return <Label>{SERVICE_META[service]?.label ?? service}</Label>;
 }
 
 export function RoundGate({
@@ -139,21 +113,9 @@ export function PressScale({
   style,
   ...props
 }: PressableProps & { style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const to = (v: number) => Animated.timing(scale, { toValue: v, duration: 110, useNativeDriver: true }).start();
   return (
-    <Pressable
-      {...props}
-      onPressIn={(e) => {
-        to(0.97);
-        props.onPressIn?.(e);
-      }}
-      onPressOut={(e) => {
-        to(1);
-        props.onPressOut?.(e);
-      }}
-    >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+    <Pressable {...props}>
+      <View style={style}>{children}</View>
     </Pressable>
   );
 }
@@ -162,31 +124,15 @@ export function TapeButton({
   title,
   onPress,
   disabled,
-  variant = 'primary',
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
+  // Accepted and ignored: stock Button has no variants. Callers keep passing it
+  // so the distinction survives for whatever design lands next.
   variant?: 'primary' | 'secondary';
 }) {
-  const t = useTheme();
-  const primary = variant === 'primary';
-  return (
-    <PressScale
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.button,
-        {
-          backgroundColor: primary ? t.accent : t.shell,
-          borderColor: primary ? t.accent : t.hairline,
-          opacity: disabled ? 0.5 : 1,
-        },
-      ]}
-    >
-      <Label style={[styles.buttonText, { color: primary ? t.accentInk : t.ink }]}>{title}</Label>
-    </PressScale>
-  );
+  return <Button title={title} onPress={onPress} disabled={disabled} />;
 }
 
 export function TapeInput(props: TextInputProps) {
@@ -195,14 +141,14 @@ export function TapeInput(props: TextInputProps) {
     <TextInput
       placeholderTextColor={t.inkMuted}
       {...props}
-      style={[styles.input, { borderColor: t.hairline, color: t.ink, fontFamily: fonts.mono }, props.style]}
+      style={[styles.input, { borderColor: t.hairline, color: t.ink }, props.style]}
     />
   );
 }
 
 export function Sprocket() {
   const t = useTheme();
-  return <View style={[styles.sprocket, { borderColor: t.hairline }]} />;
+  return <View style={[styles.sprocket, { borderTopColor: t.hairline }]} />;
 }
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {
@@ -212,45 +158,14 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  spine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingTop: 60,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-  },
-  spineLabel: { fontSize: 13, letterSpacing: 2 },
-  body: { flex: 1, padding: 20, gap: 14 },
-  reelHoles: { flexDirection: 'row', gap: 4 },
-  reelHole: { width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
-  card: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
-    gap: 10,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  label: { fontSize: 12, letterSpacing: 1.5 },
-  badge: { borderRadius: 4, paddingVertical: 3, paddingHorizontal: 6, alignSelf: 'flex-start' },
-  badgeText: { fontSize: 12, letterSpacing: 1 },
-  button: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: { fontSize: 13, letterSpacing: 1.5 },
-  input: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14, minHeight: 44 },
-  sprocket: { borderTopWidth: 1, borderStyle: 'dashed', marginVertical: 4 },
-  spinnerRow: { flexDirection: 'row', gap: 16, alignSelf: 'center' },
-  spinnerHub: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  spinnerSpoke: { width: 2, height: 11, position: 'absolute', top: 2 },
+  header: { paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  headerText: { fontSize: 20, fontWeight: '600' },
+  body: { flex: 1, padding: 16, gap: 12 },
+  body_: { fontSize: 15 },
+  heading: { fontSize: 18, fontWeight: '600' },
+  label: { fontSize: 13 },
+  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: 12, gap: 8 },
+  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 12, fontSize: 15, minHeight: 44 },
+  sprocket: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 4 },
+  spinner: { alignSelf: 'center' },
 });
