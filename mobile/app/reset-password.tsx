@@ -56,7 +56,7 @@ export default function ResetPassword() {
     <Screen label="New password">
       <BodyText>Pick a new password for your account.</BodyText>
       <TapeInput placeholder="New password" secureTextEntry value={password} onChangeText={setPassword} />
-      <Label>at least 8 characters</Label>
+      <Label>At least 8 characters.</Label>
       {error && <ErrorNote>{error}</ErrorNote>}
       <TapeButton
         title={submitting ? 'Saving…' : 'Set password and sign in'}

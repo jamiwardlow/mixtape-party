@@ -64,7 +64,7 @@ export default function Home() {
       <BodyText style={{ color: t.inkMuted }}>Signed in as {profile?.email}</BodyText>
       {joinMessage && <BodyText>{joinMessage}</BodyText>}
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
-        {leagues.length === 0 && <Label>no leagues on the shelf yet</Label>}
+        {leagues.length === 0 && <Label>No leagues yet.</Label>}
         {leagues.map((league) => (
           <JCard key={league.id}>
             <ReelHoles color={t.reel} />
@@ -75,7 +75,7 @@ export default function Home() {
                 onPress={() => router.push(roundHref(league.round!))}
               />
             ) : (
-              <Label>between rounds</Label>
+              <Label>Between rounds</Label>
             )}
           </JCard>
         ))}

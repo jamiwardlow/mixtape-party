@@ -72,7 +72,7 @@ export default function GuessRound() {
               </BodyText>
               {item.guessedAccountId ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Label>guessed:</Label>
+                  <Label>Guessed:</Label>
                   <HandText>{players.find((p) => p.accountId === item.guessedAccountId)?.displayName ?? 'a player'}</HandText>
                 </View>
               ) : (

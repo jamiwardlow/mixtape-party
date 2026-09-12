@@ -51,7 +51,7 @@ export default function RoundResults() {
         <JCard>
           {winnerNames ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-              <BodyText>Winning side:</BodyText>
+              <BodyText>Winners:</BodyText>
               <HandText>{winnerNames}</HandText>
             </View>
           ) : null}
@@ -73,15 +73,15 @@ export default function RoundResults() {
                 {item.title} — {item.artist}
               </BodyText>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Label>submitted by</Label>
+                <Label>Submitted by</Label>
                 <HandText>{item.submitter.displayName ?? 'a player'}</HandText>
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-                <Label>correctly guessed by</Label>
+                <Label>Correctly guessed by</Label>
                 {item.correctGuessers.length > 0 ? (
                   <HandText>{item.correctGuessers.map((g) => g.displayName ?? 'a player').join(', ')}</HandText>
                 ) : (
-                  <Label>nobody</Label>
+                  <Label>Nobody</Label>
                 )}
               </View>
             </JCard>
