@@ -11,6 +11,11 @@ export interface NotificationSweepDeps {
 // Add a per-league setting if leagues ever want to tune how early they're reminded.
 const REMINDER_REMAINING_FRACTION = 0.2;
 
+// Rounds 2..N of a season are scheduled before anyone names them (#74), so every notification
+// body that interpolates a theme needs a fallback -- nobody should be told to submit a track for
+// "null".
+const THEME_OR_ROUND = `COALESCE(theme, 'Round ' || round_number) AS theme`;
+
 async function notifyAccounts(
   deps: NotificationSweepDeps,
   accountIds: string[],
@@ -77,10 +82,14 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
     round_number: number;
     theme: string;
   }>(
-    `SELECT id, league_id, round_number, theme FROM rounds
+    // Keyed off submission_opens_at, not created_at: every round of a season is inserted at
+    // league creation, so created_at would make round 8's "window" span the whole season and its
+    // reminder due on the first sweep. created_at is the fallback for rounds predating the
+    // column, where the two were the same instant.
+    `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE submission_reminder_sent_at IS NULL
        AND submission_deadline > $1
-       AND submission_deadline - (submission_deadline - created_at) * $2 <= $1`,
+       AND submission_deadline - (submission_deadline - COALESCE(submission_opens_at, created_at)) * $2 <= $1`,
     [now.toISOString(), REMINDER_REMAINING_FRACTION],
   );
 
@@ -115,7 +124,7 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
     round_number: number;
     theme: string;
   }>(
-    `SELECT id, league_id, round_number, theme FROM rounds
+    `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE guessing_reminder_sent_at IS NULL
        AND guessing_deadline > $1
        AND guessing_deadline - (guessing_deadline - submission_deadline) * $2 <= $1`,
@@ -154,8 +163,11 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
 
 async function sweepResultsReady(deps: NotificationSweepDeps, now: Date): Promise<void> {
   const dueRounds = await deps.pool.query<{ id: string; league_id: string; round_number: number; theme: string }>(
-    `SELECT id, league_id, round_number, theme FROM rounds
-     WHERE results_notified_at IS NULL AND guessing_deadline <= $1`,
+    // A round with no submissions has no results to announce -- which is the normal state of a
+    // round the season scheduled but never reached.
+    `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
+     WHERE results_notified_at IS NULL AND guessing_deadline <= $1
+       AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = rounds.id)`,
     [now.toISOString()],
   );
 
@@ -176,6 +188,8 @@ async function sweepResultsReady(deps: NotificationSweepDeps, now: Date): Promis
 }
 
 async function sweepSeasonConcluded(deps: NotificationSweepDeps, now: Date): Promise<void> {
+  // round_number DESC territory, not the current-round ordering: a season concludes when its
+  // genuinely final round is revealed.
   const dueLeagues = await deps.pool.query<{ id: string; name: string }>(
     `SELECT DISTINCT l.id, l.name FROM leagues l
      JOIN rounds r ON r.league_id = l.id AND r.round_number >= l.season_length

@@ -7,7 +7,7 @@ import { useSession } from '../../lib/session';
 interface InvitePreview {
   league: { name: string; seasonLength: number };
   host: { displayName: string | null };
-  currentRound: { theme: string; submissionDeadline: string; guessingDeadline: string } | null;
+  currentRound: { theme: string | null; submissionDeadline: string; guessingDeadline: string } | null;
   players: { displayName: string | null }[];
   playerCount: number;
 }
@@ -86,7 +86,7 @@ export default function JoinLeague() {
     <View style={styles.container}>
       <Text style={styles.title}>{preview.league.name}</Text>
       <Text style={styles.body}>Hosted by {preview.host.displayName ?? 'a friend'}</Text>
-      {preview.currentRound && <Text style={styles.body}>Current theme: {preview.currentRound.theme}</Text>}
+      {preview.currentRound?.theme && <Text style={styles.body}>Current theme: {preview.currentRound.theme}</Text>}
       <Text style={styles.body}>{preview.playerCount} player(s) already joined</Text>
       {preview.players.map((player, i) => (
         <Text key={i} style={styles.body}>

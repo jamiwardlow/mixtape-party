@@ -118,4 +118,84 @@ describe('migrate', () => {
       await expect(migrate(db.pool)).resolves.toBeUndefined();
     });
   });
+  describe('against a pre-#74 database, part-way through a season', () => {
+    let db: EmbeddedPg;
+    let leagueId: string;
+
+    beforeAll(async () => {
+      db = await startEmbeddedPg('mixtape_party_pre74');
+      await migrate(db.pool);
+      // Rewind just the backfill, then set the database up the way #74 found it: a league whose
+      // host had started three of its eight rounds by hand.
+      await db.pool.query("DELETE FROM schema_migrations WHERE name LIKE '0002%'");
+
+      const { rows: accountRows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO accounts (email, password_hash) VALUES ('midseason@example.com', 'hash') RETURNING id",
+      );
+      const { rows: leagueRows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO leagues (name, season_length, host_account_id, invite_code) VALUES ('Midseason', 8, $1, 'MID1') RETURNING id",
+        [accountRows[0].id],
+      );
+      leagueId = leagueRows[0].id;
+
+      for (const n of [1, 2, 3]) {
+        await db.pool.query(
+          `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline, created_at)
+           VALUES ($1, $2, 'Theme', $3::timestamptz + make_interval(weeks => 2 * ($2 - 1)),
+                   $4::timestamptz + make_interval(weeks => 2 * ($2 - 1)),
+                   $5::timestamptz + make_interval(weeks => 2 * ($2 - 1)))`,
+          // May to July, so no daylight-saving boundary makes these instants depend on the
+          // machine's timezone.
+          [leagueId, n, '2030-05-07T00:00:00Z', '2030-05-14T00:00:00Z', '2030-04-30T00:00:00Z'],
+        );
+      }
+      await db.pool.query('UPDATE rounds SET submission_opens_at = NULL');
+
+      await migrate(db.pool);
+    }, 60_000);
+
+    afterAll(async () => {
+      await db.teardown();
+    });
+
+    async function schedule() {
+      const { rows } = await db.pool.query<{
+        round_number: number;
+        theme: string | null;
+        submission_opens_at: Date;
+        submission_deadline: Date;
+        guessing_deadline: Date;
+      }>(
+        `SELECT round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
+         FROM rounds WHERE league_id = $1 ORDER BY round_number`,
+        [leagueId],
+      );
+      return rows;
+    }
+
+    it('fills the season out from the last round the host actually started', async () => {
+      const rounds = await schedule();
+      expect(rounds.map((r) => r.round_number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      // Round 3 ran 2030-06-04 -> 2030-06-11, so the rest of the season is weekly from there.
+      expect(rounds[3]).toMatchObject({
+        theme: null,
+        submission_opens_at: new Date('2030-06-04T00:00:00Z'),
+        submission_deadline: new Date('2030-06-11T00:00:00Z'),
+        guessing_deadline: new Date('2030-06-18T00:00:00Z'),
+      });
+      expect(rounds[7].guessing_deadline).toEqual(new Date('2030-07-16T00:00:00Z'));
+    });
+
+    it('leaves the rounds the host scheduled alone, opening them where they were created', async () => {
+      const rounds = await schedule();
+      expect(rounds.slice(0, 3).map((r) => r.theme)).toEqual(['Theme', 'Theme', 'Theme']);
+      expect(rounds[0].submission_opens_at).toEqual(new Date('2030-04-30T00:00:00Z'));
+      expect(rounds[2].guessing_deadline).toEqual(new Date('2030-06-11T00:00:00Z'));
+    });
+
+    it('is safe to run again', async () => {
+      await migrate(db.pool);
+      expect((await schedule()).map((r) => r.round_number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    });
+  });
 });

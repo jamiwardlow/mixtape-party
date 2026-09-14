@@ -2,7 +2,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { startTestDb, type TestDb } from './testDb.js';
-import { buildApp as sharedBuildApp, closeGuessingWindow as closeGuessingWindowFor } from './testHelpers.js';
+import {
+  buildApp as sharedBuildApp,
+  closeGuessingWindow as closeGuessingWindowFor,
+  round1,
+  signUp,
+} from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -25,16 +30,21 @@ async function closeGuessingWindow(roundId: string) {
   await closeGuessingWindowFor(testDb.pool, roundId);
 }
 
-async function signUp(app: Express, email: string) {
-  const res = await request(app).post('/accounts').send({ email, password: 'password123' });
-  return { accountId: res.body.accountId as string, token: res.body.token as string };
+/** Every round of a league, oldest first -- the schedule POST /leagues derived. */
+async function scheduleOf(leagueId: string) {
+  const res = await testDb.pool.query<{
+    round_number: number;
+    theme: string | null;
+    submission_opens_at: Date;
+    submission_deadline: Date;
+    guessing_deadline: Date;
+  }>(
+    `SELECT round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
+     FROM rounds WHERE league_id = $1 ORDER BY round_number`,
+    [leagueId],
+  );
+  return res.rows;
 }
-
-const round1 = {
-  theme: 'One-hit wonders',
-  submissionDeadline: '2026-01-10T00:00:00.000Z',
-  guessingDeadline: '2026-01-17T00:00:00.000Z',
-};
 
 describe('POST /leagues', () => {
   it('creates a league with its first round and an invite code in one call', async () => {
@@ -81,11 +91,70 @@ describe('POST /leagues', () => {
         name: 'Office League',
         seasonLength: 8,
         theme: round1.theme,
-        submissionDeadline: '2026-01-17T00:00:00.000Z',
-        guessingDeadline: '2026-01-10T00:00:00.000Z',
+        submissionDeadline: '2030-01-17T00:00:00.000Z',
+        guessingDeadline: '2030-01-10T00:00:00.000Z',
       });
 
     expect(res.status).toBe(400);
+  });
+
+  it('rejects a season longer than the cap, now that seasonLength is a row count', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host-long-season@example.com');
+
+    const res = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Forever League', seasonLength: 1_000_000, ...round1 });
+
+    expect(res.status).toBe(400);
+    expect((await testDb.pool.query('SELECT 1 FROM rounds')).rowCount).toBe(0);
+  });
+
+  it('schedules the whole season back-to-back from round 1', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host-season@example.com');
+
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 4, ...round1 });
+
+    const rounds = await scheduleOf(created.body.leagueId);
+    expect(rounds.map((r) => r.round_number)).toEqual([1, 2, 3, 4]);
+
+    const window = Date.parse(round1.guessingDeadline) - Date.parse(round1.submissionDeadline);
+    for (const round of rounds) {
+      expect(round.guessing_deadline.getTime() - round.submission_deadline.getTime()).toBe(window);
+    }
+    // Round 1 takes submissions from the moment the league exists; every round after it takes
+    // them while the previous round is being guessed, so they all get the same window.
+    expect(rounds[0].submission_opens_at.getTime()).toBeLessThanOrEqual(Date.now());
+    for (const round of rounds.slice(1)) {
+      expect(round.submission_deadline.getTime() - round.submission_opens_at.getTime()).toBe(window);
+    }
+
+    expect(rounds[0].submission_deadline).toEqual(new Date(round1.submissionDeadline));
+    expect(rounds[0].guessing_deadline).toEqual(new Date(round1.guessingDeadline));
+    expect(rounds[2].submission_deadline).toEqual(rounds[1].guessing_deadline);
+    expect(rounds[3].submission_deadline).toEqual(rounds[2].guessing_deadline);
+  });
+
+  it('leaves rounds 2..N unnamed, keeping the theme the host submitted on round 1', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host-themes@example.com');
+
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 4, ...round1 });
+
+    expect((await scheduleOf(created.body.leagueId)).map((r) => r.theme)).toEqual([
+      round1.theme,
+      null,
+      null,
+      null,
+    ]);
   });
 });
 
@@ -102,7 +171,7 @@ describe('GET /leagues/invite/:code', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.league.name).toBe('Office League');
-    expect(res.body.currentRound.theme).toBe(round1.theme);
+    expect(res.body.currentRound).toMatchObject({ number: 1, theme: round1.theme });
     expect(res.body.playerCount).toBe(1);
   });
 
@@ -230,7 +299,7 @@ describe('GET /leagues/mine', () => {
       .set('Authorization', `Bearer ${host.token}`)
       .send({
         name: 'Guessing League',
-        seasonLength: 8,
+        seasonLength: 1,
         theme: round1.theme,
         submissionDeadline: '2000-01-01T00:00:00.000Z',
         guessingDeadline: '2030-01-17T00:00:00.000Z',
@@ -239,9 +308,42 @@ describe('GET /leagues/mine', () => {
     const guessingRes = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
     expect(guessingRes.body.leagues[0].round.phase).toBe('guessing');
 
+    // A one-round season has nothing to move on to, so the last round stays current once revealed.
     await closeGuessingWindow(created.body.round.id);
     const resultsRes = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
     expect(resultsRes.body.leagues[0].round.phase).toBe('results');
+  });
+
+  it('stays on round 1 while it is open, even though the whole season already exists', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host-round1@example.com');
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 8, ...round1 });
+
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.body.leagues[0].round).toMatchObject({
+      id: created.body.round.id,
+      number: 1,
+      theme: round1.theme,
+      phase: 'submission',
+    });
+  });
+
+  it('moves on to round 2 once round 1 is revealed', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host-round2@example.com');
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 8, ...round1 });
+
+    await closeGuessingWindow(created.body.round.id);
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.body.leagues[0].round).toMatchObject({ number: 2, theme: null });
   });
 
   it('omits leagues the caller is not a member of', async () => {
@@ -257,142 +359,5 @@ describe('GET /leagues/mine', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.leagues).toHaveLength(0);
-  });
-});
-
-describe('POST /leagues/:leagueId/rounds', () => {
-  const futureRound1 = {
-    theme: 'One-hit wonders',
-    submissionDeadline: '2030-01-10T00:00:00.000Z',
-    guessingDeadline: '2030-01-17T00:00:00.000Z',
-  };
-  const round2 = {
-    theme: 'Covers',
-    submissionDeadline: '2030-02-10T00:00:00.000Z',
-    guessingDeadline: '2030-02-17T00:00:00.000Z',
-  };
-
-  async function createLeague(app: Express, host: { token: string }) {
-    const res = await request(app)
-      .post('/leagues')
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({ name: 'Office League', seasonLength: 2, ...futureRound1 });
-    return { leagueId: res.body.leagueId as string, roundId: res.body.round.id as string };
-  }
-
-  it('rejects requests without a session', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host1@example.com');
-    const { leagueId } = await createLeague(app, host);
-
-    const res = await request(app).post(`/leagues/${leagueId}/rounds`).send(round2);
-    expect(res.status).toBe(401);
-  });
-
-  it('404s for an unknown league', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host2@example.com');
-
-    const res = await request(app)
-      .post('/leagues/00000000-0000-0000-0000-000000000000/rounds')
-      .set('Authorization', `Bearer ${host.token}`)
-      .send(round2);
-    expect(res.status).toBe(404);
-  });
-
-  it('rejects a non-host member', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host3@example.com');
-    const { leagueId } = await createLeague(app, host);
-    const player = await signUp(app, 'rounds-player3@example.com');
-
-    const res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${player.token}`)
-      .send(round2);
-    expect(res.status).toBe(403);
-  });
-
-  it('rejects starting the next round before the current round is revealed', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host4@example.com');
-    const { leagueId } = await createLeague(app, host);
-
-    const res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send(round2);
-    expect(res.status).toBe(403);
-  });
-
-  it('rejects with the not-revealed error, not the concluded error, when the final round is not yet revealed', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host4b@example.com');
-    const { leagueId, roundId } = await createLeague(app, host); // seasonLength: 2
-    await closeGuessingWindow(roundId);
-    await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send(round2); // round 2 is now the final round, not yet revealed
-
-    const res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({
-        theme: 'Round 3',
-        submissionDeadline: '2030-03-10T00:00:00.000Z',
-        guessingDeadline: '2030-03-17T00:00:00.000Z',
-      });
-    expect(res.status).toBe(403);
-  });
-
-  it('rejects an invalid round body', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host5@example.com');
-    const { leagueId, roundId } = await createLeague(app, host);
-    await closeGuessingWindow(roundId);
-
-    const res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({ theme: '', submissionDeadline: round2.submissionDeadline, guessingDeadline: round2.guessingDeadline });
-    expect(res.status).toBe(400);
-  });
-
-  it('starts round 2 once round 1 is revealed', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host6@example.com');
-    const { leagueId, roundId } = await createLeague(app, host);
-    await closeGuessingWindow(roundId);
-
-    const res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send(round2);
-
-    expect(res.status).toBe(201);
-    expect(res.body.round).toMatchObject({ number: 2, theme: round2.theme });
-  });
-
-  it('refuses to start another round once the season has concluded', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'rounds-host7@example.com');
-    const { leagueId, roundId } = await createLeague(app, host); // seasonLength: 2
-    await closeGuessingWindow(roundId);
-    const round2Res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send(round2);
-    await closeGuessingWindow(round2Res.body.round.id);
-
-    const res = await request(app)
-      .post(`/leagues/${leagueId}/rounds`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({
-        theme: 'Round 3',
-        submissionDeadline: '2030-03-10T00:00:00.000Z',
-        guessingDeadline: '2030-03-17T00:00:00.000Z',
-      });
-    expect(res.status).toBe(409);
   });
 });

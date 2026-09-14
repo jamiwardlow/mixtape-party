@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import request from 'supertest';
 import { startTestDb, type TestDb } from './testDb.js';
+import { buildApp, signUp } from './testHelpers.js';
 import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
 import { runNotificationSweep } from '../notifications/sweep.js';
 
@@ -155,13 +157,14 @@ describe('runNotificationSweep', () => {
     const leagueId = await createLeague(host);
     await addMember(leagueId, host);
     await addMember(leagueId, other);
-    await createRound(
+    const roundId = await createRound(
       leagueId,
       1,
       new Date('2030-01-01T00:00:00Z'),
       new Date('2000-01-01T00:00:00Z'),
       new Date('2000-01-02T00:00:00Z'),
     );
+    await submit(roundId, host);
 
     const deps = buildDeps();
     await runNotificationSweep(deps);
@@ -199,6 +202,61 @@ describe('runNotificationSweep', () => {
     expect(again.rows).toHaveLength(1);
   });
 
+  it('says "Round N" rather than "null" for a round nobody has named yet', async () => {
+    const host = await createAccount(`host-${Math.random()}@example.com`);
+    const leagueId = await createLeague(host);
+    await addMember(leagueId, host);
+    await testDb.pool.query(
+      `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline, created_at)
+       VALUES ($1, 2, NULL, '2030-01-06T00:00:00Z', '2030-01-13T00:00:00Z', '2030-01-01T00:00:00Z')`,
+      [leagueId],
+    );
+
+    await runNotificationSweep(buildDeps(), new Date('2030-01-05T00:00:00Z'));
+
+    const notifs = await testDb.pool.query<{ body: string }>('SELECT body FROM notifications');
+    expect(notifs.rows[0].body).toContain('"Round 2"');
+  });
+
+  it('leaves a round nobody submitted to out of the results announcements', async () => {
+    const host = await createAccount(`host-${Math.random()}@example.com`);
+    const leagueId = await createLeague(host);
+    await addMember(leagueId, host);
+    await createRound(
+      leagueId,
+      1,
+      new Date('2000-01-01T00:00:00Z'),
+      new Date('2000-01-01T00:00:00Z'),
+      new Date('2000-01-02T00:00:00Z'),
+    );
+
+    await runNotificationSweep(buildDeps());
+
+    expect((await testDb.pool.query("SELECT 1 FROM notifications WHERE type = 'results_ready'")).rowCount).toBe(0);
+  });
+
+  it('reminds about round 1 only, when a league has just scheduled its whole season', async () => {
+    const { app } = buildApp(testDb.pool);
+    const host = await signUp(app, `season-host-${Math.random()}@example.com`);
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        name: 'Office League',
+        seasonLength: 8,
+        theme: 'One-hit wonders',
+        submissionDeadline: '2030-01-10T00:00:00.000Z',
+        guessingDeadline: '2030-01-17T00:00:00.000Z',
+      });
+
+    await runNotificationSweep(buildDeps(), new Date('2030-01-09T00:00:00Z'));
+
+    const notifs = await testDb.pool.query<{ round_id: string; type: string }>(
+      'SELECT round_id, type FROM notifications',
+    );
+    expect(notifs.rows).toEqual([{ round_id: created.body.round.id, type: 'submission_reminder' }]);
+  });
+
   it('sends push to every registered device, split from the email channel', async () => {
     const host = await createAccount(`host-${Math.random()}@example.com`);
     const leagueId = await createLeague(host);
@@ -206,13 +264,14 @@ describe('runNotificationSweep', () => {
     await testDb.pool.query("INSERT INTO push_tokens (account_id, platform, token) VALUES ($1, 'expo', 'tok-1')", [
       host,
     ]);
-    await createRound(
+    const roundId = await createRound(
       leagueId,
       1,
       new Date('2030-01-01T00:00:00Z'),
       new Date('2000-01-01T00:00:00Z'),
       new Date('2000-01-02T00:00:00Z'),
     );
+    await submit(roundId, host);
 
     const deps = buildDeps();
     await runNotificationSweep(deps);

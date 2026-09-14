@@ -2,9 +2,13 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { loadLeague, loadLatestRound } from './rounds.js';
+import { CURRENT_ROUND_CLAUSE } from './rounds.js';
 
 export type LeaguesDeps = AccountsDeps;
+
+// seasonLength is a row count now that the whole season is inserted at creation, so it needs a
+// ceiling -- a weekly round for a year is already more league than anyone plays.
+const MAX_SEASON_LENGTH = 52;
 
 function generateInviteCode(): string {
   return randomBytes(5).toString('base64url');
@@ -21,7 +25,7 @@ interface LeagueRow {
 interface RoundRow {
   id: string;
   round_number: number;
-  theme: string;
+  theme: string | null;
   submission_deadline: string;
   guessing_deadline: string;
 }
@@ -73,8 +77,13 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(400).json({ error: 'name is required' });
       return;
     }
-    if (typeof seasonLength !== 'number' || !Number.isInteger(seasonLength) || seasonLength < 1) {
-      res.status(400).json({ error: 'seasonLength must be a positive integer' });
+    if (
+      typeof seasonLength !== 'number' ||
+      !Number.isInteger(seasonLength) ||
+      seasonLength < 1 ||
+      seasonLength > MAX_SEASON_LENGTH
+    ) {
+      res.status(400).json({ error: `seasonLength must be a positive integer no greater than ${MAX_SEASON_LENGTH}` });
       return;
     }
     const parsed = parseRoundInput(req.body);
@@ -95,11 +104,28 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const leagueId = league.rows[0].id;
       const inviteCode = league.rows[0].invite_code;
 
-      const round = await client.query<RoundRow>(
-        `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline)
-         VALUES ($1, 1, $2, $3, $4) RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
-        [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString()],
+      // The whole season is scheduled here, from round 1's two deadlines (#74): with W the gap
+      // between them, round N's submission deadline is G1 + (N-2)W and its guessing deadline is
+      // G1 + (N-1)W, so each round's submission deadline lands on the previous round's guessing
+      // deadline. Only round 1 has a theme; naming the rest is #75's PATCH.
+      //
+      // submission_opens_at is round N-1's *submission* deadline, not its guessing deadline as
+      // #74 phrased it -- those are one and the same instant as round N's own submission
+      // deadline, which would leave every round after the first a zero-length submission window
+      // and make its reminder fire at the deadline. Round N's submissions are collected while
+      // round N-1 is being guessed.
+      const rounds = await client.query<RoundRow>(
+        `INSERT INTO rounds (league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline)
+         SELECT $1, n,
+                CASE WHEN n = 1 THEN $2 END,
+                CASE WHEN n = 1 THEN now() ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 3) END,
+                $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 2),
+                $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 1)
+         FROM generate_series(1, $5::int) AS n
+         RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
+        [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString(), seasonLength],
       );
+      const firstRound = rounds.rows.find((row) => row.round_number === 1)!;
 
       await client.query('INSERT INTO league_members (league_id, account_id) VALUES ($1, $2)', [
         leagueId,
@@ -111,7 +137,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(201).json({
         leagueId,
         inviteCode,
-        round: serializeRound(round.rows[0]),
+        round: serializeRound(firstRound),
       });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -134,7 +160,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         league.host_account_id,
       ]),
       deps.pool.query<RoundRow>(
-        'SELECT id, round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE league_id = $1 ORDER BY round_number DESC LIMIT 1',
+        `SELECT id, round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE league_id = $1 ${CURRENT_ROUND_CLAUSE}`,
         [league.id],
       ),
       deps.pool.query<{ display_name: string | null }>(
@@ -191,7 +217,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
        JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
        LEFT JOIN LATERAL (
          SELECT id, round_number, theme, submission_deadline, guessing_deadline
-         FROM rounds WHERE league_id = l.id ORDER BY round_number DESC LIMIT 1
+         FROM rounds WHERE league_id = l.id ${CURRENT_ROUND_CLAUSE}
        ) r ON true
        ORDER BY l.name`,
       [accountId],
@@ -217,49 +243,6 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
           : null,
       })),
     });
-  });
-
-  router.post('/leagues/:leagueId/rounds', requireAuth(deps), async (req, res) => {
-    const accountId = (req as unknown as AuthedRequest).accountId;
-    const league = await loadLeague(deps.pool, req.params.leagueId);
-    if (!league) {
-      res.status(404).json({ error: 'league not found' });
-      return;
-    }
-    if (league.hostAccountId !== accountId) {
-      res.status(403).json({ error: 'only the host can start the next round' });
-      return;
-    }
-
-    const latest = (await loadLatestRound(deps.pool, req.params.leagueId))!;
-    if (new Date(latest.guessingDeadline) > new Date()) {
-      res.status(403).json({ error: 'wait for the current round to be revealed before starting the next round' });
-      return;
-    }
-    if (latest.roundNumber >= league.seasonLength) {
-      res.status(409).json({ error: 'the season has concluded' });
-      return;
-    }
-
-    const parsed = parseRoundInput(req.body);
-    if ('error' in parsed) {
-      res.status(400).json({ error: parsed.error });
-      return;
-    }
-
-    const round = await deps.pool.query<RoundRow>(
-      `INSERT INTO rounds (league_id, round_number, theme, submission_deadline, guessing_deadline)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
-      [
-        req.params.leagueId,
-        latest.roundNumber + 1,
-        parsed.theme,
-        parsed.submissionAt.toISOString(),
-        parsed.guessingAt.toISOString(),
-      ],
-    );
-
-    res.status(201).json({ round: serializeRound(round.rows[0]) });
   });
 
   return router;

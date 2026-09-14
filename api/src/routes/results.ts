@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadLatestRound, loadLeague, loadRound } from './rounds.js';
+import { isLeagueMember, loadCurrentRound, loadLeague, loadRound } from './rounds.js';
 
 export type ResultsDeps = AccountsDeps;
 
@@ -105,8 +105,8 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       return;
     }
 
-    const latest = (await loadLatestRound(deps.pool, req.params.leagueId))!;
-    const concluded = latest.roundNumber >= league.seasonLength && new Date(latest.guessingDeadline) <= new Date();
+    const current = (await loadCurrentRound(deps.pool, req.params.leagueId))!;
+    const concluded = current.roundNumber >= league.seasonLength && new Date(current.guessingDeadline) <= new Date();
     if (!concluded) {
       res.status(403).json({ error: 'final standings are not available until the season concludes' });
       return;

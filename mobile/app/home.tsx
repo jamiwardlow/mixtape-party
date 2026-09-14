@@ -9,7 +9,8 @@ import { useTheme } from '../lib/theme';
 interface RoundSummary {
   id: string;
   number: number;
-  theme: string;
+  /** Null until the host names the round -- the season is scheduled before its themes are. */
+  theme: string | null;
   phase: 'submission' | 'guessing' | 'results';
 }
 
@@ -71,7 +72,7 @@ export default function Home() {
             <HandText>{league.name}</HandText>
             {league.round ? (
               <TapeButton
-                title={`${league.round.theme}: ${PHASE_META[league.round.phase].label}`}
+                title={`${league.round.theme ?? `Round ${league.round.number}`}: ${PHASE_META[league.round.phase].label}`}
                 onPress={() => router.push(roundHref(league.round!))}
               />
             ) : (

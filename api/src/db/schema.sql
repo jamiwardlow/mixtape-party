@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS rounds (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
   round_number INTEGER NOT NULL,
-  theme TEXT NOT NULL,
+  theme TEXT,
+  submission_opens_at TIMESTAMPTZ,
   submission_deadline TIMESTAMPTZ NOT NULL,
   guessing_deadline TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -53,6 +54,12 @@ CREATE TABLE IF NOT EXISTS rounds (
   results_notified_at TIMESTAMPTZ,
   UNIQUE (league_id, round_number)
 );
+
+-- Repeat-safe fixes for rounds tables created before #74. The whole season is inserted when the
+-- league is created, so rounds 2..N have no theme yet, and created_at is no longer the moment a
+-- round's submission window opened -- submission_opens_at records that instead.
+ALTER TABLE rounds ALTER COLUMN theme DROP NOT NULL;
+ALTER TABLE rounds ADD COLUMN IF NOT EXISTS submission_opens_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS league_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

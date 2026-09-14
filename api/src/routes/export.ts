@@ -207,7 +207,9 @@ export function createExportRouter(deps: ExportDeps): Router {
       accessTokenByService.set('youtube_music', deps.youtubeMusicCookie);
     }
 
-    const playlistName = `Mixtape Party — Round ${round.roundNumber}: ${round.theme}`;
+    // A round scheduled up front has no theme until the host names one, and "Round 3: null" is
+    // not a playlist anyone wants in their library.
+    const playlistName = `Mixtape Party — Round ${round.roundNumber}${round.theme ? `: ${round.theme}` : ''}`;
     // Settled one service at a time so a single broken link cannot take the others down with it
     // (#73). A bare Promise.all rejected the whole request, throwing away a playlist another
     // service had already built and written to round_exports -- the client then saw only a 500.
