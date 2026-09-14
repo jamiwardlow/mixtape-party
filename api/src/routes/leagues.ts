@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { CURRENT_ROUND_CLAUSE, loadLeague, loadRound } from './rounds.js';
+import { CURRENT_ROUND_CLAUSE, isLeagueMember, loadLeague, loadRound } from './rounds.js';
 
 export type LeaguesDeps = AccountsDeps;
 
@@ -256,6 +256,31 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
           : null,
       })),
     });
+  });
+
+  // The whole season, for the schedule screen (#77) -- /leagues/mine and the invite preview both
+  // answer with the current round alone. A read of its own rather than part of the PATCH above:
+  // every member needs it, only the host may write.
+  router.get('/leagues/:leagueId/rounds', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const league = await loadLeague(deps.pool, req.params.leagueId);
+    if (!league) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (!(await isLeagueMember(deps.pool, req.params.leagueId, accountId))) {
+      res.status(403).json({ error: 'join the league before viewing its schedule' });
+      return;
+    }
+
+    const rounds = await deps.pool.query<RoundRow>(
+      `SELECT id, round_number, theme, submission_deadline, guessing_deadline
+       FROM rounds WHERE league_id = $1 ORDER BY round_number`,
+      [req.params.leagueId],
+    );
+
+    // Round metadata only: who submitted what stays hidden until guesses lock (Principle 1).
+    res.json({ isHost: league.hostAccountId === accountId, rounds: rounds.rows.map(serializeRound) });
   });
 
   // The only mutation path a round has (#75). #74 pre-creates the whole season from round 1's

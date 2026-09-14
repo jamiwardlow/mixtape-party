@@ -48,6 +48,17 @@ async function scheduleOf(leagueId: string) {
   return res.rows;
 }
 
+/** A host plus the whole pre-created season (#74), oldest round first. */
+async function createSeason(app: Express, email: string, seasonLength = 4) {
+  const host = await signUp(app, email);
+  const created = await request(app)
+    .post('/leagues')
+    .set('Authorization', `Bearer ${host.token}`)
+    .send({ name: 'Office League', seasonLength, ...round1 });
+  const leagueId = created.body.leagueId as string;
+  return { host, leagueId, inviteCode: created.body.inviteCode as string, rounds: await scheduleOf(leagueId) };
+}
+
 describe('POST /leagues', () => {
   it('creates a league with its first round and an invite code in one call', async () => {
     const { app } = buildApp();
@@ -367,17 +378,6 @@ describe('GET /leagues/mine', () => {
 describe('PATCH /rounds/:roundId', () => {
   const DAY = 24 * 60 * 60 * 1000;
 
-  /** A host plus the whole pre-created season (#74), oldest round first. */
-  async function createSeason(app: Express, email: string, seasonLength = 4) {
-    const host = await signUp(app, email);
-    const created = await request(app)
-      .post('/leagues')
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({ name: 'Office League', seasonLength, ...round1 });
-    const leagueId = created.body.leagueId as string;
-    return { host, leagueId, inviteCode: created.body.inviteCode as string, rounds: await scheduleOf(leagueId) };
-  }
-
   it('rejects requests without a session', async () => {
     const { app } = buildApp();
     const { rounds } = await createSeason(app, 'patch-anon@example.com');
@@ -693,5 +693,80 @@ describe('PATCH /rounds/:roundId', () => {
       .send({ guessingDeadline: new Date(rounds[1].guessing_deadline.getTime() + 5 * DAY).toISOString() });
 
     expect(res.status).toBe(200);
+  });
+});
+
+// The schedule screen (#77) needs every round of the league, not just the current one, plus
+// whether the viewer is the host -- a member who sees edit affordances only finds out on the 403.
+describe('GET /leagues/:leagueId/rounds', () => {
+  it('rejects requests without a session', async () => {
+    const { app } = buildApp();
+    const { leagueId } = await createSeason(app, 'rounds-anon@example.com');
+    expect((await request(app).get(`/leagues/${leagueId}/rounds`)).status).toBe(401);
+  });
+
+  it('404s for an unknown league', async () => {
+    const { app } = buildApp();
+    const { host } = await createSeason(app, 'rounds-404@example.com');
+    const res = await request(app)
+      .get('/leagues/00000000-0000-0000-0000-000000000000/rounds')
+      .set('Authorization', `Bearer ${host.token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('403s someone who is not in the league', async () => {
+    const { app } = buildApp();
+    const { leagueId } = await createSeason(app, 'rounds-outsider-host@example.com');
+    const outsider = await signUp(app, 'rounds-outsider@example.com');
+    const res = await request(app).get(`/leagues/${leagueId}/rounds`).set('Authorization', `Bearer ${outsider.token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns the whole season in round order, with only round 1 themed', async () => {
+    const { app } = buildApp();
+    const { host, leagueId } = await createSeason(app, 'rounds-host@example.com');
+
+    const res = await request(app).get(`/leagues/${leagueId}/rounds`).set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isHost).toBe(true);
+    expect(res.body.rounds.map((r: { number: number }) => r.number)).toEqual([1, 2, 3, 4]);
+    expect(res.body.rounds.map((r: { theme: string | null }) => r.theme)).toEqual([
+      'One-hit wonders',
+      null,
+      null,
+      null,
+    ]);
+    // Back-to-back: each round's submission deadline is the previous round's guessing deadline.
+    expect(res.body.rounds[1].submissionDeadline).toBe(res.body.rounds[0].guessingDeadline);
+  });
+
+  it('tells a member they are not the host', async () => {
+    const { app } = buildApp();
+    const { leagueId, inviteCode } = await createSeason(app, 'rounds-member-host@example.com');
+    const player = await signUp(app, 'rounds-member@example.com');
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+
+    const res = await request(app).get(`/leagues/${leagueId}/rounds`).set('Authorization', `Bearer ${player.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.isHost).toBe(false);
+    expect(res.body.rounds).toHaveLength(4);
+  });
+
+  // Round metadata only -- submissions stay anonymous until guesses lock (PRODUCT.md, Principle 1).
+  it('leaks nothing beyond round metadata', async () => {
+    const { app } = buildApp();
+    const { host, leagueId } = await createSeason(app, 'rounds-shape@example.com');
+
+    const res = await request(app).get(`/leagues/${leagueId}/rounds`).set('Authorization', `Bearer ${host.token}`);
+
+    expect(Object.keys(res.body.rounds[0]).sort()).toEqual([
+      'guessingDeadline',
+      'id',
+      'number',
+      'submissionDeadline',
+      'theme',
+    ]);
   });
 });

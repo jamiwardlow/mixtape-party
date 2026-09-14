@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import CreateLeague from '../create-league';
+import { formatDeadline } from '../../lib/ui';
 
 const mockReplace = jest.fn();
 
@@ -111,5 +112,54 @@ describe('season length', () => {
     await create();
 
     expect(lastPost().seasonLength).toBe(12);
+  });
+});
+
+// #74 derives the whole season from round 1's two deadlines and commits it without showing the
+// host a thing. These assert the host can see what they are about to agree to.
+describe('season schedule preview', () => {
+  const dateAt = (testID: string) => screen.getByTestId(testID).props.children as string;
+
+  async function previewFor(seasonLength: string) {
+    await render(<CreateLeague />);
+    await fireEvent.changeText(screen.getByPlaceholderText('Season length (rounds)'), seasonLength);
+    await pick('submission-deadline', '2026-10-01T18:00:00.000Z');
+    await pick('guessing-deadline', '2026-10-08T18:00:00.000Z');
+  }
+
+  it('shows one row per round after the first, back to back', async () => {
+    await previewFor('4');
+
+    expect(screen.queryByTestId('preview-round-5-submission')).toBeNull();
+    for (const n of [2, 3]) {
+      expect(dateAt(`preview-round-${n + 1}-submission`)).toBe(dateAt(`preview-round-${n}-guessing`));
+    }
+  });
+
+  // Round 1 is the form above the preview; repeating it under "the rest of the season" reads as
+  // an extra round the host did not ask for.
+  it('starts the preview at round 2, where the window the host picked ends', async () => {
+    await previewFor('4');
+
+    expect(screen.queryByTestId('preview-round-1-submission')).toBeNull();
+    expect(dateAt('preview-round-2-submission')).toBe(formatDeadline(new Date('2026-10-08T18:00:00.000Z')));
+    expect(dateAt('preview-round-2-guessing')).toBe(formatDeadline(new Date('2026-10-15T18:00:00.000Z')));
+  });
+
+  it('re-renders with the right row count when the season length changes', async () => {
+    await previewFor('4');
+
+    await fireEvent.changeText(screen.getByPlaceholderText('Season length (rounds)'), '2');
+
+    expect(screen.getByTestId('preview-round-2-guessing')).toBeTruthy();
+    expect(screen.queryByTestId('preview-round-3-submission')).toBeNull();
+  });
+
+  // Number('') is 0 and Number('two') is NaN; generating rows off either one is a blank list at
+  // best and a hung render at worst.
+  it('shows no preview while the season length is unusable', async () => {
+    await previewFor('');
+
+    expect(screen.queryByTestId('preview-round-2-submission')).toBeNull();
   });
 });

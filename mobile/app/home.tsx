@@ -70,14 +70,21 @@ export default function Home() {
           <JCard key={league.id}>
             <ReelHoles color={t.reel} />
             <HandText>{league.name}</HandText>
-            {league.round ? (
+            {league.round && (
               <TapeButton
                 title={`${league.round.theme ?? `Round ${league.round.number}`}: ${PHASE_META[league.round.phase].label}`}
                 onPress={() => router.push(roundHref(league.round!))}
               />
-            ) : (
-              <Label>Between rounds</Label>
             )}
+            {/* The whole season exists from creation (#74), so there is always a schedule to show
+                — which is also the only thing left to offer a league between rounds. */}
+            <TapeButton
+              title="Season schedule"
+              variant="secondary"
+              onPress={() =>
+                router.push({ pathname: '/league/[leagueId]/schedule', params: { leagueId: league.id } })
+              }
+            />
           </JCard>
         ))}
       </ScrollView>

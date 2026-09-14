@@ -152,7 +152,8 @@ export function TapeInput(props: TextInputProps) {
   );
 }
 
-function formatDeadline(date: Date): string {
+/** The one way a deadline is written in the UI: the date and the time, in the viewer's locale. */
+export function formatDeadline(date: Date): string {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
@@ -174,19 +175,22 @@ function toLocalInputValue(date: Date | undefined): string {
 // PRODUCT.md wants one design language across iOS and Android; this is as close as the library
 // gets. Replace all three with one JS calendar if that stops being close enough.
 //
-// minimumDate is an affordance, not a guarantee: Android applies it to the date dialog only, and
-// a DOM `min` outside a <form> isn't enforced. Callers still have to check the order themselves.
+// minimumDate/maximumDate are affordances, not guarantees: Android applies them to the date
+// dialog only, and DOM `min`/`max` outside a <form> aren't enforced. Callers still have to check
+// the order themselves.
 export function TapeDateField({
   label,
   value,
   onChange,
   minimumDate,
+  maximumDate,
   testID,
 }: {
   label: string;
   value: Date;
   onChange: (date: Date) => void;
   minimumDate?: Date;
+  maximumDate?: Date;
   testID?: string;
 }) {
   const t = useTheme();
@@ -200,6 +204,7 @@ export function TapeDateField({
           data-testid={testID}
           value={toLocalInputValue(value)}
           min={toLocalInputValue(minimumDate)}
+          max={toLocalInputValue(maximumDate)}
           onChange={(e) => {
             // Clearing the field, or a half-typed date, parses to Invalid Date -- keep the last
             // good value rather than handing the caller a NaN instant.
@@ -230,6 +235,7 @@ export function TapeDateField({
               value,
               mode: 'date',
               minimumDate,
+              maximumDate,
               // The date dialog answers first; the time dialog then refines the day it returned.
               onValueChange: (_event, date) =>
                 DateTimePickerAndroid.open({
@@ -254,6 +260,7 @@ export function TapeDateField({
         mode="datetime"
         display="compact"
         minimumDate={minimumDate}
+        maximumDate={maximumDate}
         onValueChange={(_event, date) => onChange(date)}
       />
     );
@@ -264,6 +271,30 @@ export function TapeDateField({
       <Label>{label}</Label>
       {control()}
     </View>
+  );
+}
+
+/** A round's two deadlines, laid out the same way by the setup preview and the schedule screen. */
+export function DeadlineRows({
+  submissionDeadline,
+  guessingDeadline,
+  testID,
+}: {
+  submissionDeadline: Date;
+  guessingDeadline: Date;
+  testID: string;
+}) {
+  return (
+    <>
+      <View style={styles.deadlineRow}>
+        <Label>Submissions due</Label>
+        <Label testID={`${testID}-submission`}>{formatDeadline(submissionDeadline)}</Label>
+      </View>
+      <View style={styles.deadlineRow}>
+        <Label>Guesses due</Label>
+        <Label testID={`${testID}-guessing`}>{formatDeadline(guessingDeadline)}</Label>
+      </View>
+    </>
   );
 }
 
@@ -289,6 +320,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: StyleSheet.hairlineWidth, ...INPUT_SHAPE },
   dateField: { gap: 4 },
   dateValue: { lineHeight: 20 },
+  deadlineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   sprocket: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 4 },
   spinner: { alignSelf: 'center' },
 });
