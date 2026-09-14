@@ -11,6 +11,7 @@ jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
 // __esModule matters: without it babel's interop hands the test a *copy* of the module object and
 // jest.replaceProperty below would patch something the screen never reads.
 jest.mock('../../lib/appleMusic', () => ({
+  ...jest.requireActual('../../lib/appleMusic'),
   __esModule: true,
   appleMusicLinkingSupported: true,
   linkAppleMusic: jest.fn(),

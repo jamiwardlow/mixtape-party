@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { fetchApi } from './api';
+import type { Profile } from './session';
 
 const MUSICKIT_SRC = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
 
@@ -25,6 +26,14 @@ declare global {
  * entitlement — worth revisiting when that gap closes.
  */
 export const appleMusicLinkingSupported = Platform.OS === 'web';
+
+/**
+ * Whether a round's playlist can land in this account's Apple Music library — the linked state the
+ * API reports on /accounts/me, which is the only place it lives client-side.
+ */
+export function isAppleMusicLinked(profile: Profile | null): boolean {
+  return profile?.services?.some((s) => s.service === 'apple_music') ?? false;
+}
 
 function loadMusicKit(): Promise<MusicKitStatic> {
   if (globalThis.MusicKit) return Promise.resolve(globalThis.MusicKit);

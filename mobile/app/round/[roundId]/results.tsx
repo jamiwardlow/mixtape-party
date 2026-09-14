@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
+import { appleMusicLinkingSupported, isAppleMusicLinked } from '../../../lib/appleMusic';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton } from '../../../lib/ui';
@@ -34,7 +35,7 @@ interface PlaylistLink {
 
 export default function RoundResults() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
-  const { token } = useSession();
+  const { token, profile } = useSession();
   const [results, setResults] = useState<Results | null>(null);
   const [playlists, setPlaylists] = useState<Array<PlaylistLink & { playlistUrl: string }>>([]);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,15 @@ export default function RoundResults() {
       setPlaylists(services.flatMap((s) => (s.playlistUrl ? [{ ...s, playlistUrl: s.playlistUrl }] : [])));
     })();
   }, [token, roundId]);
+
+  // Apple Music is the only linkable service, and its playlists are created under the user's own
+  // library token (#70) -- so an unlinked account gets no playlist and, until now, no hint why.
+  // Read off the session profile rather than asking the API again.
+  //
+  // Withheld until the profile arrives (null while /accounts/me is in flight, which outlives the
+  // results fetch) or a linked user watches the prompt flash and vanish. Web-only, because the
+  // /settings it points at can only link there -- on native the button would be a dead end.
+  const promptAppleMusic = appleMusicLinkingSupported && profile !== null && !isAppleMusicLinked(profile);
 
   const winnerNames = results?.winners.map((w) => w.displayName ?? 'A player').join(', ') ?? '';
 
@@ -95,6 +105,16 @@ export default function RoundResults() {
                 />
               </View>
             ))}
+          </JCard>
+        ) : null}
+        {promptAppleMusic ? (
+          // An offer, not a gate (#67): the results above render the same either way.
+          //
+          // ponytail: shows on every results view, with no way to dismiss it. Persisting a
+          // "not interested" flag is the upgrade if it turns out to nag.
+          <JCard>
+            <Label>Want this round’s playlist in your Apple Music library? Link your account.</Label>
+            <TapeButton title="Link Apple Music" onPress={() => router.push('/settings')} variant="secondary" />
           </JCard>
         ) : null}
         <FlatList

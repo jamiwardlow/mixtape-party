@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { appleMusicLinkingSupported, linkAppleMusic } from '../lib/appleMusic';
+import { appleMusicLinkingSupported, isAppleMusicLinked, linkAppleMusic } from '../lib/appleMusic';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
 import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, TapeButton } from '../lib/ui';
@@ -10,7 +10,7 @@ export default function Settings() {
   const { token, profile, refreshProfile } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const linked = profile?.services?.some((s) => s.service === 'apple_music') ?? false;
+  const linked = isAppleMusicLinked(profile);
 
   async function link() {
     if (!token) return;

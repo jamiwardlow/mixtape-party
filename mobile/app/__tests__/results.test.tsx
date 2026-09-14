@@ -1,19 +1,31 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import RoundResults from '../round/[roundId]/results';
+import * as appleMusic from '../../lib/appleMusic';
 
 const mockOpenURL = jest.fn();
+const mockPush = jest.fn();
+let mockProfile: { services?: { service: string }[] } | null;
 
 jest.mock('expo-router', () => ({
-  router: { replace: jest.fn() },
+  router: { replace: jest.fn(), push: (...args: unknown[]) => mockPush(...args) },
   useLocalSearchParams: () => ({ roundId: 'round-1' }),
 }));
 
 jest.mock('../../lib/session', () => ({
-  useSession: () => ({ token: 'tok-1' }),
+  useSession: () => ({ token: 'tok-1', profile: mockProfile }),
 }));
 
 jest.mock('expo-linking', () => ({
   openURL: (...args: unknown[]) => mockOpenURL(...args),
+}));
+
+// Only the platform flag is stubbed -- isAppleMusicLinked is the thing under test here, so it stays
+// real. __esModule matters: without it babel's interop hands the test a *copy* of the module object
+// and jest.replaceProperty below would patch something the screen never reads.
+jest.mock('../../lib/appleMusic', () => ({
+  ...jest.requireActual('../../lib/appleMusic'),
+  __esModule: true,
+  appleMusicLinkingSupported: true,
 }));
 
 const results = { tracks: [], scores: [], winners: [] };
@@ -29,8 +41,15 @@ function stubApi(exportBody: unknown, exportStatus = 200) {
   ) as unknown as typeof fetch;
 }
 
+// jest.replaceProperty is not undone by clearAllMocks -- without this, every test appended after
+// the native one silently runs with appleMusicLinkingSupported false.
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
+  mockProfile = { services: [{ service: 'apple_music' }] };
 });
 
 describe('exported playlist links', () => {
@@ -73,6 +92,53 @@ describe('exported playlist links', () => {
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('Playlists')).toBeNull();
+    expect(screen.getByText('Results')).toBeTruthy();
+  });
+});
+
+describe('Apple Music prompt', () => {
+  beforeEach(() => {
+    mockProfile = { services: [] };
+    stubApi({ services: [] });
+  });
+
+  // An offer, not a gate (#67): the results render alongside it, not instead of it.
+  it('points an unlinked account at the linking screen without displacing the results', async () => {
+    await render(<RoundResults />);
+
+    expect(await screen.findByText('Results')).toBeTruthy();
+    await fireEvent.press(await screen.findByText('Link Apple Music'));
+    expect(mockPush).toHaveBeenCalledWith('/settings');
+  });
+
+  it('stays quiet once Apple Music is linked', async () => {
+    mockProfile = { services: [{ service: 'apple_music' }] };
+
+    await render(<RoundResults />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Link Apple Music')).toBeNull();
+  });
+
+  // The profile lands after the token does, so a linked user would otherwise watch the prompt
+  // appear and vanish.
+  it('waits for the profile rather than assuming an unlinked account', async () => {
+    mockProfile = null;
+
+    await render(<RoundResults />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Link Apple Music')).toBeNull();
+  });
+
+  // /settings can only link on web, so off web the button would send the user to a dead end.
+  it('stays off native, where the screen it points at cannot link', async () => {
+    jest.replaceProperty(appleMusic, 'appleMusicLinkingSupported', false);
+
+    await render(<RoundResults />);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Link Apple Music')).toBeNull();
     expect(screen.getByText('Results')).toBeTruthy();
   });
 });
