@@ -121,6 +121,14 @@ export async function closeGuessingWindow(pool: Pool, roundId: string) {
   await pool.query("UPDATE rounds SET guessing_deadline = '2000-01-01T00:00:00Z' WHERE id = $1", [roundId]);
 }
 
+/** Every round of a league already reminded, so a test can watch a moved window clear its flag. */
+export async function markRemindersSent(pool: Pool, leagueId: string) {
+  await pool.query(
+    'UPDATE rounds SET submission_reminder_sent_at = now(), guessing_reminder_sent_at = now() WHERE league_id = $1',
+    [leagueId],
+  );
+}
+
 function tokenFrom(body: string, pattern: RegExp): string {
   const match = pattern.exec(body);
   if (!match) throw new Error(`no token matching ${pattern} in emailed body: ${body}`);

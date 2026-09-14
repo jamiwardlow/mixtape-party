@@ -355,60 +355,100 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
-    const neighbours = await deps.pool.query<
-      Pick<RoundRow, 'round_number' | 'submission_deadline' | 'guessing_deadline'>
-    >(
-      `SELECT round_number, submission_deadline, guessing_deadline FROM rounds
-       WHERE league_id = $1 AND round_number IN ($2, $3)`,
-      [round.leagueId, round.roundNumber - 1, round.roundNumber + 1],
+    const bounds = await deps.pool.query<{
+      previous_guessing_deadline: string | null;
+      earliest_later_deadline: string | null;
+    }>(
+      `SELECT min(guessing_deadline) FILTER (WHERE round_number = $2) AS previous_guessing_deadline,
+              min(guessing_deadline) FILTER (WHERE round_number > $3) AS earliest_later_deadline
+       FROM rounds WHERE league_id = $1 AND (round_number = $2 OR round_number > $3)`,
+      [round.leagueId, round.roundNumber - 1, round.roundNumber],
     );
-    const previous = neighbours.rows.find((row) => row.round_number === round.roundNumber - 1);
-    const next = neighbours.rows.find((row) => row.round_number === round.roundNumber + 1);
-    // The schedule has to stay monotonic: out of order, CURRENT_ROUND_CLAUSE names a nonsense
-    // round and the league silently jumps. Merely *touching* a neighbour is the preset schedule's
-    // own resting state, so only a genuine crossing is refused. Each check is also gated on its
-    // own deadline being in the patch: a deadline the host is not moving must never make the
-    // request fail for where it already sits.
-    if (submissionDeadline !== undefined && previous && submissionAt < new Date(previous.guessing_deadline)) {
+    const { previous_guessing_deadline: previousGuessing, earliest_later_deadline: earliestLater } = bounds.rows[0];
+
+    // submissionDeadline is the split point *inside* this round, so it is the only deadline with
+    // a neighbour it can collide with: backing it past round N-1's guessing deadline would put
+    // the schedule out of order, and out of order CURRENT_ROUND_CLAUSE names a nonsense round.
+    // Merely *touching* the neighbour is the preset schedule's own resting state, so only a
+    // genuine crossing is refused -- and the check is gated on the patch naming that deadline, so
+    // a deadline the host is not moving can never make the request fail for where it already sits.
+    // Its upper bound is this round's own guessing deadline, which checkDeadlineOrder covers.
+    if (submissionDeadline !== undefined && previousGuessing && submissionAt < new Date(previousGuessing)) {
       res.status(400).json({
-        error: `submissionDeadline must not precede round ${previous.round_number}'s guessing deadline`,
-      });
-      return;
-    }
-    if (guessingDeadline !== undefined && next && guessingAt > new Date(next.submission_deadline)) {
-      res.status(400).json({
-        error: `guessingDeadline must not follow round ${next.round_number}'s submission deadline`,
+        error: `submissionDeadline must not precede round ${round.roundNumber - 1}'s guessing deadline`,
       });
       return;
     }
 
-    // One data-modifying CTE so the round and its successor's submission window move in the same
-    // statement. Round N+1 collects submissions while round N is being guessed, so its
-    // submission_opens_at *is* round N's submission deadline (see POST /leagues above); the
-    // notification sweep reads the reminder as a fraction of that window and misfires if the two
-    // drift apart. The CTE matches no row when this is the last round of the season.
+    // guessingDeadline is the boundary *between* round N and round N+1, so moving it by delta
+    // slides the whole rest of the season by delta rather than being refused for crossing round
+    // N+1 (#79). Every later round keeps its window lengths and the season's end date moves with
+    // it: the host is moving the season, not squeezing one round. Stretching round N by shrinking
+    // round N+1 was rejected -- it silently squeezes a round the host said nothing about.
+    const shiftMs =
+      guessingDeadline === undefined ? 0 : guessingAt.getTime() - new Date(round.guessingDeadline).getTime();
+    // Nothing already played may move. A slide only ever touches rounds after N, and N is not
+    // over, so monotonicity already implies every slid round is in the future -- but a legacy or
+    // hand-edited league need not be monotonic, so assert it rather than assume it.
+    if (shiftMs !== 0 && earliestLater && new Date(earliestLater) <= now) {
+      res.status(409).json({ error: 'a later round of this season is already over and cannot be moved' });
+      return;
+    }
+
+    // One data-modifying CTE so the round and every round it slides move in the same statement: a
+    // half-applied slide is a non-monotonic schedule, which is exactly what CURRENT_ROUND_CLAUSE
+    // cannot survive.
+    //
+    // Round N+1 is the one round that does not slide whole. It collects submissions while round N
+    // is being guessed, so its submission_opens_at *is* round N's submission deadline (see POST
+    // /leagues above) -- which the slide did not move -- and its submission window therefore
+    // grows by the same delta round N's guessing phase does. The notification sweep reads the
+    // reminder as a fraction of that window and misfires if the two drift apart. Rounds after
+    // N+1 slide all three columns, so each still opens on its own predecessor's submission
+    // deadline. The CTE matches no row when this is the last round of the season.
     //
     // Every moved window also clears the reminder the sweep already sent against it, which is
     // one-shot per round (`... IS NULL` in sweep.ts) and so would never fire again for the new
-    // time. The CASE arms compare against the *old* row, so a window that did not actually move
-    // keeps its flag rather than re-notifying everyone.
+    // time. The CASE arms compare the new value against the *old* row, so a window that did not
+    // actually move keeps its flag rather than re-notifying everyone.
     const updated = await deps.pool.query<RoundRow>(
-      `WITH shifted AS (
-         UPDATE rounds
-         SET submission_opens_at = $3::timestamptz,
+      `WITH slid AS (
+         UPDATE rounds r
+         SET submission_opens_at = n.submission_opens_at,
+             submission_deadline = n.submission_deadline,
+             guessing_deadline = n.guessing_deadline,
              submission_reminder_sent_at =
-               CASE WHEN submission_opens_at = $3::timestamptz THEN submission_reminder_sent_at END
-         WHERE league_id = $5 AND round_number = $6
+               CASE WHEN (n.submission_opens_at, n.submission_deadline)
+                         = (r.submission_opens_at, r.submission_deadline)
+                    THEN r.submission_reminder_sent_at END,
+             guessing_reminder_sent_at =
+               CASE WHEN (n.submission_deadline, n.guessing_deadline)
+                         = (r.submission_deadline, r.guessing_deadline)
+                    THEN r.guessing_reminder_sent_at END
+         FROM (
+           SELECT id,
+                  CASE WHEN round_number = $6 THEN $3::timestamptz
+                       ELSE submission_opens_at + $7::interval END AS submission_opens_at,
+                  submission_deadline + $7::interval AS submission_deadline,
+                  guessing_deadline + $7::interval AS guessing_deadline
+           FROM rounds
+           WHERE league_id = $5
+             AND (round_number = $6 OR (round_number > $6 AND $7::interval <> interval '0'))
+         ) n
+         WHERE r.id = n.id
+         RETURNING r.id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline
+       ), patched AS (
+         UPDATE rounds
+         SET theme = COALESCE($2::text, theme), submission_deadline = $3::timestamptz,
+             guessing_deadline = $4::timestamptz,
+             submission_reminder_sent_at =
+               CASE WHEN submission_deadline = $3::timestamptz THEN submission_reminder_sent_at END,
+             guessing_reminder_sent_at =
+               CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_reminder_sent_at END
+         WHERE id = $1
+         RETURNING id, round_number, theme, submission_deadline, guessing_deadline
        )
-       UPDATE rounds
-       SET theme = COALESCE($2::text, theme), submission_deadline = $3::timestamptz,
-           guessing_deadline = $4::timestamptz,
-           submission_reminder_sent_at =
-             CASE WHEN submission_deadline = $3::timestamptz THEN submission_reminder_sent_at END,
-           guessing_reminder_sent_at =
-             CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_reminder_sent_at END
-       WHERE id = $1
-       RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
+       SELECT * FROM patched UNION ALL SELECT * FROM slid ORDER BY round_number`,
       [
         req.params.roundId,
         theme === undefined ? null : (theme as string).trim(),
@@ -416,10 +456,14 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         guessingAt.toISOString(),
         round.leagueId,
         round.roundNumber + 1,
+        `${shiftMs} milliseconds`,
       ],
     );
 
-    res.json({ round: serializeRound(updated.rows[0]) });
+    // Every round this wrote, not just the patched one: a one-round patch that silently moves the
+    // season's end date is a surprise, and the schedule screen has to redraw all of them. The
+    // patched round is always the first, since a slide only ever reaches forwards.
+    res.json({ rounds: updated.rows.map(serializeRound) });
   });
 
   return router;

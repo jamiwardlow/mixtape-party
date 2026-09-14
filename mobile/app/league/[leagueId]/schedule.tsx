@@ -91,8 +91,10 @@ export default function LeagueSchedule() {
         setError((await res.json().catch(() => null))?.error ?? 'Could not save this round');
         return;
       }
-      const { round } = (await res.json()) as { round: Round };
-      setRounds((prev) => prev && prev.map((r) => (r.id === round.id ? round : r)));
+      // Moving a round's guessing deadline slides every round after it (#79), so the response
+      // carries every round the patch actually wrote -- redraw all of them, not just this one.
+      const { rounds: moved } = (await res.json()) as { rounds: Round[] };
+      setRounds((prev) => prev && prev.map((r) => moved.find((m) => m.id === r.id) ?? r));
       setError(null);
       setDraft(null);
     } finally {
@@ -114,7 +116,6 @@ export default function LeagueSchedule() {
             const submissionAt = new Date(round.submissionDeadline);
             const guessingAt = new Date(round.guessingDeadline);
             const previous = season[index - 1];
-            const next = season[index + 1];
             const editing = draft?.original.id === round.id;
 
             return (
@@ -127,7 +128,7 @@ export default function LeagueSchedule() {
                       value={draft.theme}
                       onChangeText={(theme) => setDraft({ ...draft, theme })}
                     />
-                    {/* Bounded by the neighbouring rounds the API would refuse to cross (#75), and
+                    {/* Bounded below by the round before it, which the API refuses to cross (#75), and
                         by now — a deadline in the past retro-closes a phase people are still in. */}
                     {draft.canMoveSubmission && (
                       <TapeDateField
@@ -144,8 +145,9 @@ export default function LeagueSchedule() {
                       testID={`round-${round.number}-guessing-field`}
                       value={draft.guessingDeadline}
                       onChange={(guessingDeadline) => setDraft({ ...draft, guessingDeadline })}
+                      // No upper bound: pushing this boundary back slides the rest of the
+                      // season with it (#79), so there is no next round left to cross.
                       minimumDate={later(now, draft.canMoveSubmission ? draft.submissionDeadline : undefined)}
-                      maximumDate={next && new Date(next.submissionDeadline)}
                     />
                     <TapeButton title={saving ? 'Saving…' : 'Save'} onPress={save} disabled={saving} />
                     <TapeButton title="Cancel" onPress={() => setDraft(null)} variant="secondary" disabled={saving} />

@@ -24,7 +24,7 @@ const rounds = [
 function stubApi(isHost: boolean) {
   globalThis.fetch = jest.fn(async (_url: string, opts?: { method?: string }) =>
     opts?.method === 'PATCH'
-      ? new Response(JSON.stringify({ round: { ...rounds[2], theme: 'Deep cuts' } }), { status: 200 })
+      ? new Response(JSON.stringify({ rounds: [{ ...rounds[2], theme: 'Deep cuts' }] }), { status: 200 })
       : new Response(JSON.stringify({ isHost, rounds }), { status: 200 }),
   ) as unknown as typeof fetch;
 }
