@@ -5,6 +5,7 @@ import { startTestDb, type TestDb } from './testDb.js';
 import {
   buildApp as sharedBuildApp,
   closeGuessingWindow as closeGuessingWindowFor,
+  closeSubmissionWindow,
   round1,
   signUp,
 } from './testHelpers.js';
@@ -33,13 +34,14 @@ async function closeGuessingWindow(roundId: string) {
 /** Every round of a league, oldest first -- the schedule POST /leagues derived. */
 async function scheduleOf(leagueId: string) {
   const res = await testDb.pool.query<{
+    id: string;
     round_number: number;
     theme: string | null;
     submission_opens_at: Date;
     submission_deadline: Date;
     guessing_deadline: Date;
   }>(
-    `SELECT round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
+    `SELECT id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
      FROM rounds WHERE league_id = $1 ORDER BY round_number`,
     [leagueId],
   );
@@ -359,5 +361,337 @@ describe('GET /leagues/mine', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.leagues).toHaveLength(0);
+  });
+});
+
+describe('PATCH /rounds/:roundId', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** A host plus the whole pre-created season (#74), oldest round first. */
+  async function createSeason(app: Express, email: string, seasonLength = 4) {
+    const host = await signUp(app, email);
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength, ...round1 });
+    const leagueId = created.body.leagueId as string;
+    return { host, leagueId, inviteCode: created.body.inviteCode as string, rounds: await scheduleOf(leagueId) };
+  }
+
+  it('rejects requests without a session', async () => {
+    const { app } = buildApp();
+    const { rounds } = await createSeason(app, 'patch-anon@example.com');
+    const res = await request(app).patch(`/rounds/${rounds[2].id}`).send({ theme: 'Deep cuts' });
+    expect(res.status).toBe(401);
+  });
+
+  it('404s for an unknown round', async () => {
+    const { app } = buildApp();
+    const { host } = await createSeason(app, 'patch-404@example.com');
+    const res = await request(app)
+      .patch('/rounds/00000000-0000-0000-0000-000000000000')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ theme: 'Deep cuts' });
+    expect(res.status).toBe(404);
+  });
+
+  it('lets the host name a future round and move both of its deadlines', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-host@example.com');
+    // Round 3's window pulled in a day at each end -- the preset has it flush against rounds 2
+    // and 4, so shrinking is the only move that does not cross a neighbour.
+    const submissionDeadline = new Date(rounds[2].submission_deadline.getTime() + DAY).toISOString();
+    const guessingDeadline = new Date(rounds[2].guessing_deadline.getTime() - DAY).toISOString();
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ theme: 'Deep cuts', submissionDeadline, guessingDeadline });
+
+    expect(res.status).toBe(200);
+    expect(res.body.round).toMatchObject({ id: rounds[2].id, number: 3, theme: 'Deep cuts' });
+    expect(new Date(res.body.round.submissionDeadline)).toEqual(new Date(submissionDeadline));
+    expect(new Date(res.body.round.guessingDeadline)).toEqual(new Date(guessingDeadline));
+
+    const after = await scheduleOf(leagueId);
+    expect(after[2].theme).toBe('Deep cuts');
+    expect(after[2].submission_deadline).toEqual(new Date(submissionDeadline));
+    expect(after[2].guessing_deadline).toEqual(new Date(guessingDeadline));
+  });
+
+  it('shows a renamed current round in GET /leagues/mine', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-mine@example.com');
+
+    await request(app)
+      .patch(`/rounds/${rounds[0].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ theme: 'Songs about rain' });
+
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+    expect(res.body.leagues[0].round).toMatchObject({ number: 1, theme: 'Songs about rain' });
+  });
+
+  it('403s a league member who is not the host', async () => {
+    const { app } = buildApp();
+    const { inviteCode, rounds } = await createSeason(app, 'patch-member-host@example.com');
+    const player = await signUp(app, 'patch-member@example.com');
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ theme: 'Deep cuts' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('403s someone outside the league', async () => {
+    const { app } = buildApp();
+    const { rounds } = await createSeason(app, 'patch-outsider-host@example.com');
+    const outsider = await signUp(app, 'patch-outsider@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ theme: 'Deep cuts' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a guessing deadline that is not after the submission deadline', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-order@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: new Date(rounds[2].submission_deadline.getTime() - DAY).toISOString() });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a submission deadline that backs into the previous round', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-back@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ submissionDeadline: new Date(rounds[1].guessing_deadline.getTime() - DAY).toISOString() });
+
+    expect(res.status).toBe(400);
+    expect((await scheduleOf(leagueId))[2].submission_deadline).toEqual(rounds[2].submission_deadline);
+  });
+
+  it('rejects a guessing deadline that runs into the next round', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-forward@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: new Date(rounds[3].submission_deadline.getTime() + DAY).toISOString() });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('409s a round whose guessing deadline has already passed', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-over@example.com');
+    await closeGuessingWindow(rounds[2].id);
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ theme: 'Deep cuts' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('409s a move to a submission window that has already closed', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-shut-window@example.com');
+    await closeSubmissionWindow(testDb.pool, rounds[2].id);
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ submissionDeadline: new Date(Date.now() + DAY).toISOString() });
+
+    // Reopening it would take submissions while the round is already being guessed.
+    expect(res.status).toBe(409);
+  });
+
+  it('still names a round that is already being guessed', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-guessing-theme@example.com');
+    await closeSubmissionWindow(testDb.pool, rounds[2].id);
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ theme: 'Deep cuts' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.round.theme).toBe('Deep cuts');
+  });
+
+  it('rejects a submission deadline in the past', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-past@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[0].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ submissionDeadline: '2000-01-01T00:00:00.000Z' });
+
+    expect(res.status).toBe(400);
+  });
+
+  // Concluding the round on the spot publishes results and fires the playlist export (#7) at a
+  // checkpoint nobody reached -- and the round is frozen afterwards.
+  it('rejects a guessing deadline in the past', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-past-guessing@example.com');
+    await closeSubmissionWindow(testDb.pool, rounds[2].id);
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: '2020-01-01T00:00:00.000Z' });
+
+    expect(res.status).toBe(400);
+  });
+
+  // new Date(null) is the epoch, not an invalid date, so a null slides past a validity check.
+  it('rejects a deadline that is not a string', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-null@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[0].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ submissionDeadline: null });
+
+    expect(res.status).toBe(400);
+    expect((await scheduleOf(leagueId))[0].submission_deadline).toEqual(rounds[0].submission_deadline);
+  });
+
+  it('rejects a deadline that is not a date at all', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-garbage@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[0].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: 'next tuesday-ish' });
+
+    expect(res.status).toBe(400);
+  });
+
+  // The sweep sends each reminder once (`... IS NULL`), so a flag left set from the old window
+  // would mean the moved deadline is never announced.
+  it('clears the reminder already sent against a window it moves', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-reminders@example.com');
+    await testDb.pool.query(
+      'UPDATE rounds SET submission_reminder_sent_at = now(), guessing_reminder_sent_at = now() WHERE league_id = $1',
+      [leagueId],
+    );
+
+    await request(app)
+      .patch(`/rounds/${rounds[1].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ submissionDeadline: new Date(rounds[1].submission_deadline.getTime() + DAY).toISOString() });
+
+    const flags = await testDb.pool.query<{
+      round_number: number;
+      submission_reminder_sent_at: Date | null;
+      guessing_reminder_sent_at: Date | null;
+    }>(
+      `SELECT round_number, submission_reminder_sent_at, guessing_reminder_sent_at
+       FROM rounds WHERE league_id = $1 ORDER BY round_number`,
+      [leagueId],
+    );
+    // Round 2's submission window moved, and round 3's opened with it.
+    expect(flags.rows[1].submission_reminder_sent_at).toBeNull();
+    expect(flags.rows[2].submission_reminder_sent_at).toBeNull();
+    // Nothing touched round 2's guessing window, or round 4 at all.
+    expect(flags.rows[1].guessing_reminder_sent_at).not.toBeNull();
+    expect(flags.rows[3].submission_reminder_sent_at).not.toBeNull();
+  });
+
+  it('leaves both deadlines untouched on a theme-only patch', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-theme-only@example.com');
+
+    await request(app)
+      .patch(`/rounds/${rounds[2].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ theme: 'Deep cuts' });
+
+    const after = await scheduleOf(leagueId);
+    expect(after[2].submission_deadline).toEqual(rounds[2].submission_deadline);
+    expect(after[2].guessing_deadline).toEqual(rounds[2].guessing_deadline);
+    expect(after[2].submission_opens_at).toEqual(rounds[2].submission_opens_at);
+  });
+
+  it('keeps the theme on a deadline-only patch', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-deadline-only@example.com');
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[0].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: new Date(rounds[0].guessing_deadline.getTime() - DAY).toISOString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.round.theme).toBe(round1.theme);
+    expect((await scheduleOf(leagueId))[0].theme).toBe(round1.theme);
+  });
+
+  // Round N+1 takes submissions while round N is being guessed, so its window opens at round N's
+  // submission deadline. The notification sweep reads the reminder as a fraction of that window.
+  it('moves the next round\'s submission window with the patched round', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-opens-at@example.com');
+    const submissionDeadline = new Date(rounds[1].submission_deadline.getTime() + DAY).toISOString();
+
+    await request(app)
+      .patch(`/rounds/${rounds[1].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ submissionDeadline });
+
+    const after = await scheduleOf(leagueId);
+    expect(after[2].submission_opens_at).toEqual(new Date(submissionDeadline));
+    // The last round has no successor to shift, and shifting must not run off the end.
+    expect(after[3].submission_opens_at).toEqual(rounds[3].submission_opens_at);
+  });
+
+  // The other half of that invariant: a successor's window opens at the patched round's
+  // submission deadline, so moving only the guessing deadline must leave it where it is.
+  it('leaves the next round\'s submission window alone when only guessing moves', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'patch-opens-at-held@example.com');
+
+    await request(app)
+      .patch(`/rounds/${rounds[1].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: new Date(rounds[1].guessing_deadline.getTime() - DAY).toISOString() });
+
+    expect((await scheduleOf(leagueId))[2].submission_opens_at).toEqual(rounds[2].submission_opens_at);
+  });
+
+  it('accepts a patch to the final round of a season', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'patch-last@example.com', 2);
+
+    const res = await request(app)
+      .patch(`/rounds/${rounds[1].id}`)
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ guessingDeadline: new Date(rounds[1].guessing_deadline.getTime() + 5 * DAY).toISOString() });
+
+    expect(res.status).toBe(200);
   });
 });
