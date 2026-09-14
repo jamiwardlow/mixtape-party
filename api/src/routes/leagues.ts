@@ -166,14 +166,6 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
-    const linkedService = await deps.pool.query('SELECT 1 FROM service_links WHERE account_id = $1 LIMIT 1', [
-      accountId,
-    ]);
-    if (linkedService.rowCount === 0) {
-      res.status(403).json({ error: 'link a music service before joining a league' });
-      return;
-    }
-
     await deps.pool.query(
       'INSERT INTO league_members (league_id, account_id) VALUES ($1, $2) ON CONFLICT (league_id, account_id) DO NOTHING',
       [league.id, accountId],

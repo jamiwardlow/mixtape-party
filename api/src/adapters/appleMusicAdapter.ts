@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, createSign } from 'node:crypto';
+import { ServiceUnavailableError } from './types.js';
 import type {
   AppleMusicLinkableAdapter,
   MusicServiceAdapter,
@@ -43,8 +44,15 @@ export class AppleMusicAdapter implements MusicServiceAdapter, AppleMusicLinkabl
     const header = base64url(JSON.stringify({ alg: 'ES256', kid: this.config.keyId }));
     const payload = base64url(JSON.stringify({ iss: this.config.teamId, iat: issuedAt, exp: expiresAt }));
     const signingInput = `${header}.${payload}`;
-    const key = createPrivateKey(this.config.privateKey);
-    const signature = createSign('SHA256').update(signingInput).sign({ key, dsaEncoding: 'ieee-p1363' });
+    let signature: Buffer;
+    try {
+      const key = createPrivateKey(this.config.privateKey);
+      signature = createSign('SHA256').update(signingInput).sign({ key, dsaEncoding: 'ieee-p1363' });
+    } catch (cause) {
+      // Unset or malformed APPLE_MUSIC_* credentials -- the state of a fresh local .env. Without
+      // this, createPrivateKey('') throws a bare Error and the first Apple search 500s.
+      throw new ServiceUnavailableError('apple_music', 'apple music developer token unavailable', { cause });
+    }
     const token = `${signingInput}.${base64url(signature)}`;
     this.developerToken = { value: token, expiresAt: (expiresAt - 300) * 1000 };
     return token;
@@ -62,13 +70,22 @@ export class AppleMusicAdapter implements MusicServiceAdapter, AppleMusicLinkabl
     return { serviceUserId };
   }
 
+  // ponytail: only search converts a bad *response* into ServiceUnavailableError; the export
+  // methods below still throw bare Errors on !res.ok, and routes/export.ts has no catch for
+  // either. (The shared getDeveloperToken above throws it on every path.) Hoist into one
+  // appleFetch helper if export ever needs the same treatment.
   async search(query: string): Promise<TrackResult[]> {
     const token = await this.getDeveloperToken();
-    const res = await fetch(
-      `${API_BASE}/catalog/${this.storefront}/search?types=songs&term=${encodeURIComponent(query)}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (!res.ok) throw new Error(`apple music search failed: ${res.status}`);
+    let res: Response;
+    try {
+      res = await fetch(
+        `${API_BASE}/catalog/${this.storefront}/search?types=songs&term=${encodeURIComponent(query)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (cause) {
+      throw new ServiceUnavailableError('apple_music', 'apple music search failed', { cause });
+    }
+    if (!res.ok) throw new ServiceUnavailableError('apple_music', `apple music search failed: ${res.status}`);
     const body = (await res.json()) as {
       results?: { songs?: { data: Array<{ id: string; attributes: { name: string; artistName: string; isrc?: string } }> } };
     };

@@ -1,11 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import type { ServiceName } from '../../../lib/rounds';
 import { SERVICE_META, useTheme } from '../../../lib/theme';
 import { BodyText, ErrorNote, JCard, Label, PressScale, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
+
+// Every service is offered to every player: searching a catalog needs no per-user credential.
+// A service_links row authorizes writing to a user's library, which only export cares about.
+const SERVICES: ServiceName[] = ['apple_music', 'youtube_music', 'bandcamp'];
 
 interface TrackResult {
   externalId: string;
@@ -18,7 +22,6 @@ export default function SubmitTrack() {
   const t = useTheme();
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   const { token } = useSession();
-  const [services, setServices] = useState<ServiceName[]>([]);
   const [service, setServiceRaw] = useState<ServiceName | null>(null);
   function setService(s: ServiceName) {
     setServiceRaw(s);
@@ -33,17 +36,6 @@ export default function SubmitTrack() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-
-  useEffect(() => {
-    if (!token) return;
-    (async () => {
-      const res = await fetchApi('/accounts/me', { token });
-      if (!res.ok) return;
-      const linked: ServiceName[] = (await res.json()).services.map((s: { service: ServiceName }) => s.service);
-      setServices([...linked, 'bandcamp']);
-      setService(linked[0] ?? 'bandcamp');
-    })();
-  }, [token]);
 
   async function search() {
     if (!token || !service || service === 'bandcamp' || !query.trim()) return;
@@ -91,7 +83,7 @@ export default function SubmitTrack() {
   return (
     <Screen label="Submit a track">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {services.map((s) => {
+        {SERVICES.map((s) => {
           const active = s === service;
           return (
             <PressScale
@@ -115,7 +107,9 @@ export default function SubmitTrack() {
         })}
       </View>
       <Sprocket />
-      {service === 'bandcamp' ? (
+      {!service ? (
+        <BodyText>Pick a service to submit from.</BodyText>
+      ) : service === 'bandcamp' ? (
         <>
           <TapeInput placeholder="Bandcamp track/album URL" value={url} onChangeText={setUrl} />
           <TapeButton title={submitting ? 'Submitting…' : 'Submit'} onPress={() => submitTrack({ url })} disabled={submitting || !url.trim()} />

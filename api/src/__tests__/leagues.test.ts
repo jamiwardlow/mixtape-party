@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
-import { FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
 import { buildApp as sharedBuildApp, closeGuessingWindow as closeGuessingWindowFor } from './testHelpers.js';
 
@@ -29,15 +28,6 @@ async function closeGuessingWindow(roundId: string) {
 async function signUp(app: Express, email: string) {
   const res = await request(app).post('/accounts').send({ email, password: 'password123' });
   return { accountId: res.body.accountId as string, token: res.body.token as string };
-}
-
-async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMusicServiceAdapter, token: string) {
-  const musicUserToken = `mut-${token}`;
-  appleMusicAdapter.validMusicUserTokens.set(musicUserToken, { serviceUserId: `apple-music-${token}` });
-  await request(app)
-    .post('/auth/apple-music/callback')
-    .set('Authorization', `Bearer ${token}`)
-    .send({ musicUserToken });
 }
 
 const round1 = {
@@ -141,7 +131,9 @@ describe('POST /leagues/invite/:code/join', () => {
     expect(res.status).toBe(401);
   });
 
-  it('rejects joining without a linked music service', async () => {
+  // A linked service is export credential storage, not a precondition -- and since the linking
+  // screen was deleted, requiring one here locked every invitee out of every league.
+  it('joins with no linked music service', async () => {
     const { app } = buildApp();
     const host = await signUp(app, 'host6@example.com');
     const inviteCode = await createLeague(app, host);
@@ -151,15 +143,17 @@ describe('POST /leagues/invite/:code/join', () => {
       .post(`/leagues/invite/${inviteCode}/join`)
       .set('Authorization', `Bearer ${player.token}`);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+
+    const preview = await request(app).get(`/leagues/invite/${inviteCode}`);
+    expect(preview.body.playerCount).toBe(2);
   });
 
-  it('joins immediately once a music service is linked, with no host approval step', async () => {
-    const { app, appleMusicAdapter } = buildApp();
+  it('joins immediately, with no host approval step', async () => {
+    const { app } = buildApp();
     const host = await signUp(app, 'host7@example.com');
     const inviteCode = await createLeague(app, host);
     const player = await signUp(app, 'player2@example.com');
-    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     const res = await request(app)
       .post(`/leagues/invite/${inviteCode}/join`)
@@ -173,11 +167,10 @@ describe('POST /leagues/invite/:code/join', () => {
   });
 
   it('is idempotent when the same player joins twice', async () => {
-    const { app, appleMusicAdapter } = buildApp();
+    const { app } = buildApp();
     const host = await signUp(app, 'host8@example.com');
     const inviteCode = await createLeague(app, host);
     const player = await signUp(app, 'player3@example.com');
-    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
@@ -187,9 +180,8 @@ describe('POST /leagues/invite/:code/join', () => {
   });
 
   it('404s for an unknown invite code', async () => {
-    const { app, appleMusicAdapter } = buildApp();
+    const { app } = buildApp();
     const player = await signUp(app, 'player4@example.com');
-    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     const res = await request(app)
       .post('/leagues/invite/does-not-exist/join')
@@ -309,11 +301,10 @@ describe('POST /leagues/:leagueId/rounds', () => {
   });
 
   it('rejects a non-host member', async () => {
-    const { app, appleMusicAdapter } = buildApp();
+    const { app } = buildApp();
     const host = await signUp(app, 'rounds-host3@example.com');
     const { leagueId } = await createLeague(app, host);
     const player = await signUp(app, 'rounds-player3@example.com');
-    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
 
     const res = await request(app)
       .post(`/leagues/${leagueId}/rounds`)

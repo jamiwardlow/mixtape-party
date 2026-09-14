@@ -14,7 +14,7 @@ Friend groups playing a recurring music-guessing party game together, in casual/
 
 ## Product Purpose
 
-Friends join a shared "league." Each round has a theme; every player anonymously submits one track fitting the theme from their linked music service. Once submissions close, players guess who submitted which track. Results reveal the submitters, correct guessers, and round scores.
+Friends join a shared "league." Each round has a theme; every player anonymously submits one track fitting the theme from any supported music service. Once submissions close, players guess who submitted which track. Results reveal the submitters, correct guessers, and round scores.
 
 ## Positioning
 
@@ -23,7 +23,7 @@ A social music-discovery game built around anonymous submission + guessing, rath
 ## Operating Context
 
 - Rounds move through three phases: submission → guessing → results.
-- Players link one or more music services (Apple Music, YouTube Music, Bandcamp) to search and submit tracks; Bandcamp is embed/URL-only (no search API).
+- Players search and submit from any supported music service (Apple Music, YouTube Music, Bandcamp) without linking an account; Bandcamp is embed/URL-only (no search API). Linking is export-only: it stores the per-user credential Apple Music playlist export needs.
 - Track playback during guessing depends on whether the guesser can play that track's service in-app (deep link) vs. web fallback.
 - Leagues are joined via invite code/link.
 - Cross-service playlist consolidation/export exists after rounds complete.

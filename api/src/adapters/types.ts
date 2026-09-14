@@ -54,9 +54,10 @@ export interface AppleMusicLinkableAdapter {
 }
 
 /**
- * Thrown by an adapter whose underlying API is unauthenticated/unofficial and can go down or
- * change shape without notice (currently only YouTube Music). Callers must catch this
- * specifically and surface an explicit "unavailable" state rather than a generic 500.
+ * Thrown by an adapter whose underlying API can go down, change shape without notice, or be
+ * missing the app-level credentials it needs -- YouTube Music's unofficial innertube API, and
+ * Apple Music catalog search, which is dead without a signable MusicKit developer key. Callers
+ * must catch this specifically and surface an explicit "unavailable" state, not a generic 500.
  */
 export class ServiceUnavailableError extends Error {
   constructor(
