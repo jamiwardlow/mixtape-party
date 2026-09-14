@@ -95,6 +95,62 @@ describe('POST /rounds/:roundId/export', () => {
     expect(appleMusicAdapter.playlists.get(appleMusicExport.playlistExternalId)).toHaveLength(4);
   });
 
+  it('returns a per-service playlist link built from the playlist id', async () => {
+    const { app, appleMusicAdapter } = buildApp({ youtubeMusicCookie: 'fake-cookie' });
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const byService: Map<string, { playlistExternalId: string; playlistUrl: string }> = new Map(
+      res.body.services.map((s: { service: string }) => [s.service, s]),
+    );
+    const appleMusicExport = byService.get('apple_music')!;
+    expect(appleMusicExport.playlistUrl).toBe(
+      `https://music.apple.com/library/playlist/${appleMusicExport.playlistExternalId}`,
+    );
+    const youtubeMusicExport = byService.get('youtube_music')!;
+    expect(youtubeMusicExport.playlistUrl).toBe(
+      `https://music.youtube.com/playlist?list=${youtubeMusicExport.playlistExternalId}`,
+    );
+  });
+
+  it('shares one youtube_music playlist across every player, since they all export through the same server-held account', async () => {
+    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const first = await exportRound(app, roundId, members[0].token);
+    const second = await exportRound(app, roundId, members[1].token);
+
+    const youtubeMusicLink = (res: { body: { services: Array<{ service: string; playlistUrl: string }> } }) =>
+      res.body.services.find((s) => s.service === 'youtube_music')!.playlistUrl;
+    expect(youtubeMusicLink(first)).toBeTruthy();
+    expect(youtubeMusicLink(second)).toBe(youtubeMusicLink(first));
+    expect(youtubeMusicAdapter.playlists.size).toBe(1);
+  });
+
+  it('has no playlist link for a service that matched nothing', async () => {
+    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    // Every submission is on apple_music and none of them match into YouTube Music's catalog, so
+    // no playlist gets created and there is nothing to link to.
+    youtubeMusicAdapter.match = async () => null;
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
+    expect(youtubeMusicExport.playlistExternalId).toBeNull();
+    expect(youtubeMusicExport.playlistUrl).toBeNull();
+  });
+
   it('excludes youtube_music from export when no server-held cookie is configured', async () => {
     const { app, appleMusicAdapter } = buildApp({ youtubeMusicCookie: '' });
     const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);

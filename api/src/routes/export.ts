@@ -12,6 +12,18 @@ export interface ExportDeps extends AccountsDeps, AdapterRegistry {
 type ExportableService = Exclude<ServiceName, 'bandcamp'>;
 const EXPORTABLE_SERVICES: ExportableService[] = ['apple_music', 'youtube_music'];
 
+/**
+ * Web address of an exported playlist, the only form of it a client can open (#69). Per-track
+ * launch handles come from the adapters; a playlist has no adapter method because the id read back
+ * out of `round_exports` is all there is to build one from.
+ */
+const PLAYLIST_URL: Record<ExportableService, (externalId: string) => string> = {
+  // A library playlist is addressed without a storefront, and only its owner can open it.
+  apple_music: (externalId) => `https://music.apple.com/library/playlist/${externalId}`,
+  // UNLISTED under the shared server-held account, so this link plays for anyone who has it.
+  youtube_music: (externalId) => `https://music.youtube.com/playlist?list=${externalId}`,
+};
+
 interface SubmissionRow {
   id: string;
   service: ExportableService;
@@ -36,12 +48,25 @@ async function exportForService(
   accessToken: string,
   playlistName: string,
   submissions: SubmissionRow[],
-): Promise<{ service: ExportableService; playlistExternalId: string | null; matchedCount: number; skipped: SkippedTrack[] }> {
+): Promise<{
+  service: ExportableService;
+  playlistExternalId: string | null;
+  playlistUrl: string | null;
+  matchedCount: number;
+  skipped: SkippedTrack[];
+}> {
   const adapter = adapterFor(deps, service);
 
+  // youtube_music has no per-user account: every export runs through the one server-held cookie, so
+  // its playlist belongs to the round rather than the player. Whoever opens the results first builds
+  // it and every other player links to that same playlist -- keyed per-account, a four-player round
+  // would instead build four identical unlisted playlists and hand out four different links.
+  const sharedAcrossAccounts = service === 'youtube_music';
   const existing = await deps.pool.query<{ playlist_external_id: string | null; matched_submission_ids: string[] }>(
-    'SELECT playlist_external_id, matched_submission_ids FROM round_exports WHERE round_id = $1 AND account_id = $2 AND service = $3',
-    [roundId, accountId, service],
+    `SELECT playlist_external_id, matched_submission_ids FROM round_exports
+     WHERE round_id = $1 AND service = $2 AND ($3::boolean OR account_id = $4)
+     ORDER BY created_at LIMIT 1`,
+    [roundId, service, sharedAcrossAccounts, accountId],
   );
 
   let playlistExternalId: string | null;
@@ -79,9 +104,10 @@ async function exportForService(
     }
     matchedIds = new Set(matches.keys());
 
-    // ponytail: no locking against a concurrent duplicate request for the same round+account+service;
-    // the UNIQUE constraint keeps the *record* to one row, but a genuine race could still create two
-    // playlists upstream. Add a per-key advisory lock if double-exports show up in practice.
+    // ponytail: no locking against two concurrent exports of the same round reaching this point
+    // together -- the UNIQUE constraint keeps one account's *record* to one row, but a genuine race
+    // (or two players racing on a shared-account service) could still create two playlists upstream.
+    // Add a per-round+service advisory lock if double-exports show up in practice.
     await deps.pool.query(
       `INSERT INTO round_exports (round_id, account_id, service, playlist_external_id, matched_submission_ids)
        VALUES ($1, $2, $3, $4, $5)
@@ -107,7 +133,13 @@ async function exportForService(
       })),
   );
 
-  return { service, playlistExternalId, matchedCount: matchedIds.size, skipped };
+  return {
+    service,
+    playlistExternalId,
+    playlistUrl: playlistExternalId ? PLAYLIST_URL[service](playlistExternalId) : null,
+    matchedCount: matchedIds.size,
+    skipped,
+  };
 }
 
 export function createExportRouter(deps: ExportDeps): Router {

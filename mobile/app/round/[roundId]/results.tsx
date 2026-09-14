@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, View } from 'react-native';
@@ -25,10 +26,17 @@ interface Results {
   winners: Player[];
 }
 
+/** One service's exported playlist for this round. Null until the export builds one, or forever if nothing matched. */
+interface PlaylistLink {
+  service: ServiceName;
+  playlistUrl: string | null;
+}
+
 export default function RoundResults() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   const { token } = useSession();
   const [results, setResults] = useState<Results | null>(null);
+  const [playlists, setPlaylists] = useState<Array<PlaylistLink & { playlistUrl: string }>>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,6 +48,15 @@ export default function RoundResults() {
         return;
       }
       setResults(await res.json());
+
+      // First view of the results is what triggers the export; the route builds each playlist once
+      // per round, so a revisit -- or another player's first view -- reads back the same one. It can
+      // take a while (every track is matched into each service's catalog), so the links land after
+      // the results rather than holding them up, and a failed export simply shows no links.
+      const exported = await fetchApi(`/rounds/${roundId}/export`, { method: 'POST', token });
+      if (!exported.ok) return;
+      const { services } = (await exported.json()) as { services: PlaylistLink[] };
+      setPlaylists(services.flatMap((s) => (s.playlistUrl ? [{ ...s, playlistUrl: s.playlistUrl }] : [])));
     })();
   }, [token, roundId]);
 
@@ -62,6 +79,24 @@ export default function RoundResults() {
             </View>
           ))}
         </JCard>
+        {playlists.length > 0 ? (
+          <JCard>
+            <Label>Playlists</Label>
+            {playlists.map((playlist) => (
+              <View
+                key={playlist.service}
+                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <ServiceBadge service={playlist.service} />
+                <TapeButton
+                  title="Open playlist"
+                  onPress={() => Linking.openURL(playlist.playlistUrl)}
+                  variant="secondary"
+                />
+              </View>
+            ))}
+          </JCard>
+        ) : null}
         <FlatList
           data={results?.tracks ?? []}
           keyExtractor={(item) => item.submissionId}
