@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { fetchApi } from './api';
+import type { ServiceName } from './rounds';
 import { deviceStorage, type SessionStorage } from './storage';
 
 const TOKEN_KEY = 'session_token';
@@ -8,6 +9,9 @@ const INVITE_KEY = 'pending_invite_code';
 export interface Profile {
   id: string;
   email: string;
+  /** Linked music services, as /accounts/me returns them. Optional because nothing validates the
+   *  response shape and linking is optional (#67) — only Apple Music is linkable today. */
+  services?: { service: ServiceName; serviceUserId: string; linkedAt: string }[];
 }
 
 interface SessionContextValue {
