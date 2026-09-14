@@ -53,49 +53,54 @@ interface SearchResponseShape {
 }
 
 /**
+ * Every innertube call routes through here: it attaches the SAPISIDHASH auth the API expects and
+ * normalizes any failure (network error, bad status, unparseable body) into a
+ * {@link ServiceUnavailableError}. Exported because the contract-playlist sweep
+ * (src/scripts/sweepContractPlaylists.ts) needs a `browse` call the adapter itself has no use for.
+ */
+export async function innertubePost(endpoint: string, body: Record<string, unknown>, cookie?: string): Promise<unknown> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (cookie) {
+    headers.Cookie = cookie;
+    headers.Authorization = sapisidHashAuth(cookie);
+    headers['X-Origin'] = ORIGIN;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/${endpoint}?key=${INNERTUBE_KEY}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ context: CLIENT_CONTEXT, ...body }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable', { cause: err });
+  }
+  if (!res.ok) {
+    throw new ServiceUnavailableError('youtube_music', `youtube music request failed: ${res.status}`);
+  }
+  try {
+    return await res.json();
+  } catch (err) {
+    throw new ServiceUnavailableError('youtube_music', 'youtube music returned an unreadable response', {
+      cause: err,
+    });
+  }
+}
+
+/**
  * Real YouTube Music integration via its unofficial "innertube" web-client API — there is no
  * official Google API for YouTube Music search/playlists. Unauthenticated and undocumented, so
- * every request routes through {@link post}, which normalizes any failure (network error, bad
- * status, or a response that doesn't match the shape this adapter expects) into a
- * {@link ServiceUnavailableError} rather than letting a silent upstream change produce garbage
- * results or a hung request.
+ * every request routes through {@link innertubePost}, and a response that doesn't match the shape
+ * this adapter expects is raised as a {@link ServiceUnavailableError} rather than left to produce
+ * garbage results or a hung request.
  */
 export class YouTubeMusicAdapter implements MusicServiceAdapter {
   readonly service = 'youtube_music' as const;
 
-  private async post(endpoint: string, body: Record<string, unknown>, cookie?: string): Promise<unknown> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (cookie) {
-      headers.Cookie = cookie;
-      headers.Authorization = sapisidHashAuth(cookie);
-      headers['X-Origin'] = ORIGIN;
-    }
-
-    let res: Response;
-    try {
-      res = await fetch(`${API_BASE}/${endpoint}?key=${INNERTUBE_KEY}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ context: CLIENT_CONTEXT, ...body }),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
-    } catch (err) {
-      throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable', { cause: err });
-    }
-    if (!res.ok) {
-      throw new ServiceUnavailableError('youtube_music', `youtube music request failed: ${res.status}`);
-    }
-    try {
-      return await res.json();
-    } catch (err) {
-      throw new ServiceUnavailableError('youtube_music', 'youtube music returned an unreadable response', {
-        cause: err,
-      });
-    }
-  }
-
   async search(query: string): Promise<TrackResult[]> {
-    const body = (await this.post('search', {
+    const body = (await innertubePost('search', {
       query,
       params: 'EgWKAQIIAWoKEAMQBBAJEAoQBQ%3D%3D', // filter: songs only
     })) as SearchResponseShape;
@@ -128,14 +133,14 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
   async createPlaylist(accessToken: string, name: string): Promise<PlaylistRef> {
     // UNLISTED, not PRIVATE: this playlist is built under one shared, server-held account (see
     // createPlaylist's accessToken) and shared to arbitrary listeners via its watch link.
-    const body = (await this.post('playlist/create', { title: name, privacyStatus: 'UNLISTED' }, accessToken)) as {
+    const body = (await innertubePost('playlist/create', { title: name, privacyStatus: 'UNLISTED' }, accessToken)) as {
       playlistId: string;
     };
     return { externalId: body.playlistId, service: this.service };
   }
 
   async appendToPlaylist(accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void> {
-    await this.post(
+    await innertubePost(
       'browse/edit_playlist',
       {
         playlistId: playlist.externalId,
@@ -151,7 +156,7 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
    * account on every scheduled run.
    */
   async deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void> {
-    await this.post('playlist/delete', { playlistId: playlist.externalId }, accessToken);
+    await innertubePost('playlist/delete', { playlistId: playlist.externalId }, accessToken);
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
