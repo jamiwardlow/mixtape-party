@@ -34,6 +34,26 @@ describe('TapeDateField on web', () => {
     expect(onChange).toHaveBeenCalledWith(new Date(2026, 8, 15, 9, 0));
   });
 
+  it('opens the native picker when the field is clicked, not just the calendar icon', async () => {
+    asWeb();
+    const showPicker = jest.fn();
+    await render(<TapeDateField label="Submission deadline" value={AUG_1} onChange={jest.fn()} />);
+
+    await fireEvent(screen.getByLabelText('Submission deadline'), 'click', {
+      currentTarget: { showPicker },
+    });
+
+    expect(showPicker).toHaveBeenCalled();
+  });
+
+  // Firefox on Android and any browser predating showPicker() still have to be clickable.
+  it('survives a browser with no showPicker', async () => {
+    asWeb();
+    await render(<TapeDateField label="Submission deadline" value={AUG_1} onChange={jest.fn()} />);
+
+    await fireEvent(screen.getByLabelText('Submission deadline'), 'click', { currentTarget: {} });
+  });
+
   // Clearing the field used to be how an empty string reached the API.
   it('ignores a cleared field rather than reporting an invalid date', async () => {
     asWeb();

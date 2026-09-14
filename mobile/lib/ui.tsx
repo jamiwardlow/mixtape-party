@@ -211,6 +211,15 @@ export function TapeDateField({
             const picked = new Date(e.target.value);
             if (!Number.isNaN(picked.getTime())) onChange(picked);
           }}
+          // Clicking a segment only focuses it for typing; the calendar otherwise hides behind
+          // the small icon at the right edge. showPicker() opens it from anywhere in the field.
+          onClick={(e) => {
+            try {
+              e.currentTarget.showPicker();
+            } catch {
+              // No user gesture, or a browser without showPicker -- the icon still works.
+            }
+          }}
           style={{
             ...INPUT_SHAPE,
             borderWidth: StyleSheet.hairlineWidth,
