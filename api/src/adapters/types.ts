@@ -69,3 +69,23 @@ export class ServiceUnavailableError extends Error {
     this.name = 'ServiceUnavailableError';
   }
 }
+
+/**
+ * Thrown when the *user's own* linked account is what the service refused -- Apple Music answers
+ * 403 to a library write from an Apple ID with no active subscription, and 401 to a stale or
+ * revoked Music User Token. Distinct from {@link ServiceUnavailableError}: the service is fine,
+ * this one account is not, and only the user who owns it can do anything about it.
+ *
+ * Apple never says *which* of those it meant, so callers must describe what happened rather than
+ * assert a cause.
+ */
+export class ServiceAccountError extends Error {
+  constructor(
+    readonly service: ServiceName,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'ServiceAccountError';
+  }
+}

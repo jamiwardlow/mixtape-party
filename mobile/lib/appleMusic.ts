@@ -68,10 +68,10 @@ function loadMusicKit(): Promise<MusicKitStatic> {
  *
  * Optional by design (#67): nothing in the app requires a linked service.
  *
- * ponytail: linking cannot tell whether the account has an Apple Music subscription — MusicKit JS
- * hands out a Music User Token for any Apple ID and the server's /v1/me/storefront check passes
- * without one either, so a non-subscriber links fine and only finds out when an export fails. The
- * copy says so up front instead. Upgrade: have the export leg report the failure back per-user.
+ * Linking cannot tell whether the account has an Apple Music subscription — MusicKit JS hands out a
+ * Music User Token for any Apple ID and the server's /v1/me/storefront check passes without one
+ * either, so a non-subscriber links fine. The copy warns about that up front, and the export now
+ * reports Apple's refusal back on the results screen (#73) rather than failing silently.
  */
 export async function linkAppleMusic(sessionToken: string): Promise<void> {
   const tokenRes = await fetchApi('/auth/apple-music/developer-token', { token: sessionToken });

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { adapterFor, playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { resolveMatch } from '../adapters/matchCache.js';
-import type { PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
+import { ServiceAccountError, type PlaybackLaunchHandle, type ServiceName, type TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
@@ -40,6 +40,40 @@ interface SkippedTrack {
   playback: PlaybackLaunchHandle;
 }
 
+/**
+ * What became of one service's leg of the export (#73). Without this, "the export blew up",
+ * "nothing matched" and "you never linked" all reach the client as the same absent playlist url,
+ * and the screen has nothing to say beyond silence.
+ *
+ * `denied` is deliberately not called "no subscription": it is what Apple answers to a library
+ * write it refuses, and it will not say why (a lapsed subscription and a revoked Music User Token
+ * look identical), so the name records the refusal rather than guessing at the cause.
+ */
+type ExportStatus = 'ok' | 'no_matches' | 'not_linked' | 'denied' | 'failed';
+
+interface ServiceExport {
+  service: ExportableService;
+  status: ExportStatus;
+  playlistExternalId: string | null;
+  playlistUrl: string | null;
+  matchedCount: number;
+  skipped: SkippedTrack[];
+}
+
+/**
+ * Whether the service exports through one app-held account rather than a per-user link. Everything
+ * that differs between the two -- who the playlist belongs to, whether a missing token is the
+ * user's problem -- keys off this one fact, so it is named once rather than re-derived per site.
+ */
+function isAppOwned(service: ExportableService): boolean {
+  return service === 'youtube_music';
+}
+
+/** A leg that produced no playlist, for any of the reasons that can end one: there is no link to give. */
+function noPlaylistExport(service: ExportableService, status: ExportStatus): ServiceExport {
+  return { service, status, playlistExternalId: null, playlistUrl: null, matchedCount: 0, skipped: [] };
+}
+
 async function exportForService(
   deps: ExportDeps,
   roundId: string,
@@ -48,20 +82,13 @@ async function exportForService(
   accessToken: string,
   playlistName: string,
   submissions: SubmissionRow[],
-): Promise<{
-  service: ExportableService;
-  playlistExternalId: string | null;
-  playlistUrl: string | null;
-  matchedCount: number;
-  skipped: SkippedTrack[];
-}> {
+): Promise<ServiceExport> {
   const adapter = adapterFor(deps, service);
 
-  // youtube_music has no per-user account: every export runs through the one server-held cookie, so
-  // its playlist belongs to the round rather than the player. Whoever opens the results first builds
-  // it and every other player links to that same playlist -- keyed per-account, a four-player round
-  // would instead build four identical unlisted playlists and hand out four different links.
-  const sharedAcrossAccounts = service === 'youtube_music';
+  // An app-owned service's playlist belongs to the round rather than the player: whoever opens the
+  // results first builds it and every other player links to that same playlist. Keyed per-account, a
+  // four-player round would instead build four identical unlisted playlists and hand out four links.
+  const sharedAcrossAccounts = isAppOwned(service);
   const existing = await deps.pool.query<{ playlist_external_id: string | null; matched_submission_ids: string[] }>(
     `SELECT playlist_external_id, matched_submission_ids FROM round_exports
      WHERE round_id = $1 AND service = $2 AND ($3::boolean OR account_id = $4)
@@ -135,6 +162,7 @@ async function exportForService(
 
   return {
     service,
+    status: playlistExternalId ? 'ok' : 'no_matches',
     playlistExternalId,
     playlistUrl: playlistExternalId ? PLAYLIST_URL[service](playlistExternalId) : null,
     matchedCount: matchedIds.size,
@@ -180,18 +208,42 @@ export function createExportRouter(deps: ExportDeps): Router {
     }
 
     const playlistName = `Mixtape Party — Round ${round.roundNumber}: ${round.theme}`;
+    // Settled one service at a time so a single broken link cannot take the others down with it
+    // (#73). A bare Promise.all rejected the whole request, throwing away a playlist another
+    // service had already built and written to round_exports -- the client then saw only a 500.
     const services = await Promise.all(
-      EXPORTABLE_SERVICES.filter((service) => accessTokenByService.has(service)).map((service) =>
-        exportForService(
-          deps,
-          req.params.roundId,
-          accountId,
-          service,
-          accessTokenByService.get(service)!,
-          playlistName,
-          submissionsResult.rows,
-        ),
-      ),
+      EXPORTABLE_SERVICES.flatMap((service): Array<ServiceExport | Promise<ServiceExport>> => {
+        const accessToken = accessTokenByService.get(service);
+        if (!accessToken) {
+          // An app-owned service's token is the one server-held cookie, not a user link: a missing
+          // one is app config nobody signed in can act on, so it stays out of the response entirely
+          // rather than being reported to this user as something they failed to link.
+          return isAppOwned(service) ? [] : [noPlaylistExport(service, 'not_linked')];
+        }
+        return [
+          exportForService(
+            deps,
+            req.params.roundId,
+            accountId,
+            service,
+            accessToken,
+            playlistName,
+            submissionsResult.rows,
+          ).catch((err: unknown) => {
+            // Logged rather than returned: the message names internals, and the client's copy keys
+            // off the status. Nothing is persisted, so the next results view retries from scratch --
+            // which is what a user who fixes their subscription wants.
+            //
+            // ponytail: that retry is unbounded and not free. An account the service keeps refusing
+            // re-hits it on every results view, and a leg that fails *between* createPlaylist and
+            // appendToPlaylist leaves an empty playlist behind in the user's library each time,
+            // since no round_exports row records the one already made. Record an attempted_at on
+            // round_exports (and reuse the orphaned playlist id) if either starts to bite.
+            console.error(err);
+            return noPlaylistExport(service, err instanceof ServiceAccountError ? 'denied' : 'failed');
+          }),
+        ];
+      }),
     );
 
     res.json({ services });

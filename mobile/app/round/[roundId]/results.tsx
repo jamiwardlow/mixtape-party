@@ -6,7 +6,18 @@ import { fetchApi } from '../../../lib/api';
 import { appleMusicLinkingSupported, isAppleMusicLinked } from '../../../lib/appleMusic';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton } from '../../../lib/ui';
+import { SERVICE_META } from '../../../lib/theme';
+import {
+  BodyText,
+  HandText,
+  JCard,
+  Label,
+  RoundGate,
+  Screen,
+  ServiceBadge,
+  Sprocket,
+  TapeButton,
+} from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
@@ -27,17 +38,49 @@ interface Results {
   winners: Player[];
 }
 
-/** One service's exported playlist for this round. Null until the export builds one, or forever if nothing matched. */
-interface PlaylistLink {
+/**
+ * One service's leg of this round's export, as the API reports it (#73). `playlistUrl` is null for
+ * every status but `ok`, so the status is the only thing that tells a missing playlist apart from
+ * a broken one.
+ */
+interface ServiceExport {
   service: ServiceName;
+  status: 'ok' | 'no_matches' | 'not_linked' | 'denied' | 'failed';
   playlistUrl: string | null;
+}
+
+/**
+ * A line explaining a leg that produced no playlist, or null where there is nothing worth saying.
+ *
+ * `denied` is the only actionable one, and only on Apple Music. Apple refuses a library write both
+ * from an account with no active subscription and from a stale or revoked link, and answers the
+ * same either way -- so the copy names both and diagnoses neither. YouTube Music runs on one
+ * app-owned account, so there is nothing there for a user to fix and the copy does not pretend
+ * otherwise.
+ */
+function exportProblem({ service, status }: ServiceExport): string | null {
+  const name = SERVICE_META[service]?.label ?? service;
+  const retry = `Couldn’t build the ${name} playlist this time. Reopening the results tries again.`;
+  switch (status) {
+    case 'no_matches':
+      return `None of this round’s tracks were on ${name}.`;
+    case 'denied':
+      return service === 'apple_music'
+        ? `${name} wouldn’t save the playlist, and doesn’t say why. Most likely there’s no active Apple Music subscription on the account, or the link needs redoing in Settings.`
+        : retry;
+    case 'failed':
+      return retry;
+    // 'ok' has its link above, and 'not_linked' has the Link Apple Music card below.
+    default:
+      return null;
+  }
 }
 
 export default function RoundResults() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   const { token, profile } = useSession();
   const [results, setResults] = useState<Results | null>(null);
-  const [playlists, setPlaylists] = useState<Array<PlaylistLink & { playlistUrl: string }>>([]);
+  const [exports, setExports] = useState<ServiceExport[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,11 +96,14 @@ export default function RoundResults() {
       // First view of the results is what triggers the export; the route builds each playlist once
       // per round, so a revisit -- or another player's first view -- reads back the same one. It can
       // take a while (every track is matched into each service's catalog), so the links land after
-      // the results rather than holding them up, and a failed export simply shows no links.
+      // the results rather than holding them up.
+      //
+      // The route settles each service on its own now (#73), so a non-2xx here means the request
+      // itself died -- nothing per-service to report, and still not a reason to gate the scores.
       const exported = await fetchApi(`/rounds/${roundId}/export`, { method: 'POST', token });
       if (!exported.ok) return;
-      const { services } = (await exported.json()) as { services: PlaylistLink[] };
-      setPlaylists(services.flatMap((s) => (s.playlistUrl ? [{ ...s, playlistUrl: s.playlistUrl }] : [])));
+      const { services } = (await exported.json()) as { services: ServiceExport[] };
+      setExports(services);
     })();
   }, [token, roundId]);
 
@@ -69,6 +115,12 @@ export default function RoundResults() {
   // results fetch) or a linked user watches the prompt flash and vanish. Web-only, because the
   // /settings it points at can only link there -- on native the button would be a dead end.
   const promptAppleMusic = appleMusicLinkingSupported && profile !== null && !isAppleMusicLinked(profile);
+
+  const playlists = exports.flatMap((e) => (e.playlistUrl ? [{ ...e, playlistUrl: e.playlistUrl }] : []));
+  const problems = exports.flatMap((e) => {
+    const note = exportProblem(e);
+    return note ? [{ service: e.service, note }] : [];
+  });
 
   const winnerNames = results?.winners.map((w) => w.displayName ?? 'A player').join(', ') ?? '';
 
@@ -104,6 +156,13 @@ export default function RoundResults() {
                   variant="secondary"
                 />
               </View>
+            ))}
+          </JCard>
+        ) : null}
+        {problems.length > 0 ? (
+          <JCard>
+            {problems.map((problem) => (
+              <Label key={problem.service}>{problem.note}</Label>
             ))}
           </JCard>
         ) : null}

@@ -56,8 +56,8 @@ describe('exported playlist links', () => {
   it('triggers the export and opens the link the API built for each service', async () => {
     stubApi({
       services: [
-        { service: 'youtube_music', playlistUrl: 'https://music.youtube.com/playlist?list=PL1' },
-        { service: 'apple_music', playlistUrl: 'https://music.apple.com/library/playlist/p.1' },
+        { service: 'youtube_music', status: 'ok', playlistUrl: 'https://music.youtube.com/playlist?list=PL1' },
+        { service: 'apple_music', status: 'ok', playlistUrl: 'https://music.apple.com/library/playlist/p.1' },
       ],
     });
     await render(<RoundResults />);
@@ -78,11 +78,12 @@ describe('exported playlist links', () => {
   });
 
   it('shows no link for a service whose export built no playlist', async () => {
-    stubApi({ services: [{ service: 'youtube_music', playlistUrl: null }] });
+    stubApi({ services: [{ service: 'youtube_music', status: 'no_matches', playlistUrl: null }] });
     await render(<RoundResults />);
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('Playlists')).toBeNull();
+    expect(screen.getByText(/none of this round.s tracks were on YouTube Music/i)).toBeTruthy();
   });
 
   // A dead export must not take the results down with it -- the scores are the point of the screen.
@@ -93,6 +94,61 @@ describe('exported playlist links', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('Playlists')).toBeNull();
     expect(screen.getByText('Results')).toBeTruthy();
+  });
+});
+
+// #73: an export that fails used to render exactly like one that succeeded with nothing to show --
+// silence -- so a non-subscriber had no way to learn why their playlist never appeared.
+describe('failed export', () => {
+  it('names the likely cause when Apple Music refuses the account, without asserting it', async () => {
+    stubApi({ services: [{ service: 'apple_music', status: 'denied', playlistUrl: null }] });
+    await render(<RoundResults />);
+
+    // Both of Apple's refusals land here and it never says which, so the line names both causes
+    // and asserts neither.
+    expect(await screen.findByText(/wouldn.t save the playlist, and doesn.t say why/i)).toBeTruthy();
+    expect(await screen.findByText(/no active Apple Music subscription.*or the link needs redoing/i)).toBeTruthy();
+    expect(screen.getByText('Results')).toBeTruthy();
+  });
+
+  // YouTube Music exports through one app-owned account, so its failure is not the user's to fix.
+  it('does not tell a user to fix the app-owned YouTube Music account', async () => {
+    stubApi({ services: [{ service: 'youtube_music', status: 'denied', playlistUrl: null }] });
+    await render(<RoundResults />);
+
+    expect(await screen.findByText(/couldn.t build the YouTube Music playlist/i)).toBeTruthy();
+    expect(screen.queryByText(/subscription/i)).toBeNull();
+  });
+
+  it('reports a generic failure as retryable', async () => {
+    stubApi({ services: [{ service: 'apple_music', status: 'failed', playlistUrl: null }] });
+    await render(<RoundResults />);
+
+    expect(await screen.findByText(/couldn.t build the Apple Music playlist/i)).toBeTruthy();
+  });
+
+  // The Link Apple Music card below already covers this one; a second line would just nag twice.
+  it('stays quiet about a service that was never linked', async () => {
+    mockProfile = { services: [] };
+    stubApi({ services: [{ service: 'apple_music', status: 'not_linked', playlistUrl: null }] });
+    await render(<RoundResults />);
+
+    expect(await screen.findByText('Link Apple Music')).toBeTruthy();
+    expect(screen.queryByText(/couldn.t build/i)).toBeNull();
+  });
+
+  // Still #67: whatever the export reports, it never stands between the user and the scores.
+  it('keeps the other service’s link when one leg fails', async () => {
+    stubApi({
+      services: [
+        { service: 'apple_music', status: 'denied', playlistUrl: null },
+        { service: 'youtube_music', status: 'ok', playlistUrl: 'https://music.youtube.com/playlist?list=PL1' },
+      ],
+    });
+    await render(<RoundResults />);
+
+    expect(await screen.findByText('Playlists')).toBeTruthy();
+    expect(screen.getByText(/Apple Music wouldn.t save the playlist/i)).toBeTruthy();
   });
 });
 

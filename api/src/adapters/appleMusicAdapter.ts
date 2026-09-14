@@ -1,5 +1,5 @@
 import { createHash, createPrivateKey, createSign } from 'node:crypto';
-import { ServiceUnavailableError } from './types.js';
+import { ServiceAccountError, ServiceUnavailableError } from './types.js';
 import type {
   AppleMusicLinkableAdapter,
   MusicServiceAdapter,
@@ -23,6 +23,17 @@ export interface AppleMusicAdapterConfig {
 
 function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url');
+}
+
+/**
+ * A failed library write, classified by who can fix it. 401 and 403 are the account's problem (a
+ * revoked Music User Token, or an Apple ID with no active subscription -- Apple does not say
+ * which); anything else is ours or Apple's.
+ */
+function playlistWriteError(httpStatus: number, operation: string): Error {
+  return httpStatus === 401 || httpStatus === 403
+    ? new ServiceAccountError('apple_music', `apple music ${operation} rejected the account: ${httpStatus}`)
+    : new Error(`apple music ${operation} failed: ${httpStatus}`);
 }
 
 /** Real Apple Music integration: developer-token JWT (app-level) plus a client-supplied Music User Token (per-user). */
@@ -70,10 +81,6 @@ export class AppleMusicAdapter implements MusicServiceAdapter, AppleMusicLinkabl
     return { serviceUserId };
   }
 
-  // ponytail: only search converts a bad *response* into ServiceUnavailableError; the export
-  // methods below still throw bare Errors on !res.ok, and routes/export.ts has no catch for
-  // either. (The shared getDeveloperToken above throws it on every path.) Hoist into one
-  // appleFetch helper if export ever needs the same treatment.
   async search(query: string): Promise<TrackResult[]> {
     const token = await this.getDeveloperToken();
     let res: Response;
@@ -116,7 +123,7 @@ export class AppleMusicAdapter implements MusicServiceAdapter, AppleMusicLinkabl
       },
       body: JSON.stringify({ attributes: { name } }),
     });
-    if (!res.ok) throw new Error(`apple music create playlist failed: ${res.status}`);
+    if (!res.ok) throw playlistWriteError(res.status, 'create playlist');
     const body = (await res.json()) as { data: Array<{ id: string }> };
     return { externalId: body.data[0].id, service: this.service };
   }
@@ -132,7 +139,7 @@ export class AppleMusicAdapter implements MusicServiceAdapter, AppleMusicLinkabl
       },
       body: JSON.stringify({ data: tracks.map((t) => ({ id: t.externalId, type: 'songs' })) }),
     });
-    if (!res.ok) throw new Error(`apple music append tracks failed: ${res.status}`);
+    if (!res.ok) throw playlistWriteError(res.status, 'append tracks');
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {

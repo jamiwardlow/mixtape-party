@@ -12,6 +12,7 @@ import {
   signUp,
 } from './testHelpers.js';
 import { FAKE_BANDCAMP_URL } from '../adapters/fakeAdapter.js';
+import { ServiceAccountError, ServiceUnavailableError } from '../adapters/types.js';
 
 let testDb: TestDb;
 
@@ -149,6 +150,7 @@ describe('POST /rounds/:roundId/export', () => {
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(youtubeMusicExport.playlistExternalId).toBeNull();
     expect(youtubeMusicExport.playlistUrl).toBeNull();
+    expect(youtubeMusicExport.status).toBe('no_matches');
   });
 
   it('excludes youtube_music from export when no server-held cookie is configured', async () => {
@@ -240,6 +242,79 @@ describe('POST /rounds/:roundId/export', () => {
     expect(appleMusicExport.skipped).toHaveLength(1);
     expect(appleMusicExport.skipped[0].title).toBe('Unmatchable Song');
     expect(appleMusicExport.skipped[0].playback.deepLink).toBeTruthy();
+  });
+
+  it('reports a service the requester has not linked, rather than dropping it from the response', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const appleMusicExport = res.body.services.find((s: { service: string }) => s.service === 'apple_music');
+    expect(appleMusicExport.status).toBe('not_linked');
+    expect(appleMusicExport.playlistUrl).toBeNull();
+  });
+
+  // The bug in #73: one broken link used to 500 the whole request, throwing away a playlist the
+  // other service had already built and persisted.
+  it('settles each service independently, so one failure cannot take the others down', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+    appleMusicAdapter.createPlaylist = async () => {
+      throw new Error('apple music create playlist failed: 500');
+    };
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const byService: Map<string, { status: string; playlistUrl: string | null }> = new Map(
+      res.body.services.map((s: { service: string }) => [s.service, s]),
+    );
+    expect(byService.get('apple_music')!.status).toBe('failed');
+    expect(byService.get('apple_music')!.playlistUrl).toBeNull();
+    expect(byService.get('youtube_music')!.status).toBe('ok');
+    expect(byService.get('youtube_music')!.playlistUrl).toBeTruthy();
+  });
+
+  it('marks an account the service refused separately from a generic failure', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+    appleMusicAdapter.createPlaylist = async () => {
+      throw new ServiceAccountError('apple_music', 'apple music create playlist rejected the account: 403');
+    };
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const appleMusicExport = res.body.services.find((s: { service: string }) => s.service === 'apple_music');
+    expect(appleMusicExport.status).toBe('denied');
+  });
+
+  // youtube_music runs on one server-held account, so its outage is app-wide -- still a failure, but
+  // not one the requester can act on.
+  it('reports an unreachable service as failed', async () => {
+    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    youtubeMusicAdapter.createPlaylist = async () => {
+      throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable');
+    };
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
+    expect(youtubeMusicExport.status).toBe('failed');
   });
 
   it('runs the export once per round, reusing the same playlist on a repeat request', async () => {
