@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Button,
+  Platform,
   Pressable,
   PressableProps,
   StyleProp,
@@ -12,6 +13,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ServiceName } from './rounds';
@@ -135,6 +137,10 @@ export function TapeButton({
   return <Button title={title} onPress={onPress} disabled={disabled} />;
 }
 
+// The box shape TapeInput and TapeDateField's web control share. It lives out here because the
+// web branch is a DOM node and can't reach into the StyleSheet.
+const INPUT_SHAPE = { borderRadius: 6, padding: 12, fontSize: 15, minHeight: 44 };
+
 export function TapeInput(props: TextInputProps) {
   const t = useTheme();
   return (
@@ -143,6 +149,121 @@ export function TapeInput(props: TextInputProps) {
       {...props}
       style={[styles.input, { borderColor: t.hairline, color: t.ink }, props.style]}
     />
+  );
+}
+
+function formatDeadline(date: Date): string {
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+// <input type="datetime-local"> speaks local wall-clock time, so toISOString() would shift the
+// value by the UTC offset and show the host a date they did not pick.
+function toLocalInputValue(date: Date | undefined): string {
+  if (!date) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// A date *and* time field: deadlines are TIMESTAMPTZ and the notification sweep fires on a
+// fraction of the remaining window, so the instant matters, not just the day.
+//
+// ponytail: one field, three controls. @react-native-community/datetimepicker ships no
+// react-native-web build, so web falls back to the DOM control -- which is the native picker
+// there -- and Android has no 'datetime' mode, so it chains the date dialog into the time one.
+// PRODUCT.md wants one design language across iOS and Android; this is as close as the library
+// gets. Replace all three with one JS calendar if that stops being close enough.
+//
+// minimumDate is an affordance, not a guarantee: Android applies it to the date dialog only, and
+// a DOM `min` outside a <form> isn't enforced. Callers still have to check the order themselves.
+export function TapeDateField({
+  label,
+  value,
+  onChange,
+  minimumDate,
+  testID,
+}: {
+  label: string;
+  value: Date;
+  onChange: (date: Date) => void;
+  minimumDate?: Date;
+  testID?: string;
+}) {
+  const t = useTheme();
+
+  function control() {
+    if (Platform.OS === 'web') {
+      return (
+        <input
+          type="datetime-local"
+          aria-label={label}
+          data-testid={testID}
+          value={toLocalInputValue(value)}
+          min={toLocalInputValue(minimumDate)}
+          onChange={(e) => {
+            // Clearing the field, or a half-typed date, parses to Invalid Date -- keep the last
+            // good value rather than handing the caller a NaN instant.
+            const picked = new Date(e.target.value);
+            if (!Number.isNaN(picked.getTime())) onChange(picked);
+          }}
+          style={{
+            ...INPUT_SHAPE,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderStyle: 'solid',
+            borderColor: t.hairline,
+            color: t.ink,
+            backgroundColor: t.bg,
+            fontFamily: 'inherit',
+          }}
+        />
+      );
+    }
+
+    if (Platform.OS === 'android') {
+      return (
+        <Pressable
+          testID={testID}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          onPress={() =>
+            DateTimePickerAndroid.open({
+              value,
+              mode: 'date',
+              minimumDate,
+              // The date dialog answers first; the time dialog then refines the day it returned.
+              onValueChange: (_event, date) =>
+                DateTimePickerAndroid.open({
+                  value: date,
+                  mode: 'time',
+                  onValueChange: (_timeEvent, withTime) => onChange(withTime),
+                }),
+            })
+          }
+        >
+          <Text style={[styles.input, styles.dateValue, { borderColor: t.hairline, color: t.ink }]}>
+            {formatDeadline(value)}
+          </Text>
+        </Pressable>
+      );
+    }
+
+    return (
+      <DateTimePicker
+        testID={testID}
+        value={value}
+        mode="datetime"
+        display="compact"
+        minimumDate={minimumDate}
+        onValueChange={(_event, date) => onChange(date)}
+      />
+    );
+  }
+
+  return (
+    <View style={styles.dateField}>
+      <Label>{label}</Label>
+      {control()}
+    </View>
   );
 }
 
@@ -165,7 +286,9 @@ const styles = StyleSheet.create({
   heading: { fontSize: 18, fontWeight: '600' },
   label: { fontSize: 13 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: 12, gap: 8 },
-  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 12, fontSize: 15, minHeight: 44 },
+  input: { borderWidth: StyleSheet.hairlineWidth, ...INPUT_SHAPE },
+  dateField: { gap: 4 },
+  dateValue: { lineHeight: 20 },
   sprocket: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 4 },
   spinner: { alignSelf: 'center' },
 });
