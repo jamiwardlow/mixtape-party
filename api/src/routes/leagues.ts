@@ -106,6 +106,18 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     }
     const { theme, submissionAt, guessingAt } = parsed;
 
+    // Rounds 2..N can be named at creation too: themes[n] is round n's theme. Anything
+    // missing or blank stays null, for the schedule screen's PATCH to name later.
+    const { themes } = req.body ?? {};
+    if (themes !== undefined && (!Array.isArray(themes) || themes.some((t) => t !== null && typeof t !== 'string'))) {
+      res.status(400).json({ error: 'themes must be an array of strings' });
+      return;
+    }
+    const seasonThemes: (string | null)[] = Array.from(
+      { length: seasonLength },
+      (_, i) => (typeof themes?.[i] === 'string' && themes[i].trim()) || null,
+    );
+
     const client = await deps.pool.connect();
     try {
       await client.query('BEGIN');
@@ -120,7 +132,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       // The whole season is scheduled here, from round 1's two deadlines (#74): with W the gap
       // between them, round N's submission deadline is G1 + (N-2)W and its guessing deadline is
       // G1 + (N-1)W, so each round's submission deadline lands on the previous round's guessing
-      // deadline. Only round 1 has a theme; naming the rest is #75's PATCH.
+      // deadline. Round 1's theme is its own field; the rest come from `themes`, if sent.
       //
       // submission_opens_at is round N-1's *submission* deadline, not its guessing deadline as
       // #74 phrased it -- those are one and the same instant as round N's own submission
@@ -130,13 +142,13 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const rounds = await client.query<RoundRow>(
         `INSERT INTO rounds (league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline)
          SELECT $1, n,
-                CASE WHEN n = 1 THEN $2 END,
+                CASE WHEN n = 1 THEN $2 ELSE ($6::text[])[n] END,
                 CASE WHEN n = 1 THEN now() ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 3) END,
                 $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 2),
                 $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 1)
          FROM generate_series(1, $5::int) AS n
          RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
-        [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString(), seasonLength],
+        [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString(), seasonLength, seasonThemes],
       );
       const firstRound = rounds.rows.find((row) => row.round_number === 1)!;
 

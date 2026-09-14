@@ -59,6 +59,9 @@ export default function CreateLeague() {
   const [name, setName] = useState('');
   const [seasonLength, setSeasonLength] = useState('8');
   const [theme, setTheme] = useState('');
+  // Themes for rounds 2..N, keyed by round number. Sparse on purpose: a round nobody named stays
+  // unthemed, which the schedule screen can fill in later.
+  const [laterThemes, setLaterThemes] = useState<Record<number, string>>({});
   const [submissionDeadline, setSubmissionDeadline] = useState(defaultSubmissionDeadline);
   // null means "derive it" -- the host has not overridden the default week of guessing time.
   const [chosenGuessingDeadline, setChosenGuessingDeadline] = useState<Date | null>(null);
@@ -100,6 +103,8 @@ export default function CreateLeague() {
           name,
           seasonLength: rounds,
           theme,
+          // themes[n - 1] is round n's theme; round 1's is the `theme` field above.
+          themes: Array.from({ length: rounds }, (_, i) => laterThemes[i + 1] ?? null),
           submissionDeadline: submissionDeadline.toISOString(),
           guessingDeadline: guessingDeadline.toISOString(),
         },
@@ -171,10 +176,19 @@ export default function CreateLeague() {
           <>
             <Sprocket />
             <HandText>The rest of the season</HandText>
-            <Label>Each round opens as the one before it closes. You can change any of this later.</Label>
+            <Label>
+              Each round opens as the one before it closes. Themes are optional — you can change any of
+              this later.
+            </Label>
             {laterRounds.map((round) => (
               <JCard key={round.number}>
                 <HandText>Round {round.number}</HandText>
+                <TapeInput
+                  placeholder="Theme"
+                  testID={`preview-round-${round.number}-theme`}
+                  value={laterThemes[round.number] ?? ''}
+                  onChangeText={(text) => setLaterThemes((prev) => ({ ...prev, [round.number]: text }))}
+                />
                 <DeadlineRows
                   submissionDeadline={round.submissionDeadline}
                   guessingDeadline={round.guessingDeadline}

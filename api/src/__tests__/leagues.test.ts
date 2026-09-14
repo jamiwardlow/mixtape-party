@@ -173,6 +173,36 @@ describe('POST /leagues', () => {
       null,
     ]);
   });
+
+  it('names rounds 2..N from themes[n - 1], leaving the blanks unnamed', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host-season-themes@example.com');
+
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 4, ...round1, themes: [null, 'Deep cuts', '  ', 'One hit wonders'] });
+
+    expect((await scheduleOf(created.body.leagueId)).map((r) => r.theme)).toEqual([
+      round1.theme,
+      'Deep cuts',
+      null,
+      'One hit wonders',
+    ]);
+  });
+
+  it('rejects themes that are not strings', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host-bad-themes@example.com');
+
+    const res = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Office League', seasonLength: 4, ...round1, themes: [null, 7] });
+
+    expect(res.status).toBe(400);
+    expect((await testDb.pool.query('SELECT 1 FROM rounds')).rowCount).toBe(0);
+  });
 });
 
 describe('GET /leagues/invite/:code', () => {

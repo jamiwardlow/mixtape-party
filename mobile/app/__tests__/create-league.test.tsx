@@ -163,3 +163,33 @@ describe('season schedule preview', () => {
     expect(screen.queryByTestId('preview-round-2-submission')).toBeNull();
   });
 });
+
+// The whole season is written at creation, so a theme typed here is the difference between a
+// named round and one the host has to go back and PATCH on the schedule screen.
+describe('season themes', () => {
+  async function formFor(seasonLength: string) {
+    await render(<CreateLeague />);
+    await fireEvent.changeText(screen.getByPlaceholderText('Season length (rounds)'), seasonLength);
+  }
+
+  it('posts each round’s theme at its own index, with round 1 in the theme field', async () => {
+    await formFor('3');
+
+    await fireEvent.changeText(screen.getAllByPlaceholderText('Theme')[0], 'Songs about rain');
+    await fireEvent.changeText(screen.getByTestId('preview-round-3-theme'), 'Deep cuts');
+    await create();
+
+    expect(lastPost().theme).toBe('Songs about rain');
+    expect(lastPost().themes).toEqual([null, null, 'Deep cuts']);
+  });
+
+  it('shortens the posted themes when the season does, dropping the rounds that went away', async () => {
+    await formFor('4');
+
+    await fireEvent.changeText(screen.getByTestId('preview-round-4-theme'), 'One hit wonders');
+    await fireEvent.changeText(screen.getByPlaceholderText('Season length (rounds)'), '2');
+    await create();
+
+    expect(lastPost().themes).toEqual([null, null]);
+  });
+});
