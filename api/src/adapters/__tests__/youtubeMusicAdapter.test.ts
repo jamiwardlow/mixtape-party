@@ -39,3 +39,29 @@ describe('YouTubeMusicAdapter.search', () => {
     expect(results.every((r) => r.externalId)).toBe(true);
   });
 });
+
+describe('YouTubeMusicAdapter.deletePlaylist', () => {
+  it('posts the playlist id to the innertube delete endpoint', async () => {
+    stubFetch({});
+
+    await new YouTubeMusicAdapter().deletePlaylist('SAPISID=abc123', {
+      externalId: 'PL_contract_test',
+      service: 'youtube_music',
+    });
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(url).toContain('/youtubei/v1/playlist/delete');
+    expect(JSON.parse(init!.body as string)).toMatchObject({ playlistId: 'PL_contract_test' });
+  });
+
+  it('surfaces a refused delete as a service outage rather than resolving quietly', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 }) as unknown as Response));
+
+    await expect(
+      new YouTubeMusicAdapter().deletePlaylist('SAPISID=abc123', {
+        externalId: 'PL_contract_test',
+        service: 'youtube_music',
+      }),
+    ).rejects.toThrow(/youtube music request failed: 401/);
+  });
+});

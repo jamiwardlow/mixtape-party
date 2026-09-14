@@ -145,6 +145,15 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
     );
   }
 
+  /**
+   * Not part of {@link MusicServiceAdapter}: nothing in the product deletes an export playlist, so
+   * this exists for the contract test, which would otherwise leave a playlist in the shared app
+   * account on every scheduled run.
+   */
+  async deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void> {
+    await this.post('playlist/delete', { playlistId: playlist.externalId }, accessToken);
+  }
+
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `${ORIGIN}/watch?v=${track.externalId}` };
   }

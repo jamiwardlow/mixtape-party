@@ -41,6 +41,7 @@ jobs:
             causes: |
               1. `YOUTUBE_MUSIC_COOKIE` expired — the playlist assertions fail with an auth error and production exports are broken too. Re-capture the cookie from a logged-in music.youtube.com session and update both the repo secret and the Render env var.
               2. YouTube changed the innertube response shape — search returns fewer/no results. Fix the parse path in `api/src/adapters/youtubeMusicAdapter.ts` and re-capture `api/src/adapters/__tests__/fixtures/ytmSearchResponse.json`.
+              3. `playlist/delete` was refused or renamed — the test now deletes the playlist it created, so a failure here means each run is also leaking a `contract-test-*` playlist into the app account. Export itself is unaffected.
             impact: assume submission (`POST /rounds/:roundId/submissions`) is broken.
           - service: Bandcamp
             test: bandcampAdapter.integration
