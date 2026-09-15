@@ -74,6 +74,26 @@ export const round1 = {
   guessingDeadline: '2030-01-17T00:00:00.000Z',
 };
 
+/** One player's track for a round. The externalId is round-scoped so a season stays distinct. */
+export function submitTrack(app: Express, roundId: string, member: { accountId: string; token: string }) {
+  return request(app)
+    .post(`/rounds/${roundId}/submissions`)
+    .set('Authorization', `Bearer ${member.token}`)
+    .send({
+      externalId: `track-${roundId}-${member.accountId}`,
+      title: `Song by ${member.accountId}`,
+      artist: 'Artist',
+      service: 'apple_music',
+    });
+}
+
+export function guess(app: Express, roundId: string, submissionId: string, token: string, guessedAccountId: string) {
+  return request(app)
+    .post(`/rounds/${roundId}/submissions/${submissionId}/guesses`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ guessedAccountId });
+}
+
 export async function createLeagueWithPlayers(
   app: Express,
   appleMusicAdapter: FakeMusicServiceAdapter,
@@ -98,19 +118,11 @@ export async function createLeagueWithPlayers(
 
   const submissions: Array<{ accountId: string; submissionId: string }> = [];
   for (const member of members) {
-    const res = await request(app)
-      .post(`/rounds/${roundId}/submissions`)
-      .set('Authorization', `Bearer ${member.token}`)
-      .send({
-        externalId: `track-${member.accountId}`,
-        title: `Song by ${member.accountId}`,
-        artist: 'Artist',
-        service: 'apple_music',
-      });
+    const res = await submitTrack(app, roundId, member);
     submissions.push({ accountId: member.accountId, submissionId: res.body.submissionId });
   }
 
-  return { roundId, leagueId: created.body.leagueId as string, members, submissions };
+  return { roundId, inviteCode, leagueId: created.body.leagueId as string, members, submissions };
 }
 
 export async function closeSubmissionWindow(pool: Pool, roundId: string) {

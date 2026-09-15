@@ -7,6 +7,7 @@ import {
   closeGuessingWindow as closeGuessingWindowFor,
   closeSubmissionWindow as closeSubmissionWindowFor,
   createLeagueWithPlayers,
+  guess,
   signUp,
 } from './testHelpers.js';
 
@@ -34,13 +35,6 @@ async function closeSubmissionWindow(roundId: string) {
 
 async function closeGuessingWindow(roundId: string) {
   await closeGuessingWindowFor(testDb.pool, roundId);
-}
-
-async function guess(app: Express, roundId: string, submissionId: string, token: string, guessedAccountId: string) {
-  return request(app)
-    .post(`/rounds/${roundId}/submissions/${submissionId}/guesses`)
-    .set('Authorization', `Bearer ${token}`)
-    .send({ guessedAccountId });
 }
 
 describe('GET /rounds/:roundId/results', () => {

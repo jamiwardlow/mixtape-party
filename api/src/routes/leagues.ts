@@ -2,7 +2,20 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { CURRENT_ROUND_CLAUSE, isLeagueMember, loadLeague, loadRound } from './rounds.js';
+import {
+  CURRENT_ROUND_CLAUSE,
+  describeRound,
+  emptyRoundActivity,
+  isLeagueMember,
+  isSeasonConcluded,
+  loadCurrentRound,
+  loadLeague,
+  loadRound,
+  roundPhase,
+  type Player,
+  type RoundActivity,
+} from './rounds.js';
+import { correctGuessCounts, scoreboard } from './results.js';
 
 export type LeaguesDeps = AccountsDeps;
 
@@ -258,12 +271,10 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
               id: row.round_id,
               number: row.round_number,
               theme: row.theme,
-              phase:
-                now < new Date(row.submission_deadline!)
-                  ? 'submission'
-                  : now < new Date(row.guessing_deadline!)
-                    ? 'guessing'
-                    : 'results',
+              phase: roundPhase(
+                { submissionDeadline: row.submission_deadline!, guessingDeadline: row.guessing_deadline! },
+                now,
+              ),
             }
           : null,
       })),
@@ -293,6 +304,110 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
 
     // Round metadata only: who submitted what stays hidden until guesses lock (Principle 1).
     res.json({ isHost: league.hostAccountId === accountId, rounds: rounds.rows.map(serializeRound) });
+  });
+
+  // One read behind both overview screens (#83, #84): the roster, the running standings and every
+  // round's progress. Three grouped queries cover the whole season rather than three per round --
+  // the page draws all `seasonLength` of them, so the query count must not scale with it.
+  router.get('/leagues/:leagueId/overview', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const leagueId = req.params.leagueId;
+    const league = await loadLeague(deps.pool, leagueId);
+    if (!league) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (!(await isLeagueMember(deps.pool, leagueId, accountId))) {
+      res.status(403).json({ error: 'join the league before viewing it' });
+      return;
+    }
+
+    const [membersResult, roundsResult, submissionsResult, guessesResult, correctGuesses, current] = await Promise.all([
+      // Driven off league_members rather than off guesses, so a player who has done nothing is
+      // still on the roster and still in the standings on zero. Ordered by joined_at so the list
+      // is stable between loads.
+      deps.pool.query<{ account_id: string; display_name: string | null; joined_at: string }>(
+        `SELECT a.id AS account_id, a.display_name, lm.joined_at FROM league_members lm
+         JOIN accounts a ON a.id = lm.account_id
+         WHERE lm.league_id = $1
+         ORDER BY lm.joined_at ASC`,
+        [leagueId],
+      ),
+      deps.pool.query<RoundRow & { scored: boolean }>(
+        // `scored` comes from Postgres's clock, not the app's: correctGuessCounts filters on the
+        // same now(), so "after 3 of 8 rounds" can never disagree with the standings beside it.
+        `SELECT id, round_number, theme, submission_deadline, guessing_deadline,
+                guessing_deadline <= now() AS scored
+         FROM rounds WHERE league_id = $1 ORDER BY round_number`,
+        [leagueId],
+      ),
+      deps.pool.query<{ round_id: string; account_id: string }>(
+        `SELECT s.round_id, s.account_id FROM submissions s
+         JOIN rounds r ON r.id = s.round_id
+         WHERE r.league_id = $1
+         ORDER BY s.created_at, s.id`,
+        [leagueId],
+      ),
+      deps.pool.query<{ round_id: string; guesser_account_id: string; guess_count: string }>(
+        `SELECT s.round_id, g.guesser_account_id, count(*) AS guess_count
+         FROM guesses g
+         JOIN submissions s ON s.id = g.submission_id
+         JOIN rounds r ON r.id = s.round_id
+         WHERE r.league_id = $1
+         GROUP BY s.round_id, g.guesser_account_id`,
+        [leagueId],
+      ),
+      correctGuessCounts(deps.pool, leagueId),
+      loadCurrentRound(deps.pool, leagueId),
+    ]);
+
+    const now = new Date();
+    const players = new Map<string, Player>(
+      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name }]),
+    );
+
+    const activity = new Map<string, RoundActivity>(roundsResult.rows.map((row) => [row.id, emptyRoundActivity()]));
+    for (const row of submissionsResult.rows) {
+      activity.get(row.round_id)?.submitterIds.push(row.account_id);
+    }
+    for (const row of guessesResult.rows) {
+      activity.get(row.round_id)?.guessCounts.set(row.guesser_account_id, Number(row.guess_count));
+    }
+
+    const concluded = isSeasonConcluded(league, current, now);
+    const { scores, winners } = scoreboard([...players.values()], correctGuesses);
+
+    res.json({
+      league: {
+        id: leagueId,
+        name: league.name,
+        seasonLength: league.seasonLength,
+        inviteCode: league.inviteCode,
+        isHost: league.hostAccountId === accountId,
+        concluded,
+      },
+      host: players.get(league.hostAccountId) ?? { accountId: league.hostAccountId, displayName: null },
+      members: membersResult.rows.map((row) => ({
+        accountId: row.account_id,
+        displayName: row.display_name,
+        joinedAt: row.joined_at,
+      })),
+      standings: scores,
+      scoredRoundCount: roundsResult.rows.filter((row) => row.scored).length,
+      winners: concluded ? winners : [],
+      rounds: roundsResult.rows.map((row) => ({
+        ...describeRound(
+          serializeRound(row),
+          activity.get(row.id) ?? emptyRoundActivity(),
+          players,
+          accountId,
+          now,
+        ),
+        // CURRENT_ROUND_CLAUSE, not a second "first unfinished round" computed here -- between
+        // seasons the clause names the final round and the overview must agree with home.
+        isCurrent: row.id === current?.id,
+      })),
+    });
   });
 
   // The only mutation path a round has (#75). #74 pre-creates the whole season from round 1's

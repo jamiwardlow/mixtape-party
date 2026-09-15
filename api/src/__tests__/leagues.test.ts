@@ -6,9 +6,12 @@ import {
   buildApp as sharedBuildApp,
   closeGuessingWindow as closeGuessingWindowFor,
   closeSubmissionWindow,
+  createLeagueWithPlayers,
+  guess,
   markRemindersSent,
   round1,
   signUp,
+  submitTrack,
 } from './testHelpers.js';
 
 let testDb: TestDb;
@@ -934,5 +937,210 @@ describe('GET /leagues/:leagueId/rounds', () => {
       'submissionDeadline',
       'theme',
     ]);
+  });
+});
+
+describe('GET /leagues/:leagueId/overview', () => {
+  const overview = (app: Express, leagueId: string, token: string) =>
+    request(app).get(`/leagues/${leagueId}/overview`).set('Authorization', `Bearer ${token}`);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the response body is raw JSON.
+  const roundNumbered = (body: any, number: number): any =>
+    body.rounds.find((r: { number: number }) => r.number === number);
+
+  it('rejects requests without a session', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    expect((await request(app).get(`/leagues/${leagueId}/overview`)).status).toBe(401);
+  });
+
+  it('404s for an unknown league', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const res = await overview(app, '00000000-0000-0000-0000-000000000000', members[0].token);
+    expect(res.status).toBe(404);
+  });
+
+  it('403s someone who is not in the league', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const outsider = await signUp(app, 'overview-outsider@example.com');
+    expect((await overview(app, leagueId, outsider.token)).status).toBe(403);
+  });
+
+  // PRODUCT.md Principle 1, one test per phase. Naming who has *not* submitted narrows the
+  // guessing pool, so the submitter list is the server's to withhold -- never the client's to hide.
+  it('names the submitters while the submission window is open', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+
+    const res = await overview(app, leagueId, members[0].token);
+    const round = roundNumbered(res.body, 1);
+
+    expect(res.status).toBe(200);
+    expect(round.phase).toBe('submission');
+    expect(round.submittedCount).toBe(4);
+    expect(round.submitters.map((p: { accountId: string }) => p.accountId).sort()).toEqual(
+      members.map((m) => m.accountId).sort(),
+    );
+  });
+
+  it('withholds the submitters once guessing opens, but still counts them', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await closeSubmissionWindow(testDb.pool, roundId);
+
+    const res = await overview(app, leagueId, members[0].token);
+    const round = roundNumbered(res.body, 1);
+
+    expect(round.phase).toBe('guessing');
+    // Absent, not empty: an empty array would read as "nobody submitted".
+    expect('submitters' in round).toBe(false);
+    expect(round.submittedCount).toBe(4);
+  });
+
+  it('names the submitters again once the round is over', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await closeSubmissionWindow(testDb.pool, roundId);
+    await closeGuessingWindow(roundId);
+
+    const round = roundNumbered((await overview(app, leagueId, members[0].token)).body, 1);
+
+    expect(round.phase).toBe('results');
+    expect(round.submitters).toHaveLength(4);
+  });
+
+  it('counts a scored round in the standings and excludes one still being guessed', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4, {
+      seasonLength: 2,
+    });
+    const round2 = (await scheduleOf(leagueId))[1];
+
+    await closeSubmissionWindow(testDb.pool, roundId);
+    const round1Track = submissions.find((s) => s.accountId === members[1].accountId)!;
+    await guess(app, roundId, round1Track.submissionId, members[0].token, members[1].accountId);
+
+    const round2Submissions = [];
+    for (const member of members) {
+      const res = await submitTrack(app, round2.id, member);
+      round2Submissions.push({ accountId: member.accountId, submissionId: res.body.submissionId as string });
+    }
+    await closeSubmissionWindow(testDb.pool, round2.id);
+    const round2Track = round2Submissions.find((s) => s.accountId === members[1].accountId)!;
+    await guess(app, round2.id, round2Track.submissionId, members[0].token, members[1].accountId);
+
+    await closeGuessingWindow(roundId);
+
+    const res = await overview(app, leagueId, members[0].token);
+
+    // Two correct guesses were made; only round 1's counts, because round 2 is still in play and a
+    // running correct-guess count would narrow what is left to guess.
+    expect(res.body.standings.find((s: { accountId: string }) => s.accountId === members[0].accountId).score).toBe(1);
+    expect(res.body.scoredRoundCount).toBe(1);
+    expect(res.body.winners).toEqual([]);
+    expect(res.body.league.concluded).toBe(false);
+  });
+
+  it('keeps a member who has done nothing on the roster and on zero', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, inviteCode, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const latecomer = await signUp(app, 'overview-latecomer@example.com');
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${latecomer.token}`);
+
+    const res = await overview(app, leagueId, members[0].token);
+
+    expect(res.body.members.map((m: { accountId: string }) => m.accountId)).toContain(latecomer.accountId);
+    expect(res.body.standings.find((s: { accountId: string }) => s.accountId === latecomer.accountId).score).toBe(0);
+    // Ordered by joined_at, so the roster is stable between loads.
+    expect(res.body.members.at(-1).accountId).toBe(latecomer.accountId);
+    expect(res.body.members[0].joinedAt).toBeTruthy();
+  });
+
+  it('counts down your own guesses, never counting your own track', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await closeSubmissionWindow(testDb.pool, roundId);
+
+    const before = roundNumbered((await overview(app, leagueId, members[0].token)).body, 1);
+    // Four tracks in the round, but never your own: three to guess.
+    expect(before.you).toEqual({ submitted: true, guessesRemaining: 3 });
+    expect(before.guessedPlayers).toEqual([]);
+
+    for (const other of members.slice(1)) {
+      const track = submissions.find((s) => s.accountId === other.accountId)!;
+      await guess(app, roundId, track.submissionId, members[0].token, other.accountId);
+    }
+
+    const after = roundNumbered((await overview(app, leagueId, members[0].token)).body, 1);
+    expect(after.you.guessesRemaining).toBe(0);
+    // Who has answered, never what they answered -- safe in every phase.
+    expect(after.guessedPlayers.map((p: { accountId: string }) => p.accountId)).toEqual([members[0].accountId]);
+  });
+
+  it('names every player tied at the top once the season concludes', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4, {
+      seasonLength: 1,
+    });
+    await closeSubmissionWindow(testDb.pool, roundId);
+
+    const trackOf = (accountId: string) => submissions.find((s) => s.accountId === accountId)!;
+    await guess(app, roundId, trackOf(members[1].accountId).submissionId, members[0].token, members[1].accountId);
+    await guess(app, roundId, trackOf(members[0].accountId).submissionId, members[1].token, members[0].accountId);
+    await closeGuessingWindow(roundId);
+
+    const res = await overview(app, leagueId, members[0].token);
+
+    expect(res.body.league.concluded).toBe(true);
+    expect(res.body.scoredRoundCount).toBe(1);
+    expect(res.body.winners.map((w: { accountId: string }) => w.accountId).sort()).toEqual(
+      [members[0].accountId, members[1].accountId].sort(),
+    );
+    // Ranked, so the screen can render the list as it comes.
+    expect(res.body.standings.map((s: { score: number }) => s.score)).toEqual([1, 1, 0, 0]);
+  });
+
+  it('gives a non-host member the invite code so they can top the league up', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, inviteCode, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+
+    const res = await overview(app, leagueId, members[1].token);
+
+    expect(res.body.league.isHost).toBe(false);
+    expect(res.body.league.inviteCode).toBe(inviteCode);
+    expect(res.body.league.name).toBe('Office League');
+    expect(res.body.league.seasonLength).toBe(8);
+    expect(res.body.host.accountId).toBe(members[0].accountId);
+  });
+
+  it('marks exactly one round current, agreeing with the home screen', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+
+    const fresh = await overview(app, leagueId, members[0].token);
+    expect(fresh.body.rounds.filter((r: { isCurrent: boolean }) => r.isCurrent).map((r: { id: string }) => r.id)).toEqual(
+      [roundId],
+    );
+
+    // Round 1 over: the current round moves on, it does not vanish.
+    await closeSubmissionWindow(testDb.pool, roundId);
+    await closeGuessingWindow(roundId);
+    const later = await overview(app, leagueId, members[0].token);
+    expect(later.body.rounds.filter((r: { isCurrent: boolean }) => r.isCurrent)).toHaveLength(1);
+    expect(roundNumbered(later.body, 2).isCurrent).toBe(true);
+  });
+
+  it('returns the whole season, unthemed rounds and all', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+
+    const res = await overview(app, leagueId, members[0].token);
+
+    expect(res.body.rounds.map((r: { number: number }) => r.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(roundNumbered(res.body, 2).theme).toBeNull();
+    expect(roundNumbered(res.body, 2).submittedCount).toBe(0);
+    expect(res.body.scoredRoundCount).toBe(0);
   });
 });

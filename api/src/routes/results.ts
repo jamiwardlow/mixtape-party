@@ -1,12 +1,51 @@
 import { Router } from 'express';
+import type { Pool } from 'pg';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadCurrentRound, loadLeague, loadRound } from './rounds.js';
+import {
+  isLeagueMember,
+  isSeasonConcluded,
+  loadCurrentRound,
+  loadLeague,
+  loadRound,
+  type Player,
+} from './rounds.js';
 
 export type ResultsDeps = AccountsDeps;
 
-interface Player {
-  accountId: string;
-  displayName: string | null;
+/**
+ * The one scoring rule, shared by a round's results, final standings and the league overview:
+ * 1 point per correct guess, submitters never score for their own track, and `winners` is
+ * everyone tied at the top -- no tiebreak, and nobody wins a scoreless board. Ranked by score
+ * then name so ties come back in a stable order rather than whatever the roster query returned.
+ */
+export function scoreboard(
+  members: Player[],
+  correctGuesses: Map<string, number>,
+): { scores: Array<Player & { score: number }>; winners: Array<Player & { score: number }> } {
+  const scores = members
+    .map((member) => ({ ...member, score: correctGuesses.get(member.accountId) ?? 0 }))
+    .sort((a, b) => b.score - a.score || (a.displayName ?? '').localeCompare(b.displayName ?? ''));
+  const topScore = Math.max(0, ...scores.map((s) => s.score));
+  return { scores, winners: topScore > 0 ? scores.filter((s) => s.score === topScore) : [] };
+}
+
+/**
+ * Correct guesses per player across a league's *scored* rounds. A round still being guessed is
+ * excluded: a running correct-guess count mid-round narrows what is left to guess, which is the
+ * same leak the submitter list is withheld for.
+ */
+export async function correctGuessCounts(pool: Pool, leagueId: string): Promise<Map<string, number>> {
+  const result = await pool.query<{ guesser_account_id: string; correct_count: string }>(
+    `SELECT g.guesser_account_id, count(*) AS correct_count
+     FROM guesses g
+     JOIN submissions s ON s.id = g.submission_id
+     JOIN rounds r ON r.id = s.round_id
+     WHERE r.league_id = $1 AND g.guessed_account_id = s.account_id
+       AND r.guessing_deadline <= now()
+     GROUP BY g.guesser_account_id`,
+    [leagueId],
+  );
+  return new Map(result.rows.map((row) => [row.guesser_account_id, Number(row.correct_count)]));
 }
 
 export function createResultsRouter(deps: ResultsDeps): Router {
@@ -82,15 +121,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       excludedFromExport: row.service === 'bandcamp',
     }));
 
-    const scoreList = membersResult.rows.map((row) => ({
-      accountId: row.account_id,
-      displayName: row.display_name,
-      score: scores.get(row.account_id) ?? 0,
-    }));
-    const topScore = Math.max(0, ...scoreList.map((s) => s.score));
-    const winners = topScore > 0 ? scoreList.filter((s) => s.score === topScore) : [];
-
-    res.json({ tracks, scores: scoreList, winners });
+    res.json({ tracks, ...scoreboard([...players.values()], scores) });
   });
 
   router.get('/leagues/:leagueId/standings', requireAuth(deps), async (req, res) => {
@@ -105,9 +136,8 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       return;
     }
 
-    const current = (await loadCurrentRound(deps.pool, req.params.leagueId))!;
-    const concluded = current.roundNumber >= league.seasonLength && new Date(current.guessingDeadline) <= new Date();
-    if (!concluded) {
+    const current = await loadCurrentRound(deps.pool, req.params.leagueId);
+    if (!isSeasonConcluded(league, current, new Date())) {
       res.status(403).json({ error: 'final standings are not available until the season concludes' });
       return;
     }
@@ -119,30 +149,12 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       [req.params.leagueId],
     );
 
-    const correctGuessesResult = await deps.pool.query<{ guesser_account_id: string; correct_count: string }>(
-      `SELECT g.guesser_account_id, count(*) AS correct_count
-       FROM guesses g
-       JOIN submissions s ON s.id = g.submission_id
-       JOIN rounds r ON r.id = s.round_id
-       WHERE r.league_id = $1 AND g.guessed_account_id = s.account_id
-       GROUP BY g.guesser_account_id`,
-      [req.params.leagueId],
-    );
-
-    const scores = new Map<string, number>(membersResult.rows.map((row) => [row.account_id, 0]));
-    for (const row of correctGuessesResult.rows) {
-      scores.set(row.guesser_account_id, Number(row.correct_count));
-    }
-
-    const scoreList = membersResult.rows.map((row) => ({
+    const members = membersResult.rows.map((row) => ({
       accountId: row.account_id,
       displayName: row.display_name,
-      score: scores.get(row.account_id) ?? 0,
     }));
-    const topScore = Math.max(0, ...scoreList.map((s) => s.score));
-    const winners = topScore > 0 ? scoreList.filter((s) => s.score === topScore) : [];
 
-    res.json({ scores: scoreList, winners });
+    res.json(scoreboard(members, await correctGuessCounts(deps.pool, req.params.leagueId)));
   });
 
   return router;
