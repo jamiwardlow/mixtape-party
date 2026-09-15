@@ -36,6 +36,7 @@ function RootNavigator() {
         <Stack.Screen name="home" />
         <Stack.Screen name="create-league" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="round/[roundId]/index" />
         <Stack.Screen name="round/[roundId]/submit" />
         <Stack.Screen name="round/[roundId]/guess" />
         <Stack.Screen name="round/[roundId]/results" />

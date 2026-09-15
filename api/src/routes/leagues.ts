@@ -410,6 +410,77 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     });
   });
 
+  // #84's stable per-round URL: the same round the season page draws, addressable on its own so a
+  // link to a round survives the phase change that would otherwise make it wrong. The body comes
+  // from describeRound, not from a second derivation here -- the anonymity rule (Principle 1) has
+  // to live in exactly one place, and two copies of that branch is how the leak ships.
+  router.get('/rounds/:roundId/overview', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const roundId = req.params.roundId;
+    const round = await loadRound(deps.pool, roundId);
+    // A round always has a league, so the two misses are the same miss to anyone asking.
+    const league = round && (await loadLeague(deps.pool, round.leagueId));
+    if (!round || !league) {
+      res.status(404).json({ error: 'round not found' });
+      return;
+    }
+    if (!(await isLeagueMember(deps.pool, round.leagueId, accountId))) {
+      res.status(403).json({ error: 'join the league before viewing this round' });
+      return;
+    }
+
+    const [membersResult, submissionsResult, guessesResult] = await Promise.all([
+      deps.pool.query<{ account_id: string; display_name: string | null }>(
+        `SELECT a.id AS account_id, a.display_name FROM league_members lm
+         JOIN accounts a ON a.id = lm.account_id
+         WHERE lm.league_id = $1
+         ORDER BY lm.joined_at ASC`,
+        [round.leagueId],
+      ),
+      // Same order as the league overview's, so the submitter list is the same list.
+      deps.pool.query<{ account_id: string }>(
+        'SELECT account_id FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
+        [roundId],
+      ),
+      deps.pool.query<{ guesser_account_id: string; guess_count: string }>(
+        `SELECT g.guesser_account_id, count(*) AS guess_count
+         FROM guesses g
+         JOIN submissions s ON s.id = g.submission_id
+         WHERE s.round_id = $1
+         GROUP BY g.guesser_account_id`,
+        [roundId],
+      ),
+    ]);
+
+    const players = new Map<string, Player>(
+      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name }]),
+    );
+    const activity: RoundActivity = {
+      submitterIds: submissionsResult.rows.map((row) => row.account_id),
+      guessCounts: new Map(guessesResult.rows.map((row) => [row.guesser_account_id, Number(row.guess_count)])),
+    };
+
+    // leagueId and leagueName ride along so the page can offer the way back up to the season hub
+    // without a second request.
+    res.json({
+      leagueId: round.leagueId,
+      leagueName: league.name,
+      round: describeRound(
+        {
+          id: roundId,
+          number: round.roundNumber,
+          theme: round.theme,
+          submissionDeadline: round.submissionDeadline,
+          guessingDeadline: round.guessingDeadline,
+        },
+        activity,
+        players,
+        accountId,
+        new Date(),
+      ),
+    });
+  });
+
   // The only mutation path a round has (#75). #74 pre-creates the whole season from round 1's
   // pattern, so rounds 2..N arrive with a preset deadline and no theme -- both are a proposal the
   // host is expected to move, not a commitment.

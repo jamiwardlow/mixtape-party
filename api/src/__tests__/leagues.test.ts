@@ -1144,3 +1144,96 @@ describe('GET /leagues/:leagueId/overview', () => {
     expect(res.body.scoredRoundCount).toBe(0);
   });
 });
+
+describe('GET /rounds/:roundId/overview', () => {
+  const roundOverview = (app: Express, roundId: string, token: string) =>
+    request(app).get(`/rounds/${roundId}/overview`).set('Authorization', `Bearer ${token}`);
+
+  /**
+   * The same round as the season page sees it, minus `isCurrent` -- that is a fact about the
+   * season, not about the round, and a single-round URL has no season to compare against.
+   */
+  async function seasonEntry(app: Express, leagueId: string, roundId: string, token: string) {
+    const res = await request(app).get(`/leagues/${leagueId}/overview`).set('Authorization', `Bearer ${token}`);
+    const entry = res.body.rounds.find((r: { id: string }) => r.id === roundId);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stripping the one extra field.
+    const { isCurrent, ...round } = entry;
+    return round;
+  }
+
+  it('rejects requests without a session', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    expect((await request(app).get(`/rounds/${roundId}/overview`)).status).toBe(401);
+  });
+
+  it('404s for an unknown round', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const res = await roundOverview(app, '00000000-0000-0000-0000-000000000000', members[0].token);
+    expect(res.status).toBe(404);
+  });
+
+  it('403s someone who is not in the round’s league', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const outsider = await signUp(app, 'round-overview-outsider@example.com');
+    expect((await roundOverview(app, roundId, outsider.token)).status).toBe(403);
+  });
+
+  it('names the league so the page can get back to the season without a second request', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+
+    const res = await roundOverview(app, roundId, members[0].token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.leagueId).toBe(leagueId);
+    expect(res.body.leagueName).toBe('Office League');
+  });
+
+  // The test that earns its keep: one assembly helper means the two routes cannot disagree, and
+  // the anonymity rule (PRODUCT.md Principle 1) stays implemented once instead of implemented
+  // twice and updated once. Re-testing the rule here would only prove the copy still agrees today.
+  it('answers with exactly the round the season page draws, in every phase', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const token = members[0].token;
+
+    const open = await roundOverview(app, roundId, token);
+    expect(open.body.round.phase).toBe('submission');
+    expect(open.body.round.submitters).toHaveLength(4);
+    expect(open.body.round).toEqual(await seasonEntry(app, leagueId, roundId, token));
+
+    await closeSubmissionWindow(testDb.pool, roundId);
+    const track = submissions.find((s) => s.accountId === members[1].accountId)!;
+    await guess(app, roundId, track.submissionId, token, members[1].accountId);
+
+    const guessing = await roundOverview(app, roundId, token);
+    expect(guessing.body.round.phase).toBe('guessing');
+    // Absent, not empty -- toEqual would happily call an undefined field equal to a missing one.
+    expect('submitters' in guessing.body.round).toBe(false);
+    expect(guessing.body.round.you).toEqual({ submitted: true, guessesRemaining: 2 });
+    expect(guessing.body.round).toEqual(await seasonEntry(app, leagueId, roundId, token));
+
+    await closeGuessingWindow(roundId);
+    const over = await roundOverview(app, roundId, token);
+    expect(over.body.round.phase).toBe('results');
+    expect(over.body.round.submitters).toHaveLength(4);
+    expect(over.body.round).toEqual(await seasonEntry(app, leagueId, roundId, token));
+  });
+
+  it('serves a round nobody has touched, theme and all', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const round2 = (await scheduleOf(leagueId))[1];
+
+    const res = await roundOverview(app, round2.id, members[0].token);
+
+    // Rounds 2..N are created themeless (#74) and this URL has to work before anyone plays them.
+    expect(res.body.round.theme).toBeNull();
+    expect(res.body.round.submittedCount).toBe(0);
+    expect(res.body.round.you).toEqual({ submitted: false, guessesRemaining: 0 });
+    expect(res.body.round).toEqual(await seasonEntry(app, leagueId, round2.id, members[0].token));
+  });
+});
