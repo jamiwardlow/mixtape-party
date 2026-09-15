@@ -2,7 +2,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
-import { PHASE_META, nameOf, type Player, type RoundPhase } from '../../../lib/rounds';
+import {
+  PHASE_META,
+  SUBMISSIONS_IN_PROGRESS,
+  nameOf,
+  type Player,
+  type RoundPhase,
+  waitingOnSubmissions,
+} from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, TapeButton } from '../../../lib/ui';
 
@@ -16,6 +23,8 @@ interface RoundDetail {
   guessingDeadline: string;
   phase: RoundPhase;
   submittedCount: number;
+  /** False while the round is still collecting tracks, even though the clock says guessing. */
+  guessingOpen: boolean;
   /**
    * Optional because the server *omits* it while guessing is open: naming who has not submitted
    * narrows the pool. Its absence is the only signal this screen may branch on — the phase is
@@ -86,7 +95,9 @@ export default function RoundOverview() {
             guessingDeadline={new Date(round.guessingDeadline)}
             testID="round"
           />
-          <Label testID="round-phase">{PHASE_STATUS[round.phase]}</Label>
+          <Label testID="round-phase">
+            {waitingOnSubmissions(round) ? SUBMISSIONS_IN_PROGRESS : PHASE_STATUS[round.phase]}
+          </Label>
         </JCard>
 
         <JCard>
@@ -126,15 +137,19 @@ export default function RoundOverview() {
           )}
         </JCard>
 
-        <TapeButton
-          title={PHASE_META[round.phase].label}
-          onPress={() =>
-            router.push({
-              pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
-              params: { roundId: round.id },
-            })
-          }
-        />
+        {/* Nothing to guess on yet, so nothing to tap: the guess screen 403s below MIN_PLAYERS,
+            and a half-built playlist gives the guesser nothing to go on. */}
+        {!waitingOnSubmissions(round) && (
+          <TapeButton
+            title={PHASE_META[round.phase].label}
+            onPress={() =>
+              router.push({
+                pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
+                params: { roundId: round.id },
+              })
+            }
+          />
+        )}
       </ScrollView>
       <TapeButton
         title={`Back to ${leagueName}`}

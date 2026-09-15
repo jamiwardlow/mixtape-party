@@ -3,11 +3,9 @@ import type { Pool } from 'pg';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import type { ServiceName } from '../adapters/types.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadRound } from './rounds.js';
+import { MIN_PLAYERS, isLeagueMember, loadRound } from './rounds.js';
 
 export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
-
-const MIN_PLAYERS = 4;
 
 /**
  * Whether this guesser can play a track on its native service without leaving the app.

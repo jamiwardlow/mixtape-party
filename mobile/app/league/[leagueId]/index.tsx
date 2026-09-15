@@ -3,7 +3,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
-import { PHASE_META, nameOf, type Player, type RoundPhase } from '../../../lib/rounds';
+import {
+  PHASE_META,
+  SUBMISSIONS_IN_PROGRESS,
+  nameOf,
+  type Player,
+  type RoundPhase,
+  waitingOnSubmissions,
+} from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import {
   BodyText,
@@ -31,6 +38,8 @@ interface OverviewRound {
   guessingDeadline: string;
   phase: RoundPhase;
   submittedCount: number;
+  /** False while the round is still collecting tracks, even though the clock says guessing. */
+  guessingOpen: boolean;
   /**
    * Optional because the server *omits* it while guessing is open: naming who has not submitted
    * narrows the pool. Its absence is the only signal this screen is allowed to branch on — the
@@ -61,7 +70,7 @@ interface Overview {
 }
 
 /**
- * Guessing refuses to run below this (`api/src/routes/guessing.ts:10`), and until now a host
+ * Guessing refuses to run below this (`api/src/routes/rounds.ts`), and until now a host
  * found that out only when the phase quietly did nothing. Duplicated rather than shared: there is
  * no module the API and the app both import, and a wrong number here under-promises rather than
  * breaking anything.
@@ -127,15 +136,21 @@ export default function LeagueOverview() {
               guessingDeadline={new Date(current.guessingDeadline)}
               testID="current-round"
             />
-            <TapeButton
-              title={PHASE_META[current.phase].label}
-              onPress={() =>
-                router.push({
-                  pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
-                  params: { roundId: current.id },
-                })
-              }
-            />
+            {/* No way in until there is something to guess on: the guess screen 403s below
+                MIN_PLAYERS, and a half-built playlist gives the guesser nothing to go on. */}
+            {waitingOnSubmissions(current) ? (
+              <Label testID="current-round-cta-note">{SUBMISSIONS_IN_PROGRESS}</Label>
+            ) : (
+              <TapeButton
+                title={PHASE_META[current.phase].label}
+                onPress={() =>
+                  router.push({
+                    pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
+                    params: { roundId: current.id },
+                  })
+                }
+              />
+            )}
           </JCard>
         )}
 

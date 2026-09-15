@@ -105,6 +105,19 @@ export function isSeasonConcluded(league: LeagueInfo, current: CurrentRoundInfo 
 
 export type RoundPhase = 'submission' | 'guessing' | 'results';
 
+/** Guessing refuses to run below this -- see {@link isGuessingOpen}. */
+export const MIN_PLAYERS = 4;
+
+/**
+ * Whether the guess screen is worth opening: the deadline has passed, every member's track is in,
+ * and the league is big enough for guessing to mean anything. A round can sit in the guessing
+ * phase with a half-built playlist -- submitting is not closed at the deadline, so a straggler can
+ * still fill their slot -- and "Guess the submitters" is a dead end until they do.
+ */
+export function isGuessingOpen(phase: RoundPhase, submitterCount: number, memberCount: number): boolean {
+  return phase === 'guessing' && submitterCount === memberCount && memberCount >= MIN_PLAYERS;
+}
+
 /** Derived from the two deadlines, never stored. The one phase rule, GET /leagues/mine included. */
 export function roundPhase(round: { submissionDeadline: string; guessingDeadline: string }, now: Date): RoundPhase {
   if (now < new Date(round.submissionDeadline)) return 'submission';
@@ -156,6 +169,7 @@ export function describeRound(
     ...round,
     phase,
     submittedCount: submitters.size,
+    guessingOpen: isGuessingOpen(phase, submitters.size, players.size),
     ...(phase === 'guessing'
       ? {}
       : {

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
-import { PHASE_META, type RoundPhase } from '../lib/rounds';
+import { PHASE_META, SUBMISSIONS_IN_PROGRESS, type RoundPhase, waitingOnSubmissions } from '../lib/rounds';
 import { BodyText, HandText, JCard, Label, PressScale, ReelHoles, Screen, TapeButton } from '../lib/ui';
 import { useTheme } from '../lib/theme';
 
@@ -13,6 +13,8 @@ interface RoundSummary {
   /** Null until the host names the round -- the season is scheduled before its themes are. */
   theme: string | null;
   phase: RoundPhase;
+  /** False while the round is still collecting tracks, even though the clock says guessing. */
+  guessingOpen: boolean;
 }
 
 interface LeagueSummary {
@@ -70,7 +72,11 @@ export default function Home() {
               <HandText>{league.name}</HandText>
               {league.round && (
                 <Label>
-                  {`${league.round.theme ?? `Round ${league.round.number}`}: ${PHASE_META[league.round.phase].label}`}
+                  {`${league.round.theme ?? `Round ${league.round.number}`}: ${
+                    waitingOnSubmissions(league.round)
+                      ? SUBMISSIONS_IN_PROGRESS
+                      : PHASE_META[league.round.phase].label
+                  }`}
                 </Label>
               )}
             </JCard>

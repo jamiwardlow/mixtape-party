@@ -29,22 +29,31 @@ const submissionRound = {
   guessingDeadline: at(7),
   phase: 'submission',
   submittedCount: 3,
+  guessingOpen: false,
   submitters: [ada, bo, cy],
   guessedPlayers: [],
   you: { submitted: true, guessesRemaining: 2 },
 };
 
-/** The same round once guessing opens. `submitters` is *absent*, not empty — that is the signal. */
+/**
+ * The same round once guessing opens: every track is in. `submitters` is *absent*, not empty —
+ * that is the signal.
+ */
 const guessingRound = (() => {
   const { submitters: _omitted, ...rest } = submissionRound;
   return {
     ...rest,
     submissionDeadline: at(-1),
     phase: 'guessing',
+    submittedCount: 4,
+    guessingOpen: true,
     guessedPlayers: [ada],
     you: { submitted: true, guessesRemaining: 2 },
   };
 })();
+
+/** Past the deadline with a track still missing: the clock says guessing, the playlist disagrees. */
+const stillCollectingRound = { ...guessingRound, submittedCount: 3, guessingOpen: false };
 
 const resultsRound = {
   ...submissionRound,
@@ -52,6 +61,7 @@ const resultsRound = {
   guessingDeadline: at(-7),
   phase: 'results',
   submittedCount: 4,
+  guessingOpen: false,
   submitters: roster,
   guessedPlayers: roster,
   you: { submitted: true, guessesRemaining: 0 },
@@ -116,13 +126,22 @@ it('names who has submitted while the submission window is open', async () => {
 // has *not* submitted narrows the pool. Absence is the signal — never the phase.
 it('names nobody as a submitter once guessing opens, but still counts them', async () => {
   // Nobody has guessed yet either, so *any* name on the screen would have to be a submitter's.
-  await show({ ...guessingRound, guessedPlayers: [] });
+  await show({ ...stillCollectingRound, guessedPlayers: [] });
 
   expect(screen.queryByTestId('submitters')).toBeNull();
   for (const player of roster) {
     expect(screen.queryByText(player.displayName)).toBeNull();
   }
   expect(screen.getByTestId('submitted-count').props.children).toBe('3 tracks in');
+});
+
+// A round nobody can guess on yet must not offer the way in — the guess screen would 403 (too few
+// players) or hand over a playlist that is still missing a track.
+it('says submissions are in progress, with no CTA, until the playlist is complete', async () => {
+  await show(stillCollectingRound);
+
+  expect(screen.getByTestId('round-phase').props.children).toBe('Submissions in progress');
+  expect(screen.queryByText('Guess the submitters')).toBeNull();
 });
 
 // Who has answered, never what they answered — safe in every phase.

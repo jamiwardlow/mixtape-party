@@ -6,6 +6,7 @@ import {
   CURRENT_ROUND_CLAUSE,
   describeRound,
   emptyRoundActivity,
+  isGuessingOpen,
   isLeagueMember,
   isSeasonConcluded,
   loadCurrentRound,
@@ -18,6 +19,32 @@ import {
 import { correctGuessCounts, scoreboard } from './results.js';
 
 export type LeaguesDeps = AccountsDeps;
+
+/** The shelf's view of a league's current round: what phase it is in, and whether that phase is live. */
+function summarizeRound(
+  row: {
+    round_id: string | null;
+    round_number: number | null;
+    theme: string | null;
+    submission_deadline: string | null;
+    guessing_deadline: string | null;
+    submitted_count: number;
+    member_count: number;
+  },
+  now: Date,
+) {
+  const phase = roundPhase(
+    { submissionDeadline: row.submission_deadline!, guessingDeadline: row.guessing_deadline! },
+    now,
+  );
+  return {
+    id: row.round_id,
+    number: row.round_number,
+    theme: row.theme,
+    phase,
+    guessingOpen: isGuessingOpen(phase, row.submitted_count, row.member_count),
+  };
+}
 
 // seasonLength is a row count now that the whole season is inserted at creation, so it needs a
 // ceiling -- a weekly round for a year is already more league than anyone plays.
@@ -248,9 +275,16 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       theme: string | null;
       submission_deadline: string | null;
       guessing_deadline: string | null;
+      submitted_count: number;
+      member_count: number;
     }>(
+      // The two counts are only here to answer "is guessing actually open" (isGuessingOpen) -- the
+      // shelf reads the phase out loud, and a round still collecting tracks must not read as one
+      // ready to guess on.
       `SELECT l.id AS league_id, l.name AS league_name,
-              r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline
+              r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline,
+              (SELECT count(*)::int FROM submissions s WHERE s.round_id = r.id) AS submitted_count,
+              (SELECT count(*)::int FROM league_members m WHERE m.league_id = l.id) AS member_count
        FROM leagues l
        JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
        LEFT JOIN LATERAL (
@@ -266,17 +300,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       leagues: result.rows.map((row) => ({
         id: row.league_id,
         name: row.league_name,
-        round: row.round_id
-          ? {
-              id: row.round_id,
-              number: row.round_number,
-              theme: row.theme,
-              phase: roundPhase(
-                { submissionDeadline: row.submission_deadline!, guessingDeadline: row.guessing_deadline! },
-                now,
-              ),
-            }
-          : null,
+        round: row.round_id ? summarizeRound(row, now) : null,
       })),
     });
   });

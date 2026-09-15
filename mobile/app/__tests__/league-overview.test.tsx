@@ -29,6 +29,7 @@ const round1 = {
   guessingDeadline: at(-7),
   phase: 'results',
   submittedCount: 4,
+  guessingOpen: false,
   submitters: roster,
   guessedPlayers: [ada, bo],
   you: { submitted: true, guessesRemaining: 0 },
@@ -44,6 +45,7 @@ const round3 = {
   guessingDeadline: at(21),
   phase: 'submission',
   submittedCount: 0,
+  guessingOpen: false,
   submitters: [],
   guessedPlayers: [],
   you: { submitted: false, guessesRemaining: 0 },
@@ -84,17 +86,31 @@ const submissionRound = {
   guessingDeadline: at(7),
   phase: 'submission',
   submittedCount: 3,
+  guessingOpen: false,
   submitters: [ada, bo, cy],
   guessedPlayers: [],
   you: { submitted: true, guessesRemaining: 0 },
   isCurrent: true,
 };
 
-/** The same round once guessing opens. `submitters` is *absent*, not empty — that is the signal. */
+/**
+ * The same round once guessing opens: every track is in. `submitters` is *absent*, not empty —
+ * that is the signal.
+ */
 const guessingRound = (() => {
   const { submitters: _omitted, ...rest } = submissionRound;
-  return { ...rest, submissionDeadline: at(-1), phase: 'guessing', guessedPlayers: [ada] };
+  return {
+    ...rest,
+    submissionDeadline: at(-1),
+    phase: 'guessing',
+    submittedCount: 4,
+    guessingOpen: true,
+    guessedPlayers: [ada],
+  };
 })();
+
+/** Past the deadline with a track still missing: the clock says guessing, the playlist disagrees. */
+const stillCollectingRound = { ...guessingRound, submittedCount: 3, guessingOpen: false };
 
 const inRound = (round: unknown, overrides: Record<string, unknown> = {}) =>
   body({ rounds: [round1, round, round3], ...overrides });
@@ -150,7 +166,8 @@ it('names who has submitted while the submission window is open', async () => {
 // The regression that matters: the server omits `submitters` during guessing because naming who
 // has *not* submitted narrows the pool. Absence is the signal — never the phase.
 it('names nobody as a submitter once guessing opens, but still counts them', async () => {
-  await show(inRound(guessingRound));
+  // The still-collecting round, so there is a straggler to leak: a full playlist has nothing to hide.
+  await show(inRound(stillCollectingRound));
 
   // Named player by named player: nobody is marked either way. Ada and Bo are in, Di is not, and
   // the screen must not be able to say which is which.
@@ -232,6 +249,15 @@ it('routes the current round’s CTA into the screen its phase calls for', async
     pathname: '/round/[roundId]/guess',
     params: { roundId: 'r2' },
   });
+});
+
+// A round nobody can guess on yet must not offer the way in — the guess screen would 403 (too
+// few players) or hand over a playlist that is still missing a track.
+it('replaces the guess CTA with a status while the round is still collecting tracks', async () => {
+  await show(inRound(stillCollectingRound));
+
+  expect(screen.getByTestId('current-round-cta-note').props.children).toBe('Submissions in progress');
+  expect(screen.queryByText('Guess the submitters')).toBeNull();
 });
 
 it('links a finished round to its results and gives a future round no CTA', async () => {
