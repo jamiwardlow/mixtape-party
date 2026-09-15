@@ -112,6 +112,46 @@ describe('submit', () => {
   });
 });
 
+// A name at sign-up is the cheapest moment to get one, but it is optional -- this must not become
+// a new way for creating an account to fail (#81).
+describe('display name', () => {
+  const NAME_FIELD = 'Display name (optional)';
+
+  it('sends a name given at sign-up', async () => {
+    await render(<SignIn />);
+    await fillCredentials();
+    await fireEvent.changeText(screen.getByPlaceholderText(NAME_FIELD), '  Sam  ');
+
+    await fireEvent.press(screen.getByText('Create account'));
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/accounts'),
+      expect.objectContaining({ body: JSON.stringify({ email: 'jami@example.com', password: 'hunter2', displayName: 'Sam' }) }),
+    );
+  });
+
+  it('signs up without one', async () => {
+    await render(<SignIn />);
+    await fillCredentials();
+
+    await fireEvent.press(screen.getByText('Create account'));
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/accounts'),
+      expect.objectContaining({ body: JSON.stringify({ email: 'jami@example.com', password: 'hunter2', displayName: null }) }),
+    );
+    expect(mockSignIn).toHaveBeenCalledWith('tok-1');
+  });
+
+  // /sessions has no use for it, and signing in is not a rename.
+  it('offers no name field to returning users', async () => {
+    await render(<SignIn />);
+    await switchToSignIn();
+
+    expect(screen.queryByPlaceholderText(NAME_FIELD)).toBeNull();
+  });
+});
+
 describe('stale state', () => {
   // The note interpolates the live field, so leaving it up after an edit names an address the
   // link was never sent to.

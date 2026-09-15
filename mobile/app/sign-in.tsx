@@ -15,6 +15,7 @@ export default function SignIn() {
   const { error: googleError } = useLocalSearchParams<{ error?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [mode, setMode] = useState<'sign-up' | 'sign-in'>('sign-up');
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
@@ -43,8 +44,12 @@ export default function SignIn() {
     }
     setBusy(true);
     try {
-      const path = mode === 'sign-up' ? '/accounts' : '/sessions';
-      const res = await fetchApi(path, { method: 'POST', body: { email, password } });
+      // Optional on purpose: an empty field means no name, exactly as before this existed. Sending
+      // it only on sign-up -- /sessions has no use for it, and signing in doesn't rename you.
+      const res =
+        mode === 'sign-up'
+          ? await fetchApi('/accounts', { method: 'POST', body: { email, password, displayName: displayName.trim() || null } })
+          : await fetchApi('/sessions', { method: 'POST', body: { email, password } });
       if (!res.ok) {
         setError((await res.json().catch(() => null))?.error ?? 'Something went wrong');
         return;
@@ -98,6 +103,17 @@ export default function SignIn() {
         value={password}
         onChangeText={setPassword}
       />
+      {mode === 'sign-up' && (
+        <TextInput
+          style={styles.input}
+          placeholder="Display name (optional)"
+          // The API caps a name at 40 and PATCH rejects anything longer, so stop at 40 here rather
+          // than accept a name at sign-up that settings would later refuse to save.
+          maxLength={40}
+          value={displayName}
+          onChangeText={setDisplayName}
+        />
+      )}
       {message && <Text style={styles.error}>{message}</Text>}
       <Button title={mode === 'sign-up' ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
       {mode === 'sign-in' && (

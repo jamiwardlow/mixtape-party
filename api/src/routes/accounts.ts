@@ -35,6 +35,12 @@ export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret' | 'pool'>):
   };
 }
 
+// One rule, both doors. PATCH rejects a name outside it; sign-up silently trims and truncates to
+// it instead, because #81 must not add a new way for creating an account to fail over a field
+// nobody is required to fill in -- and a name accepted at sign-up that PATCH then refuses would
+// leave the owner unable to edit their own name.
+const MAX_DISPLAY_NAME = 40;
+
 export function createAccountsRouter(deps: AccountsDeps): Router {
   const router = Router();
 
@@ -46,10 +52,11 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
     }
 
     const passwordHash = hashPassword(password);
+    const name = typeof displayName === 'string' ? displayName.trim().slice(0, MAX_DISPLAY_NAME) || null : null;
     try {
       const result = await deps.pool.query<{ id: string }>(
         'INSERT INTO accounts (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id',
-        [email.toLowerCase(), passwordHash, displayName ?? null],
+        [email.toLowerCase(), passwordHash, name],
       );
       const accountId = result.rows[0].id;
       const token = signSessionToken(accountId, deps.sessionSecret);
@@ -90,33 +97,53 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
   });
 
   router.get('/accounts/me', requireAuth(deps), async (req, res) => {
-    const accountId = (req as unknown as AuthedRequest).accountId;
-    const accountResult = await deps.pool.query<{ id: string; email: string; display_name: string | null }>(
-      'SELECT id, email, display_name FROM accounts WHERE id = $1',
-      [accountId],
-    );
-    const account = accountResult.rows[0];
-    if (!account) {
-      res.status(404).json({ error: 'account not found' });
+    await sendProfile(deps.pool, (req as unknown as AuthedRequest).accountId, res);
+  });
+
+  // The only way an account that signed up without a name -- password and magic-link accounts, i.e.
+  // nearly all of them -- ever gets one. Responds with the /accounts/me body so the client reuses
+  // one parser. No uniqueness check: two friends in a league can both be "Sam" (#81).
+  router.patch('/accounts/me', requireAuth(deps), async (req, res) => {
+    const { displayName } = (req.body ?? {}) as Record<string, unknown>;
+    // Trimmed before the length check *and* before storing -- " Sam " kept verbatim makes a roster
+    // of otherwise aligned names read ragged.
+    const name = typeof displayName === 'string' ? displayName.trim() : '';
+    if (name.length === 0 || name.length > MAX_DISPLAY_NAME) {
+      res.status(400).json({ error: `displayName must be 1-${MAX_DISPLAY_NAME} characters` });
       return;
     }
-    const linksResult = await deps.pool.query<{ service: string; service_user_id: string; created_at: string }>(
-      'SELECT service, service_user_id, created_at FROM service_links WHERE account_id = $1',
-      [accountId],
-    );
-    res.json({
-      id: account.id,
-      email: account.email,
-      displayName: account.display_name,
-      services: linksResult.rows.map((row) => ({
-        service: row.service,
-        serviceUserId: row.service_user_id,
-        linkedAt: row.created_at,
-      })),
-    });
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    await deps.pool.query('UPDATE accounts SET display_name = $2 WHERE id = $1', [accountId, name]);
+    await sendProfile(deps.pool, accountId, res);
   });
 
   return router;
+}
+
+async function sendProfile(pool: Pool, accountId: string, res: Response): Promise<void> {
+  const accountResult = await pool.query<{ id: string; email: string; display_name: string | null }>(
+    'SELECT id, email, display_name FROM accounts WHERE id = $1',
+    [accountId],
+  );
+  const account = accountResult.rows[0];
+  if (!account) {
+    res.status(404).json({ error: 'account not found' });
+    return;
+  }
+  const linksResult = await pool.query<{ service: string; service_user_id: string; created_at: string }>(
+    'SELECT service, service_user_id, created_at FROM service_links WHERE account_id = $1',
+    [accountId],
+  );
+  res.json({
+    id: account.id,
+    email: account.email,
+    displayName: account.display_name,
+    services: linksResult.rows.map((row) => ({
+      service: row.service,
+      serviceUserId: row.service_user_id,
+      linkedAt: row.created_at,
+    })),
+  });
 }
 
 export function isUniqueViolation(err: unknown): boolean {

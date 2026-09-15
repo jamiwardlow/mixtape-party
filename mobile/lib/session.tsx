@@ -9,6 +9,9 @@ const INVITE_KEY = 'pending_invite_code';
 export interface Profile {
   id: string;
   email: string;
+  /** Optional and nullable for good: sign-up doesn't require one and older accounts have none, so
+   *  every screen that shows a player still needs its `?? 'A player'` fallback (#81). */
+  displayName?: string | null;
   /** Linked music services, as /accounts/me returns them. Optional because nothing validates the
    *  response shape and linking is optional (#67) — only Apple Music is linkable today. */
   services?: { service: ServiceName; serviceUserId: string; linkedAt: string }[];
