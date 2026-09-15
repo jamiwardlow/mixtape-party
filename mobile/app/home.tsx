@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
-import { BodyText, HandText, JCard, Label, ReelHoles, Screen, TapeButton } from '../lib/ui';
+import { PHASE_META, type RoundPhase } from '../lib/rounds';
+import { BodyText, HandText, JCard, Label, PressScale, ReelHoles, Screen, TapeButton } from '../lib/ui';
 import { useTheme } from '../lib/theme';
 
 interface RoundSummary {
@@ -11,23 +12,13 @@ interface RoundSummary {
   number: number;
   /** Null until the host names the round -- the season is scheduled before its themes are. */
   theme: string | null;
-  phase: 'submission' | 'guessing' | 'results';
+  phase: RoundPhase;
 }
 
 interface LeagueSummary {
   id: string;
   name: string;
   round: RoundSummary | null;
-}
-
-const PHASE_META: Record<RoundSummary['phase'], { label: string; segment: 'submit' | 'guess' | 'results' }> = {
-  submission: { label: 'Submit your track', segment: 'submit' },
-  guessing: { label: 'Guess the submitters', segment: 'guess' },
-  results: { label: 'See results', segment: 'results' },
-};
-
-function roundHref(round: RoundSummary) {
-  return { pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`, params: { roundId: round.id } } as const;
 }
 
 export default function Home() {
@@ -66,26 +57,24 @@ export default function Home() {
       {joinMessage && <BodyText>{joinMessage}</BodyText>}
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
         {leagues.length === 0 && <Label>No leagues yet.</Label>}
+        {/* One tap, into the season page — it owns the phase CTA and links on to the schedule
+            editor. The phase stays here as text so the shelf still reads at a glance. */}
         {leagues.map((league) => (
-          <JCard key={league.id}>
-            <ReelHoles color={t.reel} />
-            <HandText>{league.name}</HandText>
-            {league.round && (
-              <TapeButton
-                title={`${league.round.theme ?? `Round ${league.round.number}`}: ${PHASE_META[league.round.phase].label}`}
-                onPress={() => router.push(roundHref(league.round!))}
-              />
-            )}
-            {/* The whole season exists from creation (#74), so there is always a schedule to show
-                — which is also the only thing left to offer a league between rounds. */}
-            <TapeButton
-              title="Season schedule"
-              variant="secondary"
-              onPress={() =>
-                router.push({ pathname: '/league/[leagueId]/schedule', params: { leagueId: league.id } })
-              }
-            />
-          </JCard>
+          <PressScale
+            key={league.id}
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/league/[leagueId]', params: { leagueId: league.id } })}
+          >
+            <JCard>
+              <ReelHoles color={t.reel} />
+              <HandText>{league.name}</HandText>
+              {league.round && (
+                <Label>
+                  {`${league.round.theme ?? `Round ${league.round.number}`}: ${PHASE_META[league.round.phase].label}`}
+                </Label>
+              )}
+            </JCard>
+          </PressScale>
         ))}
       </ScrollView>
       <TapeButton title="Create a league" onPress={() => router.push('/create-league')} variant="secondary" />
