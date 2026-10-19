@@ -5,7 +5,6 @@ import { AppleMusicAdapter } from './adapters/appleMusicAdapter.js';
 import { YouTubeMusicAdapter } from './adapters/youtubeMusicAdapter.js';
 import { BandcampAdapter } from './adapters/bandcampAdapter.js';
 import { ExpoWebPushChannel, NoopEmailChannel, ResendEmailChannel } from './notifications/channels.js';
-import { runNotificationSweep } from './notifications/sweep.js';
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) throw new Error('SESSION_SECRET is not set');
@@ -58,12 +57,7 @@ const app = createApp({
   bandcampAdapter,
   pushChannel,
   emailChannel,
+  sweepSecret: process.env.SWEEP_SECRET,
 });
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(`api listening on :${port}`));
-
-// ponytail: single-process sweep assumed, no advisory lock against a concurrent duplicate tick.
-// Add a per-round/league advisory lock (or a dedicated worker) if this API ever runs more than one instance.
-setInterval(() => {
-  runNotificationSweep({ pool, pushChannel, emailChannel }).catch((err) => console.error('notification sweep failed', err));
-}, 60_000);

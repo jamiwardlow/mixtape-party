@@ -28,7 +28,8 @@ export function buildApp(
     youtubeMusicCookie = 'fake-youtube-music-cookie',
     googleConfigured = true,
     appBaseUrl = 'https://app.test',
-  }: { youtubeMusicCookie?: string; googleConfigured?: boolean; appBaseUrl?: string } = {},
+    sweepSecret = 'test-sweep-secret',
+  }: { youtubeMusicCookie?: string; googleConfigured?: boolean; appBaseUrl?: string; sweepSecret?: string | null } = {},
 ) {
   const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
@@ -50,6 +51,7 @@ export function buildApp(
     bandcampAdapter,
     pushChannel,
     emailChannel,
+    sweepSecret: sweepSecret ?? undefined,
   });
   return { app, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange };
 }

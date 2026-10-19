@@ -16,6 +16,7 @@ import { createLeaguesRouter } from './routes/leagues.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createResultsRouter } from './routes/results.js';
 import { createSubmissionsRouter } from './routes/submissions.js';
+import { createSweepRouter } from './routes/sweep.js';
 import type { EmailChannel, PushChannel } from './notifications/types.js';
 
 export interface AppDeps {
@@ -36,6 +37,8 @@ export interface AppDeps {
   bandcampAdapter: EmbedOnlyMusicServiceAdapter;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
+  /** Guards POST /internal/sweep; see routes/sweep.ts. */
+  sweepSecret?: string;
 }
 
 export function createApp(deps: AppDeps): Express {
@@ -63,6 +66,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(createResultsRouter(deps));
   app.use(createExportRouter(deps));
   app.use(createNotificationsRouter(deps));
+  app.use(createSweepRouter(deps));
   // Must be last and 4-arity for Express to treat it as error middleware. Express 5 routes
   // rejected handler promises here, so a rejection is a 500 rather than a dead process.
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

@@ -36,6 +36,9 @@ services:
       # Resend API key and verified from-address; without them the API sends no mail at all.
       - key: RESEND_API_KEY
         sync: false
+      # Guards POST /internal/sweep (x-sweep-secret header). Unset = endpoint answers 503.
+      - key: SWEEP_SECRET
+        sync: false
       - key: EMAIL_FROM
         sync: false
       # The mixtape-party-web URL — emailed reset/sign-in links and the Google sign-in handoff
