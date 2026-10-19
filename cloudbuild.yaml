@@ -1,0 +1,49 @@
+# Run by a Cloud Build trigger on pushes to main (#94). A failed step stops the build,
+# so a bad migration never reaches the deploy steps.
+substitutions:
+  _REGION: us-west1
+  _REPO: us-west1-docker.pkg.dev/mixtape-party/mixtape-party
+  _API_URL: https://mixtape-party-api-qnt3dj2mpq-uw.a.run.app
+
+steps:
+  # Runs here, not in the runtime image: `migrate` uses tsx, a devDependency.
+  - id: migrate
+    name: node:22-slim
+    dir: api
+    entrypoint: bash
+    args: ['-c', 'npm ci --ignore-scripts && npm run migrate']
+    secretEnv: ['DATABASE_URL']
+
+  - id: build-api
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '-t', '${_REPO}/api:$COMMIT_SHA', 'api']
+    waitFor: ['migrate']
+  - id: push-api
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '${_REPO}/api:$COMMIT_SHA']
+  # Secrets are already bound to the service (#93); deploy updates only the image.
+  - id: deploy-api
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args: ['run', 'deploy', 'mixtape-party-api', '--image', '${_REPO}/api:$COMMIT_SHA', '--region', '${_REGION}']
+
+  # EXPO_PUBLIC_API_URL is baked into the web bundle at build time.
+  - id: build-web
+    name: gcr.io/cloud-builders/docker
+    args: ['build', '--build-arg', 'EXPO_PUBLIC_API_URL=${_API_URL}', '-t', '${_REPO}/web:$COMMIT_SHA', 'mobile']
+    waitFor: ['migrate']
+  - id: push-web
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '${_REPO}/web:$COMMIT_SHA']
+  - id: deploy-web
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args: ['run', 'deploy', 'mixtape-party-web', '--image', '${_REPO}/web:$COMMIT_SHA', '--region', '${_REGION}']
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/mixtape-party/secrets/DATABASE_URL/versions/latest
+      env: DATABASE_URL
+
+options:
+  logging: CLOUD_LOGGING_ONLY
