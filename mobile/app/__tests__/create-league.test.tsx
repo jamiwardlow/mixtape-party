@@ -118,6 +118,16 @@ describe('season length', () => {
 // #74 derives the whole season from round 1's two deadlines and commits it without showing the
 // host a thing. These assert the host can see what they are about to agree to.
 describe('season schedule preview', () => {
+  // Round 1's first deadline is 9 days after this, which is the guessing period every later round gets.
+  const NOW = '2026-09-22T18:00:00.000Z';
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date(NOW),
+      doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'performance'],
+    });
+  });
+  afterEach(() => jest.useRealTimers());
+
   const dateAt = (testID: string) => screen.getByTestId(testID).props.children as string;
 
   async function previewFor(seasonLength: string) {
@@ -127,23 +137,31 @@ describe('season schedule preview', () => {
     await pick('guessing-deadline', '2026-10-08T18:00:00.000Z');
   }
 
-  it('shows one row per round after the first, back to back', async () => {
+  it('gives each later round a submission period of round 1\u2019s guessing length, then a guessing period of now \u2192 first deadline', async () => {
     await previewFor('4');
 
     expect(screen.queryByTestId('preview-round-5-submission')).toBeNull();
-    for (const n of [2, 3]) {
-      expect(dateAt(`preview-round-${n + 1}-submission`)).toBe(dateAt(`preview-round-${n}-guessing`));
-    }
+    // Round 2: submit Oct 8 -> Oct 15 (7d), guess -> Oct 24 (9d). Round 3: submit -> Oct 31, guess -> Nov 9.
+    expect(dateAt('preview-round-2-submission')).toBe(formatDeadline(new Date('2026-10-15T18:00:00.000Z')));
+    expect(dateAt('preview-round-2-guessing')).toBe(formatDeadline(new Date('2026-10-24T18:00:00.000Z')));
+    expect(dateAt('preview-round-3-submission')).toBe(formatDeadline(new Date('2026-10-31T18:00:00.000Z')));
+    expect(dateAt('preview-round-3-guessing')).toBe(formatDeadline(new Date('2026-11-09T18:00:00.000Z')));
+  });
+
+  it('posts the moment the form opened, so the saved schedule matches the preview', async () => {
+    await previewFor('4');
+    await create();
+
+    expect(lastPost().now).toBe(NOW);
   });
 
   // Round 1 is the form above the preview; repeating it under "the rest of the season" reads as
   // an extra round the host did not ask for.
-  it('starts the preview at round 2, one interval after the window the host picked ends', async () => {
+  it('starts the preview at round 2', async () => {
     await previewFor('4');
 
     expect(screen.queryByTestId('preview-round-1-submission')).toBeNull();
-    expect(dateAt('preview-round-2-submission')).toBe(formatDeadline(new Date('2026-10-15T18:00:00.000Z')));
-    expect(dateAt('preview-round-2-guessing')).toBe(formatDeadline(new Date('2026-10-22T18:00:00.000Z')));
+    expect(screen.getByTestId('preview-round-2-submission')).toBeTruthy();
   });
 
   it('re-renders with the right row count when the season length changes', async () => {

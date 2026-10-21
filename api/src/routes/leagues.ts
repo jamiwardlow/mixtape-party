@@ -108,6 +108,9 @@ function serializeRound(round: RoundRow) {
  * PATCH -- which reaches it with the stored value standing in for whichever deadline the patch
  * left out. Returns the message to 400 with, or null when the pair is fine.
  */
+// Generous: the client sends the moment it opened the form, which may be a while ago.
+const MAX_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
 function checkDeadlineOrder(submissionAt: Date, guessingAt: Date): string | null {
   if (Number.isNaN(submissionAt.getTime()) || Number.isNaN(guessingAt.getTime())) {
     return 'submissionDeadline and guessingDeadline must be valid dates';
@@ -161,6 +164,25 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     }
     const { theme, submissionAt, guessingAt } = parsed;
 
+    // The client's "now" is what its schedule preview was computed from; honouring it keeps the
+    // saved dates identical to the preview. A time far from ours is a bug or a lie, so refuse it.
+    const { now: nowInput } = req.body ?? {};
+    const createdAt = nowInput === undefined ? new Date() : new Date(nowInput as string);
+    if (typeof nowInput !== 'undefined' && typeof nowInput !== 'string') {
+      res.status(400).json({ error: 'now must be an ISO date string' });
+      return;
+    }
+    if (Number.isNaN(createdAt.getTime()) || Math.abs(createdAt.getTime() - Date.now()) > MAX_CLOCK_SKEW_MS) {
+      res.status(400).json({ error: 'now must be within a day of the server clock' });
+      return;
+    }
+    // Guessing period for rounds 2..N: creation -> round 1's submission deadline. A deadline that
+    // is already past leaves no interval to copy, so fall back to round 1's guessing length.
+    const guessLengthMs = Math.max(
+      submissionAt.getTime() - createdAt.getTime(),
+      guessingAt.getTime() - submissionAt.getTime(),
+    );
+
     // Rounds 2..N can be named at creation too: themes[n] is round n's theme. Anything
     // missing or blank stays null, for the schedule screen's PATCH to name later.
     const { themes } = req.body ?? {};
@@ -184,27 +206,37 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const leagueId = league.rows[0].id;
       const inviteCode = league.rows[0].invite_code;
 
-      // The whole season is scheduled here, from round 1's two deadlines (#74): with W the gap
-      // between them, round 1 is as entered and round N >= 2 runs from G1 + (N-1)W to G1 + NW, so
-      // round 2's submissions are due one interval after round 1's guessing closes. Round 1's
-      // theme is its own field; the rest come from `themes`, if sent.
+      // The whole season is scheduled here, from round 1's two deadlines, and no round's phases
+      // overlap. Round 1 is as entered. With W = G1 - S1 (round 1's guessing length, reused as
+      // every later submission period) and I = S1 - creation time (reused as every later guessing
+      // period), round N >= 2 is submissions G(N-1) -> S(N) = G(N-1) + W, then guessing
+      // S(N) -> G(N) = S(N) + I. Round 1's theme is its own field; the rest come from `themes`.
       //
-      // submission_opens_at is the previous round's *submission* deadline: round N's submissions
-      // are collected while round N-1 is being guessed.
+      // submission_opens_at is the previous round's guessing deadline: submissions for round N
+      // open as round N-1's guessing closes.
       const rounds = await client.query<RoundRow>(
         `INSERT INTO rounds (league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline)
          SELECT $1, n,
                 CASE WHEN n = 1 THEN $2 ELSE ($6::text[])[n] END,
-                CASE WHEN n = 1 THEN now()
-                     WHEN n = 2 THEN $3::timestamptz
-                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 2) END,
+                CASE WHEN n = 1 THEN $7::timestamptz
+                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 2) END,
                 CASE WHEN n = 1 THEN $3::timestamptz
-                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 1) END,
+                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 1)
+                          - $8::bigint * interval '1 millisecond' END,
                 CASE WHEN n = 1 THEN $4::timestamptz
-                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * n END
+                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 1) END
          FROM generate_series(1, $5::int) AS n
          RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
-        [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString(), seasonLength, seasonThemes],
+        [
+          leagueId,
+          theme,
+          submissionAt.toISOString(),
+          guessingAt.toISOString(),
+          seasonLength,
+          seasonThemes,
+          createdAt.toISOString(),
+          guessLengthMs,
+        ],
       );
       const firstRound = rounds.rows.find((row) => row.round_number === 1)!;
 
@@ -639,13 +671,10 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     // half-applied slide is a non-monotonic schedule, which is exactly what CURRENT_ROUND_CLAUSE
     // cannot survive.
     //
-    // Round N+1 is the one round that does not slide whole. It collects submissions while round N
-    // is being guessed, so its submission_opens_at *is* round N's submission deadline (see POST
-    // /leagues above) -- which the slide did not move -- and its submission window therefore
-    // grows by the same delta round N's guessing phase does. The notification sweep reads the
-    // reminder as a fraction of that window and misfires if the two drift apart. Rounds after
-    // N+1 slide all three columns, so each still opens on its own predecessor's submission
-    // deadline. The CTE matches no row when this is the last round of the season.
+    // Every later round slides whole, submission_opens_at included: round N+1 opens as round N's
+    // guessing closes (see POST /leagues above), so it moves with the boundary and keeps its
+    // window length. Moving only round N's submission deadline touches no other round. The CTE
+    // matches no row when this is the last round of the season or nothing slid.
     //
     // Every moved window also clears the reminder the sweep already sent against it, which is
     // one-shot per round (`... IS NULL` in sweep.ts) and so would never fire again for the new
@@ -667,13 +696,12 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
                     THEN r.guessing_reminder_sent_at END
          FROM (
            SELECT id,
-                  CASE WHEN round_number = $6 THEN $3::timestamptz
-                       ELSE submission_opens_at + $7::interval END AS submission_opens_at,
+                  submission_opens_at + $7::interval AS submission_opens_at,
                   submission_deadline + $7::interval AS submission_deadline,
                   guessing_deadline + $7::interval AS guessing_deadline
            FROM rounds
            WHERE league_id = $5
-             AND (round_number = $6 OR (round_number > $6 AND $7::interval <> interval '0'))
+             AND round_number >= $6 AND $7::interval <> interval '0'
          ) n
          WHERE r.id = n.id
          RETURNING r.id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline

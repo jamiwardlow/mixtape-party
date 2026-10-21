@@ -131,37 +131,46 @@ describe('POST /leagues', () => {
     expect((await testDb.pool.query('SELECT 1 FROM rounds')).rowCount).toBe(0);
   });
 
-  it('schedules the whole season back-to-back from round 1', async () => {
+  it('schedules the whole season without overlap, from round 1 and the moment of creation', async () => {
     const { app } = buildApp();
     const host = await signUp(app, 'host-season@example.com');
+    const now = new Date();
 
     const created = await request(app)
       .post('/leagues')
       .set('Authorization', `Bearer ${host.token}`)
-      .send({ name: 'Office League', seasonLength: 4, ...round1 });
+      .send({ name: 'Office League', seasonLength: 4, ...round1, now: now.toISOString() });
+    expect(created.status).toBe(201);
 
     const rounds = await scheduleOf(created.body.leagueId);
     expect(rounds.map((r) => r.round_number)).toEqual([1, 2, 3, 4]);
 
-    const window = Date.parse(round1.guessingDeadline) - Date.parse(round1.submissionDeadline);
-    for (const round of rounds) {
-      expect(round.guessing_deadline.getTime() - round.submission_deadline.getTime()).toBe(window);
-    }
-    // Round 1 takes submissions from the moment the league exists; every round after it takes
-    // them while the previous round is being guessed, so they all get the same window.
-    expect(rounds[0].submission_opens_at.getTime()).toBeLessThanOrEqual(Date.now());
-    // Round 2 opens when round 1's submissions close but is due a full interval after round 1's
-    // guessing does, so its window is two intervals long.
-    expect(rounds[1].submission_deadline.getTime() - rounds[1].submission_opens_at.getTime()).toBe(2 * window);
-    for (const round of rounds.slice(2)) {
-      expect(round.submission_deadline.getTime() - round.submission_opens_at.getTime()).toBe(window);
-    }
-
+    const submitMs = Date.parse(round1.guessingDeadline) - Date.parse(round1.submissionDeadline);
+    const guessMs = Date.parse(round1.submissionDeadline) - now.getTime();
+    expect(rounds[0].submission_opens_at).toEqual(now);
     expect(rounds[0].submission_deadline).toEqual(new Date(round1.submissionDeadline));
     expect(rounds[0].guessing_deadline).toEqual(new Date(round1.guessingDeadline));
-    expect(rounds[1].submission_deadline.getTime()).toBe(rounds[0].guessing_deadline.getTime() + window);
-    expect(rounds[2].submission_deadline).toEqual(rounds[1].guessing_deadline);
-    expect(rounds[3].submission_deadline).toEqual(rounds[2].guessing_deadline);
+    // Every round after the first: submissions open as the previous round's guessing closes, run
+    // for round 1's guessing length, then guessing runs for creation -> round 1's first deadline.
+    for (const [i, round] of rounds.slice(1).entries()) {
+      const previous = rounds[i];
+      expect(round.submission_opens_at).toEqual(previous.guessing_deadline);
+      expect(round.submission_deadline.getTime() - round.submission_opens_at.getTime()).toBe(submitMs);
+      expect(round.guessing_deadline.getTime() - round.submission_deadline.getTime()).toBe(guessMs);
+    }
+  });
+
+  it('rejects a now that is far from the server clock', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'host-skew@example.com');
+
+    const res = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Skewed League', seasonLength: 2, ...round1, now: '2001-01-01T00:00:00.000Z' });
+
+    expect(res.status).toBe(400);
+    expect((await testDb.pool.query('SELECT 1 FROM rounds')).rowCount).toBe(0);
   });
 
   it('leaves rounds 2..N unnamed, keeping the theme the host submitted on round 1', async () => {
@@ -532,9 +541,8 @@ describe('PATCH /rounds/:roundId', () => {
   // the rest of the season instead of being refused for crossing round N+1. A season that can
   // only ever be shrunk is not a schedule that flexes.
   //
-  // Round N+1 is the one round that does not slide whole: its submission window opens at round
-  // N's *submission* deadline, which the host did not move, so it grows by the same delta round
-  // N's guessing phase does. Round N+1 collects submissions while round N is being guessed.
+  // Every later round slides whole, window lengths intact: round N+1's submissions open as round
+  // N's guessing closes, so they move with it.
   it.each([
     ['later', 7 * DAY],
     ['earlier', -3 * DAY],
@@ -565,16 +573,12 @@ describe('PATCH /rounds/:roundId', () => {
         rounds[index].guessing_deadline.getTime() - rounds[index].submission_deadline.getTime(),
       );
     }
-    // Round 3 keeps collecting from round 2's submission deadline, so its submission window grows
-    // by the delta; round 4 slid whole and keeps its length.
-    expect(after[2].submission_opens_at).toEqual(rounds[2].submission_opens_at);
-    expect(after[3].submission_opens_at).toEqual(new Date(rounds[3].submission_opens_at.getTime() + delta));
-    expect(after[3].submission_deadline.getTime() - after[3].submission_opens_at.getTime()).toBe(
-      rounds[3].submission_deadline.getTime() - rounds[3].submission_opens_at.getTime(),
-    );
-    // Back-to-back all the way down: the schedule is still flush after the slide.
-    expect(after[2].submission_deadline).toEqual(after[1].guessing_deadline);
-    expect(after[3].submission_deadline).toEqual(after[2].guessing_deadline);
+    for (const index of [2, 3]) {
+      expect(after[index].submission_opens_at).toEqual(new Date(rounds[index].submission_opens_at.getTime() + delta));
+    }
+    // Still no overlap after the slide: each round opens as the previous one's guessing closes.
+    expect(after[2].submission_opens_at).toEqual(after[1].guessing_deadline);
+    expect(after[3].submission_opens_at).toEqual(after[2].guessing_deadline);
   });
 
   // A one-round patch that silently moves the season's end date is a surprise, and the schedule
@@ -790,11 +794,10 @@ describe('PATCH /rounds/:roundId', () => {
       .send({ submissionDeadline: new Date(rounds[1].submission_deadline.getTime() + DAY).toISOString() });
 
     const after = await scheduleOf(leagueId);
-    // Round 2's submission window moved, and round 3's opened with it.
+    // Round 2's submission window moved; nothing touched its guessing window, or rounds 3 and 4.
     expect(after[1].submission_reminder_sent_at).toBeNull();
-    expect(after[2].submission_reminder_sent_at).toBeNull();
-    // Nothing touched round 2's guessing window, or round 4 at all.
     expect(after[1].guessing_reminder_sent_at).not.toBeNull();
+    expect(after[2].submission_reminder_sent_at).not.toBeNull();
     expect(after[3].submission_reminder_sent_at).not.toBeNull();
   });
 
@@ -827,37 +830,35 @@ describe('PATCH /rounds/:roundId', () => {
     expect((await scheduleOf(leagueId))[0].theme).toBe(round1.theme);
   });
 
-  // Round N+1 takes submissions while round N is being guessed, so its window opens at round N's
-  // submission deadline. The notification sweep reads the reminder as a fraction of that window.
-  it('moves the next round\'s submission window with the patched round', async () => {
+  // Round N+1's submissions open as round N's guessing closes, so moving only round N's
+  // submission deadline must leave every other round exactly where it is.
+  it('leaves the next round alone when only the submission deadline moves', async () => {
     const { app } = buildApp();
     const { host, leagueId, rounds } = await createSeason(app, 'patch-opens-at@example.com');
-    const submissionDeadline = new Date(rounds[1].submission_deadline.getTime() + DAY).toISOString();
 
     await request(app)
       .patch(`/rounds/${rounds[1].id}`)
       .set('Authorization', `Bearer ${host.token}`)
-      .send({ submissionDeadline });
+      .send({ submissionDeadline: new Date(rounds[1].submission_deadline.getTime() + DAY).toISOString() });
 
     const after = await scheduleOf(leagueId);
-    expect(after[2].submission_opens_at).toEqual(new Date(submissionDeadline));
-    // The last round has no successor to shift, and shifting must not run off the end.
-    expect(after[3].submission_opens_at).toEqual(rounds[3].submission_opens_at);
+    expect(after[2]).toEqual(rounds[2]);
+    expect(after[3]).toEqual(rounds[3]);
   });
 
-  // The other half of that invariant: a successor's window opens at the patched round's
-  // submission deadline, so moving only the guessing deadline must leave it where it is.
-  it('leaves the next round\'s submission window alone when only guessing moves', async () => {
+  it('moves the next round\'s submission window with the patched round\'s guessing deadline', async () => {
     const { app } = buildApp();
     const { host, leagueId, rounds } = await createSeason(app, 'patch-opens-at-held@example.com');
+    const guessingDeadline = new Date(rounds[1].guessing_deadline.getTime() - DAY);
 
     await request(app)
       .patch(`/rounds/${rounds[1].id}`)
       .set('Authorization', `Bearer ${host.token}`)
-      .send({ guessingDeadline: new Date(rounds[1].guessing_deadline.getTime() - DAY).toISOString() });
+      .send({ guessingDeadline: guessingDeadline.toISOString() });
 
-    expect((await scheduleOf(leagueId))[2].submission_opens_at).toEqual(rounds[2].submission_opens_at);
+    expect((await scheduleOf(leagueId))[2].submission_opens_at).toEqual(guessingDeadline);
   });
+
 
   it('accepts a patch to the final round of a season', async () => {
     const { app } = buildApp();
@@ -913,8 +914,10 @@ describe('GET /leagues/:leagueId/rounds', () => {
       null,
       null,
     ]);
-    // From round 3 on, each round's submission deadline is the previous round's guessing deadline.
-    expect(res.body.rounds[2].submissionDeadline).toBe(res.body.rounds[1].guessingDeadline);
+    // Phases don't overlap: round 2's guessing closes before round 3's submissions do.
+    expect(Date.parse(res.body.rounds[1].guessingDeadline)).toBeLessThan(
+      Date.parse(res.body.rounds[2].submissionDeadline),
+    );
   });
 
   it('tells a member they are not the host', async () => {

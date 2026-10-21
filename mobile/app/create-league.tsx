@@ -35,22 +35,28 @@ function defaultSubmissionDeadline(): Date {
 }
 
 /**
- * The season the API will derive from round 1's two deadlines (#74), computed here so the host
- * sees it before they agree to it. With W the gap between them, round N >= 2 runs from G1 + (N-1)W to
- * G1 + NW -- round 2's submissions are due one interval after round 1's guessing closes.
+ * The season the API will derive from round 1's two deadlines and the moment of creation,
+ * computed here so the host sees it before they agree to it. With W the gap between the two
+ * deadlines and I the gap from `now` to the first submission deadline, round N >= 2 takes
+ * submissions for W after round N-1's guessing closes, then guessing for I -- no overlap.
  *
  * Kept in step with the INSERT in `api/src/routes/leagues.ts` by hand: a preview that drifts from
  * the rule is worse than no preview.
  */
-function derivedSchedule(submissionDeadline: Date, guessingDeadline: Date, rounds: number) {
-  const windowMs = guessingDeadline.getTime() - submissionDeadline.getTime();
-  if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_SEASON_LENGTH || windowMs <= 0) return [];
+function derivedSchedule(now: Date, submissionDeadline: Date, guessingDeadline: Date, rounds: number) {
+  const submitMs = guessingDeadline.getTime() - submissionDeadline.getTime();
+  // A first deadline already past leaves no interval to copy; the API falls back the same way.
+  const guessMs = Math.max(submissionDeadline.getTime() - now.getTime(), submitMs);
+  if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_SEASON_LENGTH || submitMs <= 0) return [];
   // Round 1 is the form above; the preview starts at 2.
-  return Array.from({ length: rounds - 1 }, (_, i) => ({
-    number: i + 2,
-    submissionDeadline: new Date(guessingDeadline.getTime() + (i + 1) * windowMs),
-    guessingDeadline: new Date(guessingDeadline.getTime() + (i + 2) * windowMs),
-  }));
+  return Array.from({ length: rounds - 1 }, (_, i) => {
+    const guessingEnd = guessingDeadline.getTime() + (i + 1) * (submitMs + guessMs);
+    return {
+      number: i + 2,
+      submissionDeadline: new Date(guessingEnd - guessMs),
+      guessingDeadline: new Date(guessingEnd),
+    };
+  });
 }
 
 export default function CreateLeague() {
@@ -61,6 +67,9 @@ export default function CreateLeague() {
   // Themes for rounds 2..N, keyed by round number. Sparse on purpose: a round nobody named stays
   // unthemed, which the schedule screen can fill in later.
   const [laterThemes, setLaterThemes] = useState<Record<number, string>>({});
+  // Read once: the API derives the guessing period from it, so a ticking clock would make the
+  // preview drift. It is posted as `now` so the saved schedule matches what the host saw.
+  const [openedAt] = useState(() => new Date());
   const [submissionDeadline, setSubmissionDeadline] = useState(defaultSubmissionDeadline);
   // null means "derive it" -- the host has not overridden the default week of guessing time.
   const [chosenGuessingDeadline, setChosenGuessingDeadline] = useState<Date | null>(null);
@@ -74,7 +83,7 @@ export default function CreateLeague() {
 
   const guessingDeadline = chosenGuessingDeadline ?? inDays(submissionDeadline, 7);
   // Rounds 2..N, as the API will derive them.
-  const laterRounds = derivedSchedule(submissionDeadline, guessingDeadline, Number(seasonLength));
+  const laterRounds = derivedSchedule(openedAt, submissionDeadline, guessingDeadline, Number(seasonLength));
 
   async function submit() {
     if (!token) return;
@@ -106,6 +115,7 @@ export default function CreateLeague() {
           themes: Array.from({ length: rounds }, (_, i) => laterThemes[i + 1] ?? null),
           submissionDeadline: submissionDeadline.toISOString(),
           guessingDeadline: guessingDeadline.toISOString(),
+          now: openedAt.toISOString(),
         },
       });
       if (!res.ok) {
