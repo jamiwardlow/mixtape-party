@@ -16,13 +16,13 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/ag
 
 ### Layout
 
-`api/` — Express + Postgres, deployed to Render. `mobile/` — Expo / React Native (Expo Router),
+`api/` — Express + Postgres, deployed to Cloud Run (Postgres on Neon). `mobile/` — Expo / React Native (Expo Router),
 which is also what serves the web client. Product intent lives in `PRODUCT.md`.
 
 ### Shipping
 
 Solo project, one agent working one issue at a time. **No branches, no pull requests** — commit
-straight to `main`. Render auto-deploys `main`, so a push *is* a production deploy. Put the issue
+straight to `main`. Cloud Build (`cloudbuild.yaml`) migrates and deploys `main` to Cloud Run, so a push *is* a production deploy. Put the issue
 number in the commit subject (`Add the thing (#55)`) and close the issue after pushing. Rollback
 is `git revert` plus a push.
 
@@ -67,5 +67,5 @@ startup, not as an obvious bug in that file.
 ### Config and secrets
 
 `api/.env.example` documents every environment variable and where to obtain it — it is the source
-of truth for local setup. Production values are set by hand in the Render dashboard (they are
-`sync: false` in `render.yaml`).
+of truth for local setup. Production values live in Google Cloud Secret Manager (project `mixtape-party`, not the default
+`gcloud` project) and are bound to the `mixtape-party-api` Cloud Run service.
