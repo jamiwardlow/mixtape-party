@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { ServiceName } from '../adapters/types.js';
 
 /**
  * How to pick a league's current round now that every round of the season exists from creation
@@ -131,10 +132,12 @@ export interface RoundActivity {
   submitterIds: string[];
   /** Guesses made in this round, keyed by guesser. */
   guessCounts: Map<string, number>;
+  /** The viewer's own track, or null. Never anyone else's -- see the note in describeRound. */
+  yourSubmission: { service: ServiceName; title: string; artist: string } | null;
 }
 
 export function emptyRoundActivity(): RoundActivity {
-  return { submitterIds: [], guessCounts: new Map() };
+  return { submitterIds: [], guessCounts: new Map(), yourSubmission: null };
 }
 
 /**
@@ -183,6 +186,9 @@ export function describeRound(
     you: {
       submitted: submitters.has(viewerAccountId),
       guessesRemaining: Math.max(0, owedCount(viewerAccountId) - guessesMade(viewerAccountId)),
+      // Unconditional, on purpose: your own track is not a hint about anyone, in any phase, so it
+      // sits outside the anonymity branch above. There is exactly one phase branch in here.
+      submission: activity.yourSubmission,
     },
   };
 }

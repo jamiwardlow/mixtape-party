@@ -1033,6 +1033,48 @@ describe('GET /leagues/:leagueId/overview', () => {
     expect(round.guessingOpen).toBe(false);
   });
 
+  // `you.submission` is deliberately *outside* the anonymity branch: your own track tells you
+  // nothing you didn't already know, so it is present in all three phases. Nobody else's is, ever.
+  it('returns the viewer’s own track in every phase, and never anyone else’s', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${members[1].token}`)
+      .send({
+        externalId: 'someone-elses-track',
+        title: 'SOMEONE ELSES SECRET',
+        artist: 'SOMEONE ELSES ARTIST',
+        service: 'apple_music',
+      });
+
+    const mine = { service: 'apple_music', title: `Song by ${members[0].accountId}`, artist: 'Artist' };
+    const check = async (phase: string) => {
+      const res = await overview(app, leagueId, members[0].token);
+      const round = roundNumbered(res.body, 1);
+      expect(round.phase).toBe(phase);
+      expect(round.you.submission).toEqual(mine);
+      expect(JSON.stringify(res.body)).not.toContain('SOMEONE ELSES');
+    };
+
+    await check('submission');
+    await closeSubmissionWindow(testDb.pool, roundId);
+    await check('guessing');
+    await closeGuessingWindow(roundId);
+    await check('results');
+  });
+
+  it('returns a null submission for a member who has not submitted', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { leagueId, inviteCode } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const latecomer = await signUp(app, 'overview-no-track@example.com');
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${latecomer.token}`);
+
+    const round = roundNumbered((await overview(app, leagueId, latecomer.token)).body, 1);
+
+    expect(round.you).toEqual({ submitted: false, guessesRemaining: 4, submission: null });
+  });
+
   it('names the submitters again once the round is over', async () => {
     const { app, appleMusicAdapter } = buildApp();
     const { leagueId, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
@@ -1099,7 +1141,7 @@ describe('GET /leagues/:leagueId/overview', () => {
 
     const before = roundNumbered((await overview(app, leagueId, members[0].token)).body, 1);
     // Four tracks in the round, but never your own: three to guess.
-    expect(before.you).toEqual({ submitted: true, guessesRemaining: 3 });
+    expect(before.you).toMatchObject({ submitted: true, guessesRemaining: 3 });
     expect(before.guessedPlayers).toEqual([]);
 
     for (const other of members.slice(1)) {
@@ -1247,7 +1289,11 @@ describe('GET /rounds/:roundId/overview', () => {
     expect(guessing.body.round.phase).toBe('guessing');
     // Absent, not empty -- toEqual would happily call an undefined field equal to a missing one.
     expect('submitters' in guessing.body.round).toBe(false);
-    expect(guessing.body.round.you).toEqual({ submitted: true, guessesRemaining: 2 });
+    expect(guessing.body.round.you).toEqual({
+      submitted: true,
+      guessesRemaining: 2,
+      submission: { service: 'apple_music', title: `Song by ${members[0].accountId}`, artist: 'Artist' },
+    });
     expect(guessing.body.round).toEqual(await seasonEntry(app, leagueId, roundId, token));
 
     await closeGuessingWindow(roundId);
@@ -1267,7 +1313,7 @@ describe('GET /rounds/:roundId/overview', () => {
     // Rounds 2..N are created themeless (#74) and this URL has to work before anyone plays them.
     expect(res.body.round.theme).toBeNull();
     expect(res.body.round.submittedCount).toBe(0);
-    expect(res.body.round.you).toEqual({ submitted: false, guessesRemaining: 0 });
+    expect(res.body.round.you).toEqual({ submitted: false, guessesRemaining: 0, submission: null });
     expect(res.body.round).toEqual(await seasonEntry(app, leagueId, round2.id, members[0].token));
   });
 });

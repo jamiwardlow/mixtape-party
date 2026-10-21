@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { ServiceUnavailableError, type ServiceName } from '../adapters/types.js';
 import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
-import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
 export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
@@ -119,20 +119,22 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       resolved = { externalId, title, artist, isrc: isrc ?? null };
     }
 
-    try {
-      const submission = await deps.pool.query<{ id: string }>(
-        `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc],
-      );
-      res.status(201).json({ submissionId: submission.rows[0].id });
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ error: 'already submitted a track to this round' });
-        return;
-      }
-      throw err;
-    }
+    // Submitting again replaces your track, up to the deadline checked above and no further --
+    // there is no second gate and no "reopen". `DO UPDATE` rather than DELETE + INSERT keeps the
+    // row id, so guesses.submission_id (ON DELETE CASCADE) never comes into it: unreachable while
+    // no guess can exist before the submission deadline, and still correct if that ever changes.
+    // created_at is left alone -- the submitter roster is ordered by it and a replacement should
+    // not reshuffle it. Both paths answer 201: "your track for this round is now X".
+    const submission = await deps.pool.query<{ id: string }>(
+      `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (round_id, account_id) DO UPDATE
+         SET service = EXCLUDED.service, external_id = EXCLUDED.external_id,
+             title = EXCLUDED.title, artist = EXCLUDED.artist, isrc = EXCLUDED.isrc
+       RETURNING id`,
+      [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc],
+    );
+    res.status(201).json({ submissionId: submission.rows[0].id });
   });
 
   return router;

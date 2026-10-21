@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
+import type { ServiceName } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   CURRENT_ROUND_CLAUSE,
@@ -69,6 +70,21 @@ interface RoundRow {
   submission_deadline: string;
   guessing_deadline: string;
 }
+
+interface SubmissionRow {
+  account_id: string;
+  service: ServiceName;
+  title: string;
+  artist: string;
+}
+
+/**
+ * The three fields of a track both overview routes may serialize -- and only ever for the viewer's
+ * own submission, picked out in the loop that reads the rows rather than narrowed on the way out.
+ * A map of everyone's tracks that gets filtered at serialization time is one careless spread away
+ * from shipping the whole playlist with names attached (PRODUCT.md Principle 1).
+ */
+const trackOf = (row: SubmissionRow) => ({ service: row.service, title: row.title, artist: row.artist });
 
 async function findLeagueByInviteCode(pool: Pool, inviteCode: string): Promise<LeagueRow | null> {
   const result = await pool.query<LeagueRow>(
@@ -365,8 +381,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
          FROM rounds WHERE league_id = $1 ORDER BY round_number`,
         [leagueId],
       ),
-      deps.pool.query<{ round_id: string; account_id: string }>(
-        `SELECT s.round_id, s.account_id FROM submissions s
+      deps.pool.query<SubmissionRow & { round_id: string }>(
+        `SELECT s.round_id, s.account_id, s.service, s.title, s.artist FROM submissions s
          JOIN rounds r ON r.id = s.round_id
          WHERE r.league_id = $1
          ORDER BY s.created_at, s.id`,
@@ -392,7 +408,10 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
 
     const activity = new Map<string, RoundActivity>(roundsResult.rows.map((row) => [row.id, emptyRoundActivity()]));
     for (const row of submissionsResult.rows) {
-      activity.get(row.round_id)?.submitterIds.push(row.account_id);
+      const round = activity.get(row.round_id);
+      if (!round) continue;
+      round.submitterIds.push(row.account_id);
+      if (row.account_id === accountId) round.yourSubmission = trackOf(row);
     }
     for (const row of guessesResult.rows) {
       activity.get(row.round_id)?.guessCounts.set(row.guesser_account_id, Number(row.guess_count));
@@ -462,8 +481,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         [round.leagueId],
       ),
       // Same order as the league overview's, so the submitter list is the same list.
-      deps.pool.query<{ account_id: string }>(
-        'SELECT account_id FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
+      deps.pool.query<SubmissionRow>(
+        'SELECT account_id, service, title, artist FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
         [roundId],
       ),
       deps.pool.query<{ guesser_account_id: string; guess_count: string }>(
@@ -479,9 +498,11 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     const players = new Map<string, Player>(
       membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name }]),
     );
+    const mine = submissionsResult.rows.find((row) => row.account_id === accountId);
     const activity: RoundActivity = {
       submitterIds: submissionsResult.rows.map((row) => row.account_id),
       guessCounts: new Map(guessesResult.rows.map((row) => [row.guesser_account_id, Number(row.guess_count)])),
+      yourSubmission: mine ? trackOf(mine) : null,
     };
 
     // leagueId and leagueName ride along so the page can offer the way back up to the season hub

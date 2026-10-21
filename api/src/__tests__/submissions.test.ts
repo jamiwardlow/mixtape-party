@@ -3,7 +3,7 @@ import request from 'supertest';
 import type { Express } from 'express';
 import { FAKE_BANDCAMP_URL, FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
-import { buildApp as sharedBuildApp, linkFakeAppleMusic } from './testHelpers.js';
+import { buildApp as sharedBuildApp, closeSubmissionWindow, linkFakeAppleMusic } from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -164,7 +164,68 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect(res.status).toBe(401);
   });
 
-  it('rejects a second submission by the same player in the same round', async () => {
+  /** One row per player per round is the invariant; a passing status over two rows is the bug. */
+  async function submissionsOf(roundId: string, accountId: string) {
+    const res = await testDb.pool.query(
+      `SELECT id, service, external_id, title, artist, isrc FROM submissions
+       WHERE round_id = $1 AND account_id = $2`,
+      [roundId, accountId],
+    );
+    return res.rows;
+  }
+
+  it('replaces a player’s track when they submit again in the same round', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+
+    const first = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send(track);
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({
+        externalId: 'fake-track-100',
+        title: 'Tubthumping',
+        artist: 'Chumbawamba',
+        service: 'youtube_music',
+      });
+
+    expect(res.status).toBe(201);
+    expect(await submissionsOf(roundId, player.accountId)).toEqual([
+      {
+        // Updated in place: guesses.submission_id is ON DELETE CASCADE, so the row must survive.
+        id: first.body.submissionId,
+        service: 'youtube_music',
+        external_id: 'fake-track-100',
+        title: 'Tubthumping',
+        artist: 'Chumbawamba',
+        isrc: null,
+      },
+    ]);
+  });
+
+  it('clears the old isrc when the replacement comes from a service that has none', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+
+    await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ ...track, isrc: 'GBARL9300135' });
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ service: 'bandcamp', url: FAKE_BANDCAMP_URL });
+
+    expect(res.status).toBe(201);
+    const rows = await submissionsOf(roundId, player.accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ service: 'bandcamp', title: 'Fake Bandcamp Song', isrc: null });
+  });
+
+  it('rejects a replacement once the submission deadline has passed', async () => {
     const { app, appleMusicAdapter } = buildApp();
     const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
 
@@ -172,12 +233,15 @@ describe('POST /rounds/:roundId/submissions', () => {
       .post(`/rounds/${roundId}/submissions`)
       .set('Authorization', `Bearer ${player.token}`)
       .send(track);
+    await closeSubmissionWindow(testDb.pool, roundId);
+
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
       .set('Authorization', `Bearer ${player.token}`)
-      .send({ ...track, externalId: 'fake-track-100' });
+      .send({ ...track, externalId: 'fake-track-100', title: 'Too Late' });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(403);
+    expect(await submissionsOf(roundId, player.accountId)).toMatchObject([{ title: track.title }]);
   });
 
   it('rejects a submission from someone who has not joined the league', async () => {
