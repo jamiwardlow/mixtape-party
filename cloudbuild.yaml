@@ -3,7 +3,7 @@
 substitutions:
   _REGION: us-west1
   _REPO: us-west1-docker.pkg.dev/mixtape-party/mixtape-party
-  _API_URL: https://mixtape-party-api-qnt3dj2mpq-uw.a.run.app
+  _API_URL: https://api.mixtape-party.com
 
 steps:
   # Runs here, not in the runtime image: `migrate` uses tsx, a devDependency.
