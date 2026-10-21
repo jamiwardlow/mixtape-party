@@ -12,14 +12,14 @@ export const nameOf = (player: Player) => player.displayName ?? 'A player';
 export type RoundPhase = 'submission' | 'guessing' | 'results';
 
 /**
- * A round whose clock says "guessing" but whose playlist is still missing tracks (or whose league
- * is still too small). Guessing there is a dead end, so the screens say what is actually happening
- * instead of offering the way in -- `guessingOpen` is the server's call, in `api/src/routes/rounds.ts`.
+ * A round whose clock says "guessing" but whose league is too small to guess in. Submissions are
+ * closed for good by then, so a missing track is not waited on -- only a fourth player can unstick
+ * the round. `guessingOpen` is the server's call, in `api/src/routes/rounds.ts`.
  */
-export const waitingOnSubmissions = (round: { phase: RoundPhase; guessingOpen: boolean }) =>
+export const waitingOnPlayers = (round: { phase: RoundPhase; guessingOpen: boolean }) =>
   round.phase === 'guessing' && !round.guessingOpen;
 
-export const SUBMISSIONS_IN_PROGRESS = 'Submissions in progress';
+export const WAITING_ON_PLAYERS = 'Needs 4 players to guess';
 
 /** What a round in each phase asks of you, and the screen that asks it. Shared by home and the season page. */
 export const PHASE_META: Record<RoundPhase, { label: string; segment: 'submit' | 'guess' | 'results' }> = {

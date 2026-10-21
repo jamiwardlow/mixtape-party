@@ -135,12 +135,11 @@ it('names nobody as a submitter once guessing opens, but still counts them', asy
   expect(screen.getByTestId('submitted-count').props.children).toBe('3 tracks in');
 });
 
-// A round nobody can guess on yet must not offer the way in — the guess screen would 403 (too few
-// players) or hand over a playlist that is still missing a track.
-it('says submissions are in progress, with no CTA, until the playlist is complete', async () => {
+// A round nobody can guess on must not offer the way in — the guess screen would 403 (too few players).
+it('says it needs four players, with no CTA, while the league is too small to guess', async () => {
   await show(stillCollectingRound);
 
-  expect(screen.getByTestId('round-phase').props.children).toBe('Submissions in progress');
+  expect(screen.getByTestId('round-phase').props.children).toBe('Needs 4 players to guess');
   expect(screen.queryByText('Guess the submitters')).toBeNull();
 });
 

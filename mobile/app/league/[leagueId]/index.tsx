@@ -5,11 +5,11 @@ import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import {
   PHASE_META,
-  SUBMISSIONS_IN_PROGRESS,
+  WAITING_ON_PLAYERS,
   nameOf,
   type Player,
   type RoundPhase,
-  waitingOnSubmissions,
+  waitingOnPlayers,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import {
@@ -38,7 +38,7 @@ interface OverviewRound {
   guessingDeadline: string;
   phase: RoundPhase;
   submittedCount: number;
-  /** False while the round is still collecting tracks, even though the clock says guessing. */
+  /** False while the league is too small to guess in, even though the clock says guessing. */
   guessingOpen: boolean;
   /**
    * Optional because the server *omits* it while guessing is open: naming who has not submitted
@@ -136,10 +136,9 @@ export default function LeagueOverview() {
               guessingDeadline={new Date(current.guessingDeadline)}
               testID="current-round"
             />
-            {/* No way in until there is something to guess on: the guess screen 403s below
-                MIN_PLAYERS, and a half-built playlist gives the guesser nothing to go on. */}
-            {waitingOnSubmissions(current) ? (
-              <Label testID="current-round-cta-note">{SUBMISSIONS_IN_PROGRESS}</Label>
+            {/* No way in until the league has MIN_PLAYERS: the guess screen 403s below it. */}
+            {waitingOnPlayers(current) ? (
+              <Label testID="current-round-cta-note">{WAITING_ON_PLAYERS}</Label>
             ) : (
               <TapeButton
                 title={PHASE_META[current.phase].label}

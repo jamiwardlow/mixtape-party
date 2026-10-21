@@ -1002,22 +1002,23 @@ describe('GET /leagues/:leagueId/overview', () => {
     expect(round.submittedCount).toBe(4);
   });
 
-  // The clock opening the guessing window is not enough: submitting is not closed at the deadline,
-  // so a straggler can still fill their slot, and guessing a half-built playlist is a dead end.
-  it('holds guessing shut until every member has a track in', async () => {
+  // The playlist is final at the submission deadline (#88): a no-show must not wedge the round, so
+  // guessing opens on whatever tracks are in.
+  it('opens guessing on a partial playlist when a member never submits', async () => {
     const { app, appleMusicAdapter } = buildApp();
     const { leagueId, inviteCode, roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
     await closeSubmissionWindow(testDb.pool, roundId);
 
     expect(roundNumbered((await overview(app, leagueId, members[0].token)).body, 1).guessingOpen).toBe(true);
 
-    // One more player, no track: the playlist is a member short again.
+    // One more player, no track: the playlist is a member short, and the round is still guessable.
     const latecomer = await signUp(app, 'overview-guessing-open@example.com');
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${latecomer.token}`);
 
     const round = roundNumbered((await overview(app, leagueId, members[0].token)).body, 1);
     expect(round.phase).toBe('guessing');
-    expect(round.guessingOpen).toBe(false);
+    expect(round.submittedCount).toBe(4);
+    expect(round.guessingOpen).toBe(true);
   });
 
   // The other half of the same rule, and the one the guessing route already enforces with a 403.

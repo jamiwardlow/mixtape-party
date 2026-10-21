@@ -251,12 +251,11 @@ it('routes the current round’s CTA into the screen its phase calls for', async
   });
 });
 
-// A round nobody can guess on yet must not offer the way in — the guess screen would 403 (too
-// few players) or hand over a playlist that is still missing a track.
-it('replaces the guess CTA with a status while the round is still collecting tracks', async () => {
+// A round nobody can guess on must not offer the way in — the guess screen would 403 (too few players).
+it('replaces the guess CTA with a status while the league is too small to guess', async () => {
   await show(inRound(stillCollectingRound));
 
-  expect(screen.getByTestId('current-round-cta-note').props.children).toBe('Submissions in progress');
+  expect(screen.getByTestId('current-round-cta-note').props.children).toBe('Needs 4 players to guess');
   expect(screen.queryByText('Guess the submitters')).toBeNull();
 });
 

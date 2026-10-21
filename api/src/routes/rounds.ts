@@ -110,13 +110,13 @@ export type RoundPhase = 'submission' | 'guessing' | 'results';
 export const MIN_PLAYERS = 4;
 
 /**
- * Whether the guess screen is worth opening: the deadline has passed, every member's track is in,
- * and the league is big enough for guessing to mean anything. A round can sit in the guessing
- * phase with a half-built playlist -- submitting is not closed at the deadline, so a straggler can
- * still fill their slot -- and "Guess the submitters" is a dead end until they do.
+ * Whether the guess screen is worth opening: the submission deadline has passed and the league is
+ * big enough for guessing to mean anything. The playlist is final at the deadline -- submitting
+ * closes there for good -- so a round missing a no-show's track is guessed on as it stands rather
+ * than waiting for a track that can never arrive.
  */
-export function isGuessingOpen(phase: RoundPhase, submitterCount: number, memberCount: number): boolean {
-  return phase === 'guessing' && submitterCount === memberCount && memberCount >= MIN_PLAYERS;
+export function isGuessingOpen(phase: RoundPhase, memberCount: number): boolean {
+  return phase === 'guessing' && memberCount >= MIN_PLAYERS;
 }
 
 /** Derived from the two deadlines, never stored. The one phase rule, GET /leagues/mine included. */
@@ -172,7 +172,7 @@ export function describeRound(
     ...round,
     phase,
     submittedCount: submitters.size,
-    guessingOpen: isGuessingOpen(phase, submitters.size, players.size),
+    guessingOpen: isGuessingOpen(phase, players.size),
     ...(phase === 'guessing'
       ? {}
       : {

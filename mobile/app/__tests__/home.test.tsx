@@ -47,9 +47,9 @@ it('still says which phase each league is in', async () => {
   expect(await screen.findByText(/Guess the submitters/)).toBeTruthy();
 });
 
-// The clock alone does not make a round guessable: until every track is in, the shelf says what
+// The clock alone does not make a round guessable: below the player minimum, the shelf says what
 // the round is actually waiting for.
-it('reads a still-collecting round as submissions in progress', async () => {
+it('reads a too-small league as needing four players', async () => {
   globalThis.fetch = jest.fn(
     async () =>
       new Response(
@@ -60,7 +60,7 @@ it('reads a still-collecting round as submissions in progress', async () => {
 
   await render(<Home />);
 
-  expect(await screen.findByText(/Submissions in progress/)).toBeTruthy();
+  expect(await screen.findByText(/Needs 4 players to guess/)).toBeTruthy();
   expect(screen.queryByText(/Guess the submitters/)).toBeNull();
 });
 

@@ -4,11 +4,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import {
   PHASE_META,
-  SUBMISSIONS_IN_PROGRESS,
+  WAITING_ON_PLAYERS,
   nameOf,
   type Player,
   type RoundPhase,
-  waitingOnSubmissions,
+  waitingOnPlayers,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, TapeButton } from '../../../lib/ui';
@@ -23,7 +23,7 @@ interface RoundDetail {
   guessingDeadline: string;
   phase: RoundPhase;
   submittedCount: number;
-  /** False while the round is still collecting tracks, even though the clock says guessing. */
+  /** False while the league is too small to guess in, even though the clock says guessing. */
   guessingOpen: boolean;
   /**
    * Optional because the server *omits* it while guessing is open: naming who has not submitted
@@ -96,7 +96,7 @@ export default function RoundOverview() {
             testID="round"
           />
           <Label testID="round-phase">
-            {waitingOnSubmissions(round) ? SUBMISSIONS_IN_PROGRESS : PHASE_STATUS[round.phase]}
+            {waitingOnPlayers(round) ? WAITING_ON_PLAYERS : PHASE_STATUS[round.phase]}
           </Label>
         </JCard>
 
@@ -137,9 +137,8 @@ export default function RoundOverview() {
           )}
         </JCard>
 
-        {/* Nothing to guess on yet, so nothing to tap: the guess screen 403s below MIN_PLAYERS,
-            and a half-built playlist gives the guesser nothing to go on. */}
-        {!waitingOnSubmissions(round) && (
+        {/* Nothing to tap: the guess screen 403s below MIN_PLAYERS. */}
+        {!waitingOnPlayers(round) && (
           <TapeButton
             title={PHASE_META[round.phase].label}
             onPress={() =>
