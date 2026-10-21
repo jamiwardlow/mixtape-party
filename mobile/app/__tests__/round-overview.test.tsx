@@ -20,6 +20,8 @@ const cy = { accountId: 'c', displayName: 'Cy' };
 const di = { accountId: 'd', displayName: 'Di' };
 const roster = [ada, bo, cy, di];
 
+const mine = { service: 'bandcamp', title: 'Rain Song', artist: 'The Drips' };
+
 /** Mid-submission: three of four are in, and the server names them. */
 const submissionRound = {
   id: 'r2',
@@ -32,7 +34,7 @@ const submissionRound = {
   guessingOpen: false,
   submitters: [ada, bo, cy],
   guessedPlayers: [],
-  you: { submitted: true, guessesRemaining: 2 },
+  you: { submitted: true, guessesRemaining: 2, submission: mine },
 };
 
 /**
@@ -48,7 +50,7 @@ const guessingRound = (() => {
     submittedCount: 4,
     guessingOpen: true,
     guessedPlayers: [ada],
-    you: { submitted: true, guessesRemaining: 2 },
+    you: { submitted: true, guessesRemaining: 2, submission: mine },
   };
 })();
 
@@ -64,7 +66,7 @@ const resultsRound = {
   guessingOpen: false,
   submitters: roster,
   guessedPlayers: roster,
-  you: { submitted: true, guessesRemaining: 0 },
+  you: { submitted: true, guessesRemaining: 0, submission: mine },
 };
 
 const body = (round: unknown) => ({ leagueId: 'league-1', leagueName: 'Office League', round });
@@ -93,7 +95,7 @@ it('loads the round once and heads the page with the round and its deadlines', a
 // The whole point of this URL: one address that keeps working as the deadlines pass, each phase
 // offering the screen that phase calls for rather than 403ing or showing the wrong thing.
 it.each([
-  ['submission', submissionRound, 'Submit your track', 'submit'],
+  ['submission', submissionRound, 'Change my track', 'submit'],
   ['guessing', guessingRound, 'Guess the submitters', 'guess'],
   ['results', resultsRound, 'See results', 'results'],
 ] as const)('gives the %s phase its own CTA into that phase’s screen', async (_phase, round, label, segment) => {
@@ -158,12 +160,40 @@ it('names the submitters again once the round is over', async () => {
 
 it('says where you stand, submitted or not', async () => {
   await show(guessingRound);
-  expect(screen.getByTestId('your-submission').props.children).toBe('Your track is in');
+  expect(screen.getByTestId('your-submission').props.children).toBe('Rain Song — The Drips');
   expect(screen.getByTestId('your-guesses').props.children).toBe('2 guesses to go');
 
-  await show({ ...guessingRound, you: { submitted: false, guessesRemaining: 0 } });
+  await show({ ...guessingRound, you: { submitted: false, guessesRemaining: 0, submission: null } });
   expect(screen.getByTestId('your-submission').props.children).toBe('You have not submitted a track');
   expect(screen.getByTestId('your-guesses').props.children).toBe('You have made all your guesses');
+});
+
+it('names your track and offers to change it while submissions are open', async () => {
+  await show(submissionRound);
+
+  expect(screen.getByText('Rain Song — The Drips')).toBeTruthy();
+  expect(screen.queryByText('Submit your track')).toBeNull();
+  fireEvent.press(screen.getByText('Change my track'));
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/round/[roundId]/submit', params: { roundId: 'r2' } });
+});
+
+it('still asks for a track when you have none', async () => {
+  await show({ ...submissionRound, you: { submitted: false, guessesRemaining: 0, submission: null } });
+
+  expect(screen.getByTestId('your-submission').props.children).toBe('You have not submitted a track');
+  expect(screen.getByText('Submit your track')).toBeTruthy();
+  expect(screen.queryByText('Change my track')).toBeNull();
+});
+
+it.each([
+  ['guessing', guessingRound, 'Guess the submitters'],
+  ['results', resultsRound, 'See results'],
+] as const)('shows your track in %s without offering to change it', async (_phase, round, label) => {
+  await show(round);
+
+  expect(screen.getByText('Rain Song — The Drips')).toBeTruthy();
+  expect(screen.getByText(label)).toBeTruthy();
+  expect(screen.queryByText('Change my track')).toBeNull();
 });
 
 // A guess count before guessing opens counts tracks nobody may guess yet; after it, it is stale.

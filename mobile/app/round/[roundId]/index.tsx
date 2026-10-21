@@ -8,10 +8,11 @@ import {
   nameOf,
   type Player,
   type RoundPhase,
+  type ServiceName,
   waitingOnPlayers,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, TapeButton } from '../../../lib/ui';
+import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton } from '../../../lib/ui';
 
 /** The one round, as `GET /rounds/:roundId/overview` describes it — the season page's entry. */
 interface RoundDetail {
@@ -34,7 +35,12 @@ interface RoundDetail {
   submitters?: Player[];
   /** Who has answered, never what they answered — safe to name in every phase. */
   guessedPlayers: Player[];
-  you: { submitted: boolean; guessesRemaining: number };
+  you: {
+    submitted: boolean;
+    guessesRemaining: number;
+    /** Your own track, in every phase. Yours only: the server never sends anyone else's. */
+    submission: { service: ServiceName; title: string; artist: string } | null;
+  };
 }
 
 interface Overview {
@@ -123,9 +129,14 @@ export default function RoundOverview() {
 
         <JCard>
           <HandText>You</HandText>
-          <BodyText testID="your-submission">
-            {round.you.submitted ? 'Your track is in' : 'You have not submitted a track'}
-          </BodyText>
+          {round.you.submission ? (
+            <View style={styles.row}>
+              <ServiceBadge service={round.you.submission.service} />
+              <BodyText testID="your-submission">{`${round.you.submission.title} — ${round.you.submission.artist}`}</BodyText>
+            </View>
+          ) : (
+            <BodyText testID="your-submission">You have not submitted a track</BodyText>
+          )}
           {/* Only while guesses are being made: before then it counts tracks nobody can guess yet,
               and afterwards it is a leftover from a window that has shut. */}
           {round.phase === 'guessing' && (
@@ -140,7 +151,7 @@ export default function RoundOverview() {
         {/* Nothing to tap: the guess screen 403s below MIN_PLAYERS. */}
         {!waitingOnPlayers(round) && (
           <TapeButton
-            title={PHASE_META[round.phase].label}
+            title={round.phase === 'submission' && round.you.submission ? 'Change my track' : PHASE_META[round.phase].label}
             onPress={() =>
               router.push({
                 pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
