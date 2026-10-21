@@ -4,7 +4,7 @@ import { SESSION_TTL_MS } from './auth.js';
 
 export type AuthTokenPurpose = 'password_reset' | 'sign_in';
 
-// Deliberately generous: both Render services are on the free plan and cold-start in 30-60s, and
+// Deliberately generous: Cloud Run cold-starts take seconds, and
 // the web client blocks on two @expo-google-fonts packages before it renders. Single use, enforced
 // atomically in consumeAuthToken, is the actual protection here — not the clock.
 export const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
@@ -64,7 +64,7 @@ export const GLOBAL_DAILY_TOKEN_LIMIT = 90;
 
 /**
  * True when another token for this account would exceed the per-account or global cap.
- * Counted in SQL against `auth_tokens`, never in memory — Render can run more than one instance,
+ * Counted in SQL against `auth_tokens`, never in memory — Cloud Run can run more than one instance,
  * and an in-memory counter silently multiplies the limit by the instance count.
  */
 export async function isAuthTokenRateLimited(pool: Pool, accountId: string): Promise<boolean> {

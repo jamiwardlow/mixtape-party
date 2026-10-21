@@ -103,7 +103,7 @@ describe('useSession', () => {
     );
   });
 
-  // Offline, or the API asleep on Render's free plan: the local session must still be cleared, and
+  // Offline, or the API cold-starting on Cloud Run: the local session must still be cleared, and
   // the rejection must not surface -- otherwise the user is stranded in a signed-in app.
   it('signs out locally even when the revoke call fails', async () => {
     const result = await mountSession();

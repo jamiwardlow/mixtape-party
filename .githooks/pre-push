@@ -1,5 +1,5 @@
 #!/bin/sh
-# Gate before anything reaches main, which auto-deploys to Render.
+# Gate before anything reaches main, which deploys via Cloud Build.
 set -e
 
 # Skip when every ref being pushed is a deletion — there is nothing to test,

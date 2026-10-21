@@ -76,7 +76,7 @@ export function SessionProvider({ children, storage = deviceStorage }: PropsWith
   async function signOut(): Promise<void> {
     // Clearing storage alone leaves the token valid server-side for its full TTL (#64), so tell the
     // API to revoke it. Deliberately not awaited: this is wired to a button and the API cold-starts
-    // in 30-60s on Render's free plan, so awaiting would leave the UI signed-in for up to a minute.
+    // in seconds on Cloud Run, so awaiting would leave the UI signed-in that long.
     //
     // ponytail: best effort, so a sign-out made offline never revokes. A retry queue is the fix if
     // that matters; the local clear below happens either way.

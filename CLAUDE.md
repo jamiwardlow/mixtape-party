@@ -68,4 +68,4 @@ startup, not as an obvious bug in that file.
 
 `api/.env.example` documents every environment variable and where to obtain it — it is the source
 of truth for local setup. Production values live in Google Cloud Secret Manager (project `mixtape-party`, not the default
-`gcloud` project) and are bound to the `mixtape-party-api` Cloud Run service.
+`gcloud` project) and are bound to the `mixtape-party-api` Cloud Run service. Cloud Scheduler drives the notification sweep (`POST /internal/sweep`, every minute).

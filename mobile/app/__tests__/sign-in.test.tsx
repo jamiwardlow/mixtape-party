@@ -81,7 +81,7 @@ describe('submit', () => {
     expect(mockSignIn).not.toHaveBeenCalled();
   });
 
-  // Render's free plan can leave a request hanging for seconds; without the busy guard an
+  // A cold-starting API can leave a request hanging for seconds; without the busy guard an
   // impatient second tap creates a second account.
   it('disables submit and ignores extra presses while a request is in flight', async () => {
     let release!: (r: Response) => void;

@@ -9,7 +9,7 @@ import { ExpoWebPushChannel, NoopEmailChannel, ResendEmailChannel } from './noti
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret) throw new Error('SESSION_SECRET is not set');
 
-// No default: a fallback to localhost would silently email unreachable reset links from Render.
+// No default: a fallback to localhost would silently email unreachable reset links from Cloud Run.
 const appBaseUrl = process.env.APP_BASE_URL;
 if (!appBaseUrl) throw new Error('APP_BASE_URL is not set');
 
