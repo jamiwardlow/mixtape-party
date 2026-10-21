@@ -185,22 +185,23 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const inviteCode = league.rows[0].invite_code;
 
       // The whole season is scheduled here, from round 1's two deadlines (#74): with W the gap
-      // between them, round N's submission deadline is G1 + (N-2)W and its guessing deadline is
-      // G1 + (N-1)W, so each round's submission deadline lands on the previous round's guessing
-      // deadline. Round 1's theme is its own field; the rest come from `themes`, if sent.
+      // between them, round 1 is as entered and round N >= 2 runs from G1 + (N-1)W to G1 + NW, so
+      // round 2's submissions are due one interval after round 1's guessing closes. Round 1's
+      // theme is its own field; the rest come from `themes`, if sent.
       //
-      // submission_opens_at is round N-1's *submission* deadline, not its guessing deadline as
-      // #74 phrased it -- those are one and the same instant as round N's own submission
-      // deadline, which would leave every round after the first a zero-length submission window
-      // and make its reminder fire at the deadline. Round N's submissions are collected while
-      // round N-1 is being guessed.
+      // submission_opens_at is the previous round's *submission* deadline: round N's submissions
+      // are collected while round N-1 is being guessed.
       const rounds = await client.query<RoundRow>(
         `INSERT INTO rounds (league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline)
          SELECT $1, n,
                 CASE WHEN n = 1 THEN $2 ELSE ($6::text[])[n] END,
-                CASE WHEN n = 1 THEN now() ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 3) END,
-                $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 2),
-                $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 1)
+                CASE WHEN n = 1 THEN now()
+                     WHEN n = 2 THEN $3::timestamptz
+                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 2) END,
+                CASE WHEN n = 1 THEN $3::timestamptz
+                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * (n - 1) END,
+                CASE WHEN n = 1 THEN $4::timestamptz
+                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz) * n END
          FROM generate_series(1, $5::int) AS n
          RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
         [leagueId, theme, submissionAt.toISOString(), guessingAt.toISOString(), seasonLength, seasonThemes],

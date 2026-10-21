@@ -36,8 +36,8 @@ function defaultSubmissionDeadline(): Date {
 
 /**
  * The season the API will derive from round 1's two deadlines (#74), computed here so the host
- * sees it before they agree to it. With W the gap between them, round N runs from G1 + (N-2)W to
- * G1 + (N-1)W -- every round's submissions close as the previous round's guessing does.
+ * sees it before they agree to it. With W the gap between them, round N >= 2 runs from G1 + (N-1)W to
+ * G1 + NW -- round 2's submissions are due one interval after round 1's guessing closes.
  *
  * Kept in step with the INSERT in `api/src/routes/leagues.ts` by hand: a preview that drifts from
  * the rule is worse than no preview.
@@ -45,13 +45,12 @@ function defaultSubmissionDeadline(): Date {
 function derivedSchedule(submissionDeadline: Date, guessingDeadline: Date, rounds: number) {
   const windowMs = guessingDeadline.getTime() - submissionDeadline.getTime();
   if (!Number.isInteger(rounds) || rounds < 1 || rounds > MAX_SEASON_LENGTH || windowMs <= 0) return [];
-  // Round 1 is the form above; the preview starts at 2. It is still generated here so the
-  // arithmetic reads as the API's own rule rather than as an off-by-one.
-  return Array.from({ length: rounds }, (_, i) => ({
-    number: i + 1,
-    submissionDeadline: new Date(guessingDeadline.getTime() + (i - 1) * windowMs),
-    guessingDeadline: new Date(guessingDeadline.getTime() + i * windowMs),
-  })).slice(1);
+  // Round 1 is the form above; the preview starts at 2.
+  return Array.from({ length: rounds - 1 }, (_, i) => ({
+    number: i + 2,
+    submissionDeadline: new Date(guessingDeadline.getTime() + (i + 1) * windowMs),
+    guessingDeadline: new Date(guessingDeadline.getTime() + (i + 2) * windowMs),
+  }));
 }
 
 export default function CreateLeague() {

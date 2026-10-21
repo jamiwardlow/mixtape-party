@@ -150,12 +150,16 @@ describe('POST /leagues', () => {
     // Round 1 takes submissions from the moment the league exists; every round after it takes
     // them while the previous round is being guessed, so they all get the same window.
     expect(rounds[0].submission_opens_at.getTime()).toBeLessThanOrEqual(Date.now());
-    for (const round of rounds.slice(1)) {
+    // Round 2 opens when round 1's submissions close but is due a full interval after round 1's
+    // guessing does, so its window is two intervals long.
+    expect(rounds[1].submission_deadline.getTime() - rounds[1].submission_opens_at.getTime()).toBe(2 * window);
+    for (const round of rounds.slice(2)) {
       expect(round.submission_deadline.getTime() - round.submission_opens_at.getTime()).toBe(window);
     }
 
     expect(rounds[0].submission_deadline).toEqual(new Date(round1.submissionDeadline));
     expect(rounds[0].guessing_deadline).toEqual(new Date(round1.guessingDeadline));
+    expect(rounds[1].submission_deadline.getTime()).toBe(rounds[0].guessing_deadline.getTime() + window);
     expect(rounds[2].submission_deadline).toEqual(rounds[1].guessing_deadline);
     expect(rounds[3].submission_deadline).toEqual(rounds[2].guessing_deadline);
   });
@@ -909,8 +913,8 @@ describe('GET /leagues/:leagueId/rounds', () => {
       null,
       null,
     ]);
-    // Back-to-back: each round's submission deadline is the previous round's guessing deadline.
-    expect(res.body.rounds[1].submissionDeadline).toBe(res.body.rounds[0].guessingDeadline);
+    // From round 3 on, each round's submission deadline is the previous round's guessing deadline.
+    expect(res.body.rounds[2].submissionDeadline).toBe(res.body.rounds[1].guessingDeadline);
   });
 
   it('tells a member they are not the host', async () => {
