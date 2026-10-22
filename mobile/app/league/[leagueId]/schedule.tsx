@@ -191,7 +191,10 @@ export default function LeagueSchedule() {
             );
           })}
         </ScrollView>
-        <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
+        <TapeButton
+          title="Back to league"
+          onPress={() => router.replace({ pathname: '/league/[leagueId]', params: { leagueId } })}
+        />
       </Screen>
     </RoundGate>
   );
