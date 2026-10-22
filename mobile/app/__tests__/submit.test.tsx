@@ -73,6 +73,7 @@ describe('search and submit', () => {
     await render(<SubmitTrack />);
 
     await fireEvent.press(screen.getByText('YouTube Music'));
+    await fireEvent.changeText(screen.getByPlaceholderText(/Add a comment/), 'my fave');
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
     await waitFor(() => expect(screen.getByText('Submit')).toBeTruthy());
@@ -80,6 +81,7 @@ describe('search and submit', () => {
 
     expect(lastPost()).toEqual({
       service: 'youtube_music',
+      comment: 'my fave',
       externalId: 'vid-1',
       title: 'Feeling Good',
       artist: 'Nina Simone',
@@ -109,6 +111,6 @@ describe('search and submit', () => {
     );
     await fireEvent.press(screen.getByText('Submit'));
 
-    expect(lastPost()).toEqual({ service: 'bandcamp', url: 'https://band.bandcamp.com/track/song' });
+    expect(lastPost()).toEqual({ service: 'bandcamp', comment: '', url: 'https://band.bandcamp.com/track/song' });
   });
 });
