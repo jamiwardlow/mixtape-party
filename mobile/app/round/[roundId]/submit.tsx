@@ -84,6 +84,8 @@ export default function SubmitTrack() {
 
   return (
     <Screen label={title}>
+      {/* Outside the FlatList, so it stays on screen however long the results get. */}
+      {edit && <TapeButton title="Cancel" onPress={() => router.back()} variant="secondary" />}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {SERVICES.map((s) => {
           const active = s === service;
