@@ -171,6 +171,21 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect((await post({ ...track, comment: 'x'.repeat(501) })).status).toBe(400);
   });
 
+  it('edits only the comment of an existing track', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const auth = { Authorization: `Bearer ${player.token}` };
+    const patch = (comment: string) =>
+      request(app).patch(`/rounds/${roundId}/submissions/mine`).set(auth).send({ comment });
+    expect((await patch('hi')).status).toBe(404);
+    await request(app).post(`/rounds/${roundId}/submissions`).set(auth).send(track);
+
+    expect((await patch('  hi  ')).status).toBe(204);
+    const row = (await testDb.pool.query('SELECT title, comment FROM submissions WHERE round_id = $1', [roundId])).rows[0];
+    expect(row).toEqual({ title: track.title, comment: 'hi' });
+    expect((await patch('x'.repeat(501))).status).toBe(400);
+  });
+
   it('rejects requests without a session', async () => {
     const { app, appleMusicAdapter } = buildApp();
     const { roundId } = await createLeagueWithPlayer(app, appleMusicAdapter);

@@ -133,7 +133,7 @@ export interface RoundActivity {
   /** Guesses made in this round, keyed by guesser. */
   guessCounts: Map<string, number>;
   /** The viewer's own track, or null. Never anyone else's -- see the note in describeRound. */
-  yourSubmission: { service: ServiceName; title: string; artist: string } | null;
+  yourSubmission: { service: ServiceName; title: string; artist: string; comment?: string | null } | null;
 }
 
 export function emptyRoundActivity(): RoundActivity {

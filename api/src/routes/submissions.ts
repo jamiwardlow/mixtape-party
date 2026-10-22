@@ -13,6 +13,15 @@ function parseService(value: unknown): ServiceName | null {
   return null;
 }
 
+function parseComment(value: unknown): { ok: true; comment: string | null } | { ok: false; error: string } {
+  if (value !== undefined && value !== null && typeof value !== 'string') {
+    return { ok: false, error: 'comment must be a string' };
+  }
+  const comment = (value ?? '').trim() || null;
+  if (comment && comment.length > 500) return { ok: false, error: 'comment must be 500 characters or fewer' };
+  return { ok: true, comment };
+}
+
 export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
   const router = Router();
 
@@ -54,15 +63,12 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     }
 
     const { externalId, title, artist, isrc, url } = body;
-    if (body.comment !== undefined && body.comment !== null && typeof body.comment !== 'string') {
-      res.status(400).json({ error: 'comment must be a string' });
+    const parsed = parseComment(body.comment);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
       return;
     }
-    const comment = (body.comment ?? '').trim() || null;
-    if (comment && comment.length > 500) {
-      res.status(400).json({ error: 'comment must be 500 characters or fewer' });
-      return;
-    }
+    const comment = parsed.comment;
     if (service === 'bandcamp') {
       if (typeof url !== 'string') {
         res.status(400).json({ error: 'url is required' });
@@ -145,6 +151,35 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc, comment],
     );
     res.status(201).json({ submissionId: submission.rows[0].id });
+  });
+
+  // Edits just the comment on your existing track, up to the same deadline as replacing the track.
+  router.patch('/rounds/:roundId/submissions/mine', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const parsed = parseComment(req.body?.comment);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const round = await loadRound(deps.pool, req.params.roundId);
+    if (!round) {
+      res.status(404).json({ error: 'round not found' });
+      return;
+    }
+    if (new Date(round.submissionDeadline) <= new Date()) {
+      res.status(403).json({ error: 'the submission window for this round has closed' });
+      return;
+    }
+    const updated = await deps.pool.query('UPDATE submissions SET comment = $1 WHERE round_id = $2 AND account_id = $3', [
+      parsed.comment,
+      req.params.roundId,
+      accountId,
+    ]);
+    if (updated.rowCount === 0) {
+      res.status(404).json({ error: 'you have not submitted a track to this round' });
+      return;
+    }
+    res.status(204).end();
   });
 
   return router;

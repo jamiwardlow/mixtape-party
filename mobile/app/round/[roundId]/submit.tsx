@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
@@ -37,6 +37,21 @@ export default function SubmitTrack() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [current, setCurrent] = useState<{ service: ServiceName; title: string; artist: string } | null>(null);
+  const [commentSaved, setCommentSaved] = useState(false);
+
+  // Editing: show the track already in, and start the comment box from what is saved.
+  useEffect(() => {
+    if (!edit || !token) return;
+    (async () => {
+      const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
+      if (!res.ok) return;
+      const mine = (await res.json()).round.you.submission;
+      if (!mine) return;
+      setCurrent(mine);
+      setComment(mine.comment ?? '');
+    })();
+  }, [edit, token, roundId]);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
 
@@ -53,6 +68,23 @@ export default function SubmitTrack() {
       setResults((await res.json()).results);
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function saveComment() {
+    if (!token) return;
+    setSubmitting(true);
+    setError(null);
+    setCommentSaved(false);
+    try {
+      const res = await fetchApi(`/rounds/${roundId}/submissions/mine`, { method: 'PATCH', token, body: { comment } });
+      if (!res.ok) {
+        setError((await res.json().catch(() => null))?.error ?? 'Could not save your comment');
+        return;
+      }
+      setCommentSaved(true);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -87,6 +119,15 @@ export default function SubmitTrack() {
     <Screen label={title}>
       {/* Outside the FlatList, so it stays on screen however long the results get. */}
       {edit && <TapeButton title="Cancel" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />}
+      {current && (
+        <JCard>
+          <Label>Your current track</Label>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <ServiceBadge service={current.service} />
+            <BodyText testID="current-track" style={{ flex: 1 }}>{`${current.title} — ${current.artist}`}</BodyText>
+          </View>
+        </JCard>
+      )}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {SERVICES.map((s) => {
           const active = s === service;
@@ -114,10 +155,16 @@ export default function SubmitTrack() {
       <TapeInput
         placeholder="Add a comment (optional) — hidden until results"
         value={comment}
-        onChangeText={setComment}
+        onChangeText={(text) => {
+          setComment(text);
+          setCommentSaved(false);
+        }}
         maxLength={500}
         multiline
       />
+      {current && (
+        <TapeButton title={commentSaved ? 'Comment saved' : 'Save comment only'} onPress={saveComment} disabled={submitting} variant="secondary" />
+      )}
       <Sprocket />
       {!service ? (
         <BodyText>Pick a service to submit from.</BodyText>

@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import SubmitTrack from '../round/[roundId]/submit';
 
 const mockReplace = jest.fn();
+let mockParams: Record<string, string> = { roundId: 'round-1' };
 
 jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockReplace(...args) },
-  useLocalSearchParams: () => ({ roundId: 'round-1' }),
+  useLocalSearchParams: () => mockParams,
 }));
 
 jest.mock('../../lib/session', () => ({
@@ -22,6 +23,7 @@ const searchResults = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockParams = { roundId: 'round-1' };
   globalThis.fetch = jest.fn(async (url: string) =>
     ok(String(url).includes('/search') ? searchResults : { submissionId: 'sub-1' }),
   ) as unknown as typeof fetch;
@@ -112,5 +114,28 @@ describe('search and submit', () => {
     await fireEvent.press(screen.getByText('Submit'));
 
     expect(lastPost()).toEqual({ service: 'bandcamp', comment: '', url: 'https://band.bandcamp.com/track/song' });
+  });
+});
+
+describe('editing', () => {
+  it('shows the current track and saves just the comment', async () => {
+    mockParams = { roundId: 'round-1', edit: '1' };
+    const mine = { service: 'bandcamp', title: 'Old Song', artist: 'Old Band', comment: 'first take' };
+    globalThis.fetch = jest.fn(async (_url: string, init?: { method?: string }) =>
+      ok(init?.method === 'PATCH' ? {} : { round: { you: { submission: mine } } }),
+    ) as unknown as typeof fetch;
+    await render(<SubmitTrack />);
+
+    await waitFor(() => expect(screen.getByText('Old Song — Old Band')).toBeTruthy());
+    const box = screen.getByPlaceholderText(/Add a comment/);
+    expect(box.props.value).toBe('first take');
+    await fireEvent.changeText(box, 'second take');
+    await fireEvent.press(screen.getByText('Save comment only'));
+
+    await waitFor(() => expect(screen.getByText('Comment saved')).toBeTruthy());
+    const [url, init] = (fetch as jest.Mock).mock.calls.at(-1);
+    expect(url).toContain('/rounds/round-1/submissions/mine');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body)).toEqual({ comment: 'second take' });
   });
 });
