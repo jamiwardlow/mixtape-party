@@ -130,9 +130,9 @@ describe('editing', () => {
     const box = screen.getByPlaceholderText(/Add a comment/);
     expect(box.props.value).toBe('first take');
     await fireEvent.changeText(box, 'second take');
-    await fireEvent.press(screen.getByText('Save comment only'));
+    await fireEvent.press(screen.getByText('Save'));
 
-    await waitFor(() => expect(screen.getByText('Comment saved')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy());
     const [url, init] = (fetch as jest.Mock).mock.calls.at(-1);
     expect(url).toContain('/rounds/round-1/submissions/mine');
     expect(init.method).toBe('PATCH');

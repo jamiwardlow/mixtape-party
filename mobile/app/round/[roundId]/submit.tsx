@@ -163,7 +163,7 @@ export default function SubmitTrack() {
         multiline
       />
       {current && (
-        <TapeButton title={commentSaved ? 'Comment saved' : 'Save comment only'} onPress={saveComment} disabled={submitting} variant="secondary" />
+        <TapeButton title={commentSaved ? 'Saved' : 'Save'} onPress={saveComment} disabled={submitting} variant="secondary" />
       )}
       <Sprocket />
       {!service ? (
