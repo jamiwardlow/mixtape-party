@@ -73,7 +73,7 @@ export default function SubmitTrack() {
     return (
       <Screen label="Submit a track">
         <JCard>
-          <BodyText style={{ fontSize: 18 }}>Track submitted — side A logged.</BodyText>
+          <BodyText style={{ fontSize: 18 }}>Track submitted.</BodyText>
         </JCard>
         <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
       </Screen>
