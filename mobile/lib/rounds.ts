@@ -27,3 +27,7 @@ export const PHASE_META: Record<RoundPhase, { label: string; segment: 'submit' |
   guessing: { label: 'Guess the submitters', segment: 'guess' },
   results: { label: 'See results', segment: 'results' },
 };
+
+/** PHASE_META's label, except that once your track is in, the submission phase offers to edit it. */
+export const phaseLabel = (phase: RoundPhase, submitted: boolean) =>
+  phase === 'submission' && submitted ? 'Edit your track' : PHASE_META[phase].label;

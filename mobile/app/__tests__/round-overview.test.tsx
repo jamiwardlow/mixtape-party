@@ -95,7 +95,7 @@ it('loads the round once and heads the page with the round and its deadlines', a
 // The whole point of this URL: one address that keeps working as the deadlines pass, each phase
 // offering the screen that phase calls for rather than 403ing or showing the wrong thing.
 it.each([
-  ['submission', submissionRound, 'Change my track', 'submit'],
+  ['submission', submissionRound, 'Edit your track', 'submit'],
   ['guessing', guessingRound, 'Guess the submitters', 'guess'],
   ['results', resultsRound, 'See results', 'results'],
 ] as const)('gives the %s phase its own CTA into that phase’s screen', async (_phase, round, label, segment) => {
@@ -173,7 +173,7 @@ it('names your track and offers to change it while submissions are open', async 
 
   expect(screen.getByText('Rain Song — The Drips')).toBeTruthy();
   expect(screen.queryByText('Submit your track')).toBeNull();
-  fireEvent.press(screen.getByText('Change my track'));
+  fireEvent.press(screen.getByText('Edit your track'));
   expect(router.push).toHaveBeenCalledWith({ pathname: '/round/[roundId]/submit', params: { roundId: 'r2' } });
 });
 
@@ -182,7 +182,7 @@ it('still asks for a track when you have none', async () => {
 
   expect(screen.getByTestId('your-submission').props.children).toBe('You have not submitted a track');
   expect(screen.getByText('Submit your track')).toBeTruthy();
-  expect(screen.queryByText('Change my track')).toBeNull();
+  expect(screen.queryByText('Edit your track')).toBeNull();
 });
 
 it.each([
@@ -193,7 +193,7 @@ it.each([
 
   expect(screen.getByText('Rain Song — The Drips')).toBeTruthy();
   expect(screen.getByText(label)).toBeTruthy();
-  expect(screen.queryByText('Change my track')).toBeNull();
+  expect(screen.queryByText('Edit your track')).toBeNull();
 });
 
 // A guess count before guessing opens counts tracks nobody may guess yet; after it, it is stale.

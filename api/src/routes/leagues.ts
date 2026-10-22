@@ -30,6 +30,7 @@ function summarizeRound(
     submission_deadline: string | null;
     guessing_deadline: string | null;
     member_count: number;
+    submitted: boolean;
   },
   now: Date,
 ) {
@@ -43,6 +44,7 @@ function summarizeRound(
     theme: row.theme,
     phase,
     guessingOpen: isGuessingOpen(phase, row.member_count),
+    submitted: row.submitted,
   };
 }
 
@@ -324,12 +326,14 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       submission_deadline: string | null;
       guessing_deadline: string | null;
       member_count: number;
+      submitted: boolean;
     }>(
       // The member count is only here to answer "is guessing actually open" (isGuessingOpen) -- the
       // shelf reads the phase out loud, and a league too small to guess must not read as one ready to.
       `SELECT l.id AS league_id, l.name AS league_name,
               r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline,
-              (SELECT count(*)::int FROM league_members m WHERE m.league_id = l.id) AS member_count
+              (SELECT count(*)::int FROM league_members m WHERE m.league_id = l.id) AS member_count,
+              EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.account_id = $1) AS submitted
        FROM leagues l
        JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
        LEFT JOIN LATERAL (

@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import {
   PHASE_META,
+  phaseLabel,
   WAITING_ON_PLAYERS,
   nameOf,
   type Player,
@@ -151,7 +152,7 @@ export default function RoundOverview() {
         {/* Nothing to tap: the guess screen 403s below MIN_PLAYERS. */}
         {!waitingOnPlayers(round) && (
           <TapeButton
-            title={round.phase === 'submission' && round.you.submission ? 'Change my track' : PHASE_META[round.phase].label}
+            title={phaseLabel(round.phase, !!round.you.submission)}
             onPress={() =>
               router.push({
                 pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,

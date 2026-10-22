@@ -5,6 +5,7 @@ import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import {
   PHASE_META,
+  phaseLabel,
   WAITING_ON_PLAYERS,
   nameOf,
   type Player,
@@ -79,7 +80,7 @@ const MIN_PLAYERS = 4;
 
 export default function LeagueOverview() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
-  const { token } = useSession();
+  const { token, profile } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -141,7 +142,7 @@ export default function LeagueOverview() {
               <Label testID="current-round-cta-note">{WAITING_ON_PLAYERS}</Label>
             ) : (
               <TapeButton
-                title={PHASE_META[current.phase].label}
+                title={phaseLabel(current.phase, !!current.submitters?.some((s) => s.accountId === profile?.id))}
                 onPress={() =>
                   router.push({
                     pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
