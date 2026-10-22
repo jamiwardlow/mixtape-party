@@ -1056,7 +1056,7 @@ describe('GET /leagues/:leagueId/overview', () => {
         service: 'apple_music',
       });
 
-    const mine = { service: 'apple_music', title: `Song by ${members[0].accountId}`, artist: 'Artist' };
+    const mine = { service: 'apple_music', title: `Song by ${members[0].accountId}`, artist: 'Artist', comment: null };
     const check = async (phase: string) => {
       const res = await overview(app, leagueId, members[0].token);
       const round = roundNumbered(res.body, 1);
@@ -1300,7 +1300,7 @@ describe('GET /rounds/:roundId/overview', () => {
     expect(guessing.body.round.you).toEqual({
       submitted: true,
       guessesRemaining: 2,
-      submission: { service: 'apple_music', title: `Song by ${members[0].accountId}`, artist: 'Artist' },
+      submission: { service: 'apple_music', title: `Song by ${members[0].accountId}`, artist: 'Artist', comment: null },
     });
     expect(guessing.body.round).toEqual(await seasonEntry(app, leagueId, roundId, token));
 
