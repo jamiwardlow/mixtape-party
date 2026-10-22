@@ -186,8 +186,8 @@ export default function CreateLeague() {
             <Sprocket />
             <HandText>The rest of the season</HandText>
             <Label>
-              Each round opens as the one before it closes. Themes are optional — you can change any of
-              this later.
+              Each round opens as the one before it closes. You can change any of this
+              later.
             </Label>
             {laterRounds.map((round) => (
               <JCard key={round.number}>
