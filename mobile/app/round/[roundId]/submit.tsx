@@ -20,7 +20,7 @@ interface TrackResult {
 
 export default function SubmitTrack() {
   const t = useTheme();
-  const { roundId } = useLocalSearchParams<{ roundId: string }>();
+  const { roundId, edit } = useLocalSearchParams<{ roundId: string; edit?: string }>();
   const { token } = useSession();
   const [service, setServiceRaw] = useState<ServiceName | null>(null);
   function setService(s: ServiceName) {
@@ -36,6 +36,8 @@ export default function SubmitTrack() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  // Already has a track in this round (the entry screens say so), or has just sent one.
+  const title = edit || submitted ? 'Edit your track' : 'Submit your track';
 
   async function search() {
     if (!token || !service || service === 'bandcamp' || !query.trim()) return;
@@ -71,7 +73,7 @@ export default function SubmitTrack() {
 
   if (submitted) {
     return (
-      <Screen label="Submit a track">
+      <Screen label={title}>
         <JCard>
           <BodyText style={{ fontSize: 18 }}>Track submitted.</BodyText>
         </JCard>
@@ -81,7 +83,7 @@ export default function SubmitTrack() {
   }
 
   return (
-    <Screen label="Submit a track">
+    <Screen label={title}>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {SERVICES.map((s) => {
           const active = s === service;

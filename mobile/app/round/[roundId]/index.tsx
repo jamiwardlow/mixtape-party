@@ -156,7 +156,7 @@ export default function RoundOverview() {
             onPress={() =>
               router.push({
                 pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
-                params: { roundId: round.id },
+                params: round.phase === 'submission' && round.you.submission ? { roundId: round.id, edit: '1' } : { roundId: round.id },
               })
             }
           />

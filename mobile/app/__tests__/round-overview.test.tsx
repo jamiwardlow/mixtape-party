@@ -105,7 +105,7 @@ it.each([
 
   expect(router.push).toHaveBeenCalledWith({
     pathname: `/round/[roundId]/${segment}`,
-    params: { roundId: 'r2' },
+    params: segment === 'submit' ? { roundId: 'r2', edit: '1' } : { roundId: 'r2' },
   });
 });
 
@@ -174,7 +174,7 @@ it('names your track and offers to change it while submissions are open', async 
   expect(screen.getByText('Rain Song — The Drips')).toBeTruthy();
   expect(screen.queryByText('Submit your track')).toBeNull();
   fireEvent.press(screen.getByText('Edit your track'));
-  expect(router.push).toHaveBeenCalledWith({ pathname: '/round/[roundId]/submit', params: { roundId: 'r2' } });
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/round/[roundId]/submit', params: { roundId: 'r2', edit: '1' } });
 });
 
 it('still asks for a track when you have none', async () => {

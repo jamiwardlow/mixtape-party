@@ -107,6 +107,7 @@ export default function LeagueOverview() {
   const { league, members, standings, scoredRoundCount, winners, rounds } = overview;
   // The API marks exactly one round current, and keeps marking the last one between seasons.
   const current = rounds.find((round) => round.isCurrent);
+  const iSubmitted = !!current?.submitters?.some((s) => s.accountId === profile?.id);
   const shortBy = MIN_PLAYERS - members.length;
 
   return (
@@ -142,11 +143,11 @@ export default function LeagueOverview() {
               <Label testID="current-round-cta-note">{WAITING_ON_PLAYERS}</Label>
             ) : (
               <TapeButton
-                title={phaseLabel(current.phase, !!current.submitters?.some((s) => s.accountId === profile?.id))}
+                title={phaseLabel(current.phase, iSubmitted)}
                 onPress={() =>
                   router.push({
                     pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
-                    params: { roundId: current.id },
+                    params: current.phase === 'submission' && iSubmitted ? { roundId: current.id, edit: '1' } : { roundId: current.id },
                   })
                 }
               />
