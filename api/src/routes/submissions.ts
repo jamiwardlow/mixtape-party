@@ -54,6 +54,15 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     }
 
     const { externalId, title, artist, isrc, url } = body;
+    if (body.comment !== undefined && body.comment !== null && typeof body.comment !== 'string') {
+      res.status(400).json({ error: 'comment must be a string' });
+      return;
+    }
+    const comment = (body.comment ?? '').trim() || null;
+    if (comment && comment.length > 500) {
+      res.status(400).json({ error: 'comment must be 500 characters or fewer' });
+      return;
+    }
     if (service === 'bandcamp') {
       if (typeof url !== 'string') {
         res.status(400).json({ error: 'url is required' });
@@ -126,13 +135,14 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     // created_at is left alone -- the submitter roster is ordered by it and a replacement should
     // not reshuffle it. Both paths answer 201: "your track for this round is now X".
     const submission = await deps.pool.query<{ id: string }>(
-      `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc, comment)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (round_id, account_id) DO UPDATE
          SET service = EXCLUDED.service, external_id = EXCLUDED.external_id,
-             title = EXCLUDED.title, artist = EXCLUDED.artist, isrc = EXCLUDED.isrc
+             title = EXCLUDED.title, artist = EXCLUDED.artist, isrc = EXCLUDED.isrc,
+             comment = EXCLUDED.comment
        RETURNING id`,
-      [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc],
+      [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc, comment],
     );
     res.status(201).json({ submissionId: submission.rows[0].id });
   });

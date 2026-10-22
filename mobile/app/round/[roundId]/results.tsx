@@ -24,6 +24,7 @@ interface Track {
   service: ServiceName;
   title: string;
   artist: string;
+  comment: string | null;
   submitter: Player;
   correctGuessers: Player[];
 }
@@ -186,6 +187,7 @@ export default function RoundResults() {
               <BodyText>
                 {item.title} — {item.artist}
               </BodyText>
+              {item.comment && <BodyText>“{item.comment}”</BodyText>}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Label>Submitted by</Label>
                 <HandText>{item.submitter.displayName ?? 'a player'}</HandText>

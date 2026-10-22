@@ -31,6 +31,7 @@ export default function SubmitTrack() {
   }
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
+  const [comment, setComment] = useState('');
   const [results, setResults] = useState<TrackResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +61,7 @@ export default function SubmitTrack() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetchApi(`/rounds/${roundId}/submissions`, { method: 'POST', token, body: { service, ...body } });
+      const res = await fetchApi(`/rounds/${roundId}/submissions`, { method: 'POST', token, body: { service, comment, ...body } });
       if (!res.ok) {
         setError((await res.json().catch(() => null))?.error ?? 'Could not submit that track');
         return;
@@ -110,6 +111,13 @@ export default function SubmitTrack() {
           );
         })}
       </View>
+      <TapeInput
+        placeholder="Add a comment (optional) — hidden until results"
+        value={comment}
+        onChangeText={setComment}
+        maxLength={500}
+        multiline
+      />
       <Sprocket />
       {!service ? (
         <BodyText>Pick a service to submit from.</BodyText>

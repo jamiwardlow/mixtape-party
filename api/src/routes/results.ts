@@ -82,8 +82,9 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       service: 'apple_music' | 'youtube_music' | 'bandcamp';
       title: string;
       artist: string;
+      comment: string | null;
       account_id: string;
-    }>('SELECT id, service, title, artist, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
+    }>('SELECT id, service, title, artist, comment, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
       req.params.roundId,
     ]);
 
@@ -116,6 +117,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       service: row.service,
       title: row.title,
       artist: row.artist,
+      comment: row.comment,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
       excludedFromExport: row.service === 'bandcamp',

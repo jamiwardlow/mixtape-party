@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   title TEXT NOT NULL,
   artist TEXT NOT NULL,
   isrc TEXT,
+  comment TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (round_id, account_id)
 );

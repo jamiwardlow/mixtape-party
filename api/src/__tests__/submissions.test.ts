@@ -156,6 +156,21 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect(res.body.accountId).toBeUndefined();
   });
 
+  it('stores a trimmed comment, clears it on a comment-less resubmit, and rejects an over-long one', async () => {
+    const { app, appleMusicAdapter } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const post = (body: object) =>
+      request(app).post(`/rounds/${roundId}/submissions`).set('Authorization', `Bearer ${player.token}`).send(body);
+    const stored = async () =>
+      (await testDb.pool.query('SELECT comment FROM submissions WHERE round_id = $1', [roundId])).rows[0].comment;
+
+    expect((await post({ ...track, comment: '  my fave  ' })).status).toBe(201);
+    expect(await stored()).toBe('my fave');
+    expect((await post(track)).status).toBe(201);
+    expect(await stored()).toBeNull();
+    expect((await post({ ...track, comment: 'x'.repeat(501) })).status).toBe(400);
+  });
+
   it('rejects requests without a session', async () => {
     const { app, appleMusicAdapter } = buildApp();
     const { roundId } = await createLeagueWithPlayer(app, appleMusicAdapter);
