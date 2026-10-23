@@ -16,11 +16,12 @@ steps:
 
   - id: build-api
     name: gcr.io/cloud-builders/docker
-    args: ['build', '-t', '${_REPO}/api:$COMMIT_SHA', 'api']
+    entrypoint: bash
+    args: ['-c', 'docker pull ${_REPO}/api:latest || true; docker build --cache-from ${_REPO}/api:latest -t ${_REPO}/api:$COMMIT_SHA -t ${_REPO}/api:latest api']
     waitFor: ['migrate']
   - id: push-api
     name: gcr.io/cloud-builders/docker
-    args: ['push', '${_REPO}/api:$COMMIT_SHA']
+    args: ['push', '--all-tags', '${_REPO}/api']
   # Secrets are already bound to the service (#93); deploy updates only the image.
   - id: deploy-api
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -30,11 +31,12 @@ steps:
   # EXPO_PUBLIC_API_URL is baked into the web bundle at build time.
   - id: build-web
     name: gcr.io/cloud-builders/docker
-    args: ['build', '--build-arg', 'EXPO_PUBLIC_API_URL=${_API_URL}', '-t', '${_REPO}/web:$COMMIT_SHA', 'mobile']
+    entrypoint: bash
+    args: ['-c', 'docker pull ${_REPO}/web:latest || true; docker build --cache-from ${_REPO}/web:latest --build-arg EXPO_PUBLIC_API_URL=${_API_URL} -t ${_REPO}/web:$COMMIT_SHA -t ${_REPO}/web:latest mobile']
     waitFor: ['migrate']
   - id: push-web
     name: gcr.io/cloud-builders/docker
-    args: ['push', '${_REPO}/web:$COMMIT_SHA']
+    args: ['push', '--all-tags', '${_REPO}/web']
   - id: deploy-web
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
@@ -47,3 +49,5 @@ availableSecrets:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  # Default e2-medium is slow for `tsc` and the Expo web export.
+  machineType: E2_HIGHCPU_8
