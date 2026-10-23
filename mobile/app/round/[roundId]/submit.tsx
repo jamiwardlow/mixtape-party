@@ -115,6 +115,24 @@ export default function SubmitTrack() {
     );
   }
 
+  const commentField = (
+    <>
+        <TapeInput
+          placeholder="Add a comment (optional) — hidden until results"
+          value={comment}
+          onChangeText={(text) => {
+            setComment(text);
+            setCommentSaved(false);
+          }}
+          maxLength={500}
+          multiline
+        />
+        {current && (
+          <TapeButton title={commentSaved ? 'Saved' : 'Save'} onPress={saveComment} disabled={submitting} variant="secondary" />
+        )}
+    </>
+  );
+
   return (
     <Screen label={title}>
       {/* Outside the FlatList, so it stays on screen however long the results get. */}
@@ -152,31 +170,23 @@ export default function SubmitTrack() {
           );
         })}
       </View>
-      <TapeInput
-        placeholder="Add a comment (optional) — hidden until results"
-        value={comment}
-        onChangeText={(text) => {
-          setComment(text);
-          setCommentSaved(false);
-        }}
-        maxLength={500}
-        multiline
-      />
-      {current && (
-        <TapeButton title={commentSaved ? 'Saved' : 'Save'} onPress={saveComment} disabled={submitting} variant="secondary" />
-      )}
       <Sprocket />
       {!service ? (
-        <BodyText>Pick a service to submit from.</BodyText>
+        <>
+          <BodyText>Pick a service to submit from.</BodyText>
+          {commentField}
+        </>
       ) : service === 'bandcamp' ? (
         <>
           <TapeInput placeholder="Bandcamp track/album URL" value={url} onChangeText={setUrl} />
+          {commentField}
           <TapeButton title={submitting ? 'Submitting…' : 'Submit'} onPress={() => submitTrack({ url })} disabled={submitting || !url.trim()} />
         </>
       ) : (
         <>
           <TapeInput placeholder="Search for a track" value={query} onChangeText={setQuery} />
           <TapeButton title={searching ? 'Searching…' : 'Search'} onPress={search} disabled={searching || !query.trim()} variant="secondary" />
+          {commentField}
           {searching && <ReelSpinner />}
           <FlatList
             data={results}
