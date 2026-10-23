@@ -40,8 +40,8 @@ describe('service chips', () => {
   it('offers both services without asking what the player has linked', async () => {
     await render(<SubmitTrack />);
 
-    expect(screen.getByText('YouTube Music')).toBeTruthy();
-    expect(screen.getByText('Bandcamp')).toBeTruthy();
+    expect(screen.getByText('Search YouTube Music')).toBeTruthy();
+    expect(screen.getByText('Paste a link from Bandcamp')).toBeTruthy();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -59,7 +59,7 @@ describe('search and submit', () => {
   it('searches the chosen service and lists what comes back', async () => {
     await render(<SubmitTrack />);
 
-    await fireEvent.press(screen.getByText('YouTube Music'));
+    await fireEvent.press(screen.getByText('Search YouTube Music'));
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
 
@@ -73,7 +73,7 @@ describe('search and submit', () => {
   it('submits a search result under the service it came from', async () => {
     await render(<SubmitTrack />);
 
-    await fireEvent.press(screen.getByText('YouTube Music'));
+    await fireEvent.press(screen.getByText('Search YouTube Music'));
     await fireEvent.changeText(screen.getByPlaceholderText(/Add a comment/), 'my fave');
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
@@ -94,7 +94,7 @@ describe('search and submit', () => {
     (fetch as jest.Mock).mockResolvedValue(new Response(JSON.stringify({ error: 'search unavailable' }), { status: 503 }));
     await render(<SubmitTrack />);
 
-    await fireEvent.press(screen.getByText('YouTube Music'));
+    await fireEvent.press(screen.getByText('Search YouTube Music'));
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
 
@@ -104,7 +104,7 @@ describe('search and submit', () => {
   it('still takes a pasted Bandcamp URL', async () => {
     await render(<SubmitTrack />);
 
-    await fireEvent.press(screen.getByText('Bandcamp'));
+    await fireEvent.press(screen.getByText('Paste a link from Bandcamp'));
     await fireEvent.changeText(
       screen.getByPlaceholderText('Bandcamp track/album URL'),
       'https://band.bandcamp.com/track/song',

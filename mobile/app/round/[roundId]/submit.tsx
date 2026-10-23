@@ -4,11 +4,15 @@ import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import type { ServiceName } from '../../../lib/rounds';
-import { SERVICE_META, useTheme } from '../../../lib/theme';
+import { useTheme } from '../../../lib/theme';
 import { BodyText, ErrorNote, JCard, Label, PressScale, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
+const BUTTON_LABEL: Record<ServiceName, string> = {
+  youtube_music: 'Search YouTube Music',
+  bandcamp: 'Paste a link from Bandcamp',
+};
 
 interface TrackResult {
   externalId: string;
@@ -164,7 +168,7 @@ export default function SubmitTrack() {
                 borderColor: active ? t.accent : t.hairline,
               }}
             >
-              <Label style={{ color: active ? t.accentInk : t.inkMuted }}>{SERVICE_META[s]?.label ?? s}</Label>
+              <Label style={{ color: active ? t.accentInk : t.inkMuted }}>{BUTTON_LABEL[s] ?? s}</Label>
             </PressScale>
           );
         })}
