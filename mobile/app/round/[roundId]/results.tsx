@@ -3,7 +3,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
-import { appleMusicLinkingSupported, isAppleMusicLinked } from '../../../lib/appleMusic';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { SERVICE_META } from '../../../lib/theme';
@@ -46,18 +45,15 @@ interface Results {
  */
 interface ServiceExport {
   service: ServiceName;
-  status: 'ok' | 'no_matches' | 'not_linked' | 'denied' | 'failed';
+  status: 'ok' | 'no_matches' | 'failed';
   playlistUrl: string | null;
 }
 
 /**
  * A line explaining a leg that produced no playlist, or null where there is nothing worth saying.
  *
- * `denied` is the only actionable one, and only on Apple Music. Apple refuses a library write both
- * from an account with no active subscription and from a stale or revoked link, and answers the
- * same either way -- so the copy names both and diagnoses neither. YouTube Music runs on one
- * app-owned account, so there is nothing there for a user to fix and the copy does not pretend
- * otherwise.
+ * YouTube Music runs on one app-owned account, so there is nothing for a user to fix and the copy
+ * does not pretend otherwise.
  */
 function exportProblem({ service, status }: ServiceExport): string | null {
   const name = SERVICE_META[service]?.label ?? service;
@@ -65,13 +61,9 @@ function exportProblem({ service, status }: ServiceExport): string | null {
   switch (status) {
     case 'no_matches':
       return `None of this round’s tracks were on ${name}.`;
-    case 'denied':
-      return service === 'apple_music'
-        ? `${name} wouldn’t save the playlist, and doesn’t say why. Most likely there’s no active Apple Music subscription on the account, or the link needs redoing in Settings.`
-        : retry;
     case 'failed':
       return retry;
-    // 'ok' has its link above, and 'not_linked' has the Link Apple Music card below.
+    // 'ok' has its link above.
     default:
       return null;
   }
@@ -79,7 +71,7 @@ function exportProblem({ service, status }: ServiceExport): string | null {
 
 export default function RoundResults() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
-  const { token, profile } = useSession();
+  const { token } = useSession();
   const [results, setResults] = useState<Results | null>(null);
   const [exports, setExports] = useState<ServiceExport[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -107,15 +99,6 @@ export default function RoundResults() {
       setExports(services);
     })();
   }, [token, roundId]);
-
-  // Apple Music is the only linkable service, and its playlists are created under the user's own
-  // library token (#70) -- so an unlinked account gets no playlist and, until now, no hint why.
-  // Read off the session profile rather than asking the API again.
-  //
-  // Withheld until the profile arrives (null while /accounts/me is in flight, which outlives the
-  // results fetch) or a linked user watches the prompt flash and vanish. Web-only, because the
-  // /settings it points at can only link there -- on native the button would be a dead end.
-  const promptAppleMusic = appleMusicLinkingSupported && profile !== null && !isAppleMusicLinked(profile);
 
   const playlists = exports.flatMap((e) => (e.playlistUrl ? [{ ...e, playlistUrl: e.playlistUrl }] : []));
   const problems = exports.flatMap((e) => {
@@ -165,16 +148,6 @@ export default function RoundResults() {
             {problems.map((problem) => (
               <Label key={problem.service}>{problem.note}</Label>
             ))}
-          </JCard>
-        ) : null}
-        {promptAppleMusic ? (
-          // An offer, not a gate (#67): the results above render the same either way.
-          //
-          // ponytail: shows on every results view, with no way to dismiss it. Persisting a
-          // "not interested" flag is the upgrade if it turns out to nag.
-          <JCard>
-            <Label>Want this round’s playlist in your Apple Music library? Link your account.</Label>
-            <TapeButton title="Link Apple Music" onPress={() => router.push('/settings')} variant="secondary" />
           </JCard>
         ) : null}
         <FlatList

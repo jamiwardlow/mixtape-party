@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { fetchApi } from './api';
-import type { ServiceName } from './rounds';
 import { deviceStorage, type SessionStorage } from './storage';
 
 const TOKEN_KEY = 'session_token';
@@ -12,9 +11,6 @@ export interface Profile {
   /** Optional and nullable for good: sign-up doesn't require one and older accounts have none, so
    *  every screen that shows a player still needs its `?? 'A player'` fallback (#81). */
   displayName?: string | null;
-  /** Linked music services, as /accounts/me returns them. Optional because nothing validates the
-   *  response shape and linking is optional (#67) — only Apple Music is linkable today. */
-  services?: { service: ServiceName; serviceUserId: string; linkedAt: string }[];
 }
 
 interface SessionContextValue {

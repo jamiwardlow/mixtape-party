@@ -13,7 +13,6 @@ interface Track {
   title: string;
   artist: string;
   playback: { deepLink: string; webUrl?: string };
-  canPlayInApp: boolean;
   guessedAccountId: string | null;
 }
 
@@ -65,7 +64,7 @@ export default function GuessRound() {
             <JCard>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <ServiceBadge service={item.service} />
-                {item.canPlayInApp && <TapeButton title="Play" onPress={() => play(item)} variant="secondary" />}
+                <TapeButton title="Play" onPress={() => play(item)} variant="secondary" />
               </View>
               <BodyText>
                 {item.title} — {item.artist}

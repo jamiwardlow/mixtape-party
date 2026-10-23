@@ -2,12 +2,10 @@ import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import type { Pool } from 'pg';
 import type {
-  AppleMusicLinkableAdapter,
   EmbedOnlyMusicServiceAdapter,
   MusicServiceAdapter,
 } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
-import { createAppleMusicAuthRouter } from './routes/appleMusicAuth.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createExportRouter } from './routes/export.js';
 import { createGoogleAuthRouter, type GoogleProfile } from './routes/googleAuth.js';
@@ -30,7 +28,6 @@ export interface AppDeps {
   googleRedirectUri?: string;
   /** Injected so the callback — the most security-sensitive route here — is testable without Google. */
   googleTokenExchange: (code: string) => Promise<GoogleProfile>;
-  appleMusicAdapter: MusicServiceAdapter & AppleMusicLinkableAdapter;
   youtubeMusicAdapter: MusicServiceAdapter;
   // App-owned music.youtube.com session cookie shared by all users' exports — see youtubeMusicAdapter.ts.
   youtubeMusicCookie?: string;
@@ -59,7 +56,6 @@ export function createApp(deps: AppDeps): Express {
   app.use(createAccountsRouter(deps));
   app.use(createAuthRouter(deps));
   app.use(createGoogleAuthRouter(deps));
-  app.use(createAppleMusicAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
   app.use(createSubmissionsRouter(deps));
   app.use(createGuessingRouter(deps));

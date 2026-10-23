@@ -7,12 +7,11 @@ import {
   closeGuessingWindow as closeGuessingWindowFor,
   closeSubmissionWindow as closeSubmissionWindowFor,
   createLeagueWithPlayers,
-  linkFakeAppleMusic,
   round1,
   signUp,
 } from './testHelpers.js';
 import { FAKE_BANDCAMP_URL } from '../adapters/fakeAdapter.js';
-import { ServiceAccountError, ServiceUnavailableError } from '../adapters/types.js';
+import { ServiceUnavailableError } from '../adapters/types.js';
 
 let testDb: TestDb;
 
@@ -46,16 +45,16 @@ function exportRound(app: Express, roundId: string, token: string) {
 
 describe('POST /rounds/:roundId/export', () => {
   it('404s for an unknown round', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const { app } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, 4);
 
     const res = await exportRound(app, '00000000-0000-0000-0000-000000000000', members[0].token);
     expect(res.status).toBe(404);
   });
 
   it('rejects a requester who has not joined the league', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const { app } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
     const outsider = await signUp(app, 'export-outsider@example.com');
@@ -65,63 +64,50 @@ describe('POST /rounds/:roundId/export', () => {
   });
 
   it('rejects export before the guessing deadline passes', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await exportRound(app, roundId, members[0].token);
     expect(res.status).toBe(403);
   });
 
-  it('builds a playlist on apple_music (per-user linked) and youtube_music (shared server-held account), matching every non-bandcamp submission', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+  it('builds a youtube_music playlist on the shared server-held account, matching every non-bandcamp submission', async () => {
+    const { app, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
     const res = await exportRound(app, roundId, members[0].token);
 
     expect(res.status).toBe(200);
-    const byService: Map<string, { matchedCount: number; skipped: unknown[]; playlistExternalId: string }> = new Map(
-      res.body.services.map((s: { service: string }) => [s.service, s]),
-    );
-    expect(byService.has('apple_music')).toBe(true);
-    expect(byService.has('youtube_music')).toBe(true);
-
-    const appleMusicExport = byService.get('apple_music')!;
-    expect(appleMusicExport.matchedCount).toBe(4);
-    expect(appleMusicExport.skipped).toEqual([]);
-    expect(appleMusicExport.playlistExternalId).toBeTruthy();
-    expect(appleMusicAdapter.playlists.get(appleMusicExport.playlistExternalId)).toHaveLength(4);
+    expect(res.body.services).toHaveLength(1);
+    const youtubeMusicExport = res.body.services[0];
+    expect(youtubeMusicExport.service).toBe('youtube_music');
+    expect(youtubeMusicExport.status).toBe('ok');
+    expect(youtubeMusicExport.matchedCount).toBe(4);
+    expect(youtubeMusicExport.skipped).toEqual([]);
+    expect(youtubeMusicAdapter.playlists.get(youtubeMusicExport.playlistExternalId)).toHaveLength(4);
   });
 
-  it('returns a per-service playlist link built from the playlist id', async () => {
-    const { app, appleMusicAdapter } = buildApp({ youtubeMusicCookie: 'fake-cookie' });
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+  it('returns a playlist link built from the playlist id', async () => {
+    const { app } = buildApp({ youtubeMusicCookie: 'fake-cookie' });
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
     const res = await exportRound(app, roundId, members[0].token);
 
     expect(res.status).toBe(200);
-    const byService: Map<string, { playlistExternalId: string; playlistUrl: string }> = new Map(
-      res.body.services.map((s: { service: string }) => [s.service, s]),
-    );
-    const appleMusicExport = byService.get('apple_music')!;
-    expect(appleMusicExport.playlistUrl).toBe(
-      `https://music.apple.com/library/playlist/${appleMusicExport.playlistExternalId}`,
-    );
-    const youtubeMusicExport = byService.get('youtube_music')!;
+    const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(youtubeMusicExport.playlistUrl).toBe(
       `https://music.youtube.com/playlist?list=${youtubeMusicExport.playlistExternalId}`,
     );
   });
 
   it('shares one youtube_music playlist across every player, since they all export through the same server-held account', async () => {
-    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const { app, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
@@ -135,41 +121,20 @@ describe('POST /rounds/:roundId/export', () => {
     expect(youtubeMusicAdapter.playlists.size).toBe(1);
   });
 
-  it('has no playlist link for a service that matched nothing', async () => {
-    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    // Every submission is on apple_music and none of them match into YouTube Music's catalog, so
-    // no playlist gets created and there is nothing to link to.
-    youtubeMusicAdapter.match = async () => null;
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, members[0].token);
-
-    expect(res.status).toBe(200);
-    const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
-    expect(youtubeMusicExport.playlistExternalId).toBeNull();
-    expect(youtubeMusicExport.playlistUrl).toBeNull();
-    expect(youtubeMusicExport.status).toBe('no_matches');
-  });
-
   it('excludes youtube_music from export when no server-held cookie is configured', async () => {
-    const { app, appleMusicAdapter } = buildApp({ youtubeMusicCookie: '' });
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+    const { app } = buildApp({ youtubeMusicCookie: '' });
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
     const res = await exportRound(app, roundId, members[0].token);
 
     expect(res.status).toBe(200);
-    const services = res.body.services.map((s: { service: string }) => s.service);
-    expect(services).toContain('apple_music');
-    expect(services).not.toContain('youtube_music');
+    expect(res.body.services).toEqual([]);
   });
 
   it('never includes a bandcamp submission in an exported playlist', async () => {
-    const { app, appleMusicAdapter } = buildApp();
+    const { app, youtubeMusicAdapter } = buildApp();
     const host = await signUp(app, `host-${Date.now()}@example.com`);
     const created = await request(app)
       .post('/leagues')
@@ -177,16 +142,14 @@ describe('POST /rounds/:roundId/export', () => {
       .send({ name: 'Bandcamp League', seasonLength: 8, ...round1 });
     const roundId = created.body.round.id as string;
     const inviteCode = created.body.inviteCode as string;
-    await linkFakeAppleMusic(app, appleMusicAdapter, host.token);
 
     const bandcampPlayer = await signUp(app, `bandcamp-player-${Date.now()}@example.com`);
-    await linkFakeAppleMusic(app, appleMusicAdapter, bandcampPlayer.token);
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${bandcampPlayer.token}`);
 
     await request(app)
       .post(`/rounds/${roundId}/submissions`)
       .set('Authorization', `Bearer ${host.token}`)
-      .send({ externalId: 'track-host', title: 'A Fine Song', artist: 'Artist', service: 'apple_music' });
+      .send({ externalId: 'track-host', title: 'A Fine Song', artist: 'Artist', service: 'youtube_music' });
     await request(app)
       .post(`/rounds/${roundId}/submissions`)
       .set('Authorization', `Bearer ${bandcampPlayer.token}`)
@@ -197,113 +160,20 @@ describe('POST /rounds/:roundId/export', () => {
 
     const res = await exportRound(app, roundId, host.token);
     expect(res.status).toBe(200);
-    const appleMusicExport = res.body.services.find((s: { service: string }) => s.service === 'apple_music');
-    expect(appleMusicExport.matchedCount).toBe(1);
-    expect(appleMusicExport.skipped).toEqual([]); // bandcamp submission is excluded entirely, not skipped-with-fallback
-    const appendedTitles: string[] = appleMusicAdapter.playlists
-      .get(appleMusicExport.playlistExternalId)!
+    const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
+    expect(youtubeMusicExport.matchedCount).toBe(1);
+    expect(youtubeMusicExport.skipped).toEqual([]); // bandcamp submission is excluded entirely, not skipped-with-fallback
+    const appendedTitles: string[] = youtubeMusicAdapter.playlists
+      .get(youtubeMusicExport.playlistExternalId)!
       .map((t: { title: string }) => t.title);
     expect(appendedTitles).toEqual(['A Fine Song']);
-  });
-
-  it('skips a track that fails to match on a service with an open-in-app fallback, without blocking the rest', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const host = await signUp(app, `host-${Date.now()}@example.com`);
-    const created = await request(app)
-      .post('/leagues')
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({ name: 'No Match League', seasonLength: 8, ...round1 });
-    const roundId = created.body.round.id as string;
-    const inviteCode = created.body.inviteCode as string;
-    await linkFakeAppleMusic(app, appleMusicAdapter, host.token);
-    // Submitted (and matched) on YouTube Music, but forced to miss when the export tries to match it into Apple Music's catalog.
-    appleMusicAdapter.forcedNoMatchTitles.add('Unmatchable Song');
-
-    const other = await signUp(app, `player-${Date.now()}@example.com`);
-    await linkFakeAppleMusic(app, appleMusicAdapter, other.token);
-    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${other.token}`);
-
-    await request(app)
-      .post(`/rounds/${roundId}/submissions`)
-      .set('Authorization', `Bearer ${host.token}`)
-      .send({ service: 'youtube_music', externalId: 'track-host', title: 'Unmatchable Song', artist: 'Artist' });
-    await request(app)
-      .post(`/rounds/${roundId}/submissions`)
-      .set('Authorization', `Bearer ${other.token}`)
-      .send({ externalId: 'track-other', title: 'A Fine Song', artist: 'Artist', service: 'apple_music' });
-
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, host.token);
-    expect(res.status).toBe(200);
-    const appleMusicExport = res.body.services.find((s: { service: string }) => s.service === 'apple_music');
-    expect(appleMusicExport.matchedCount).toBe(1);
-    expect(appleMusicExport.skipped).toHaveLength(1);
-    expect(appleMusicExport.skipped[0].title).toBe('Unmatchable Song');
-    expect(appleMusicExport.skipped[0].playback.deepLink).toBeTruthy();
-  });
-
-  it('reports a service the requester has not linked, rather than dropping it from the response', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, members[0].token);
-
-    expect(res.status).toBe(200);
-    const appleMusicExport = res.body.services.find((s: { service: string }) => s.service === 'apple_music');
-    expect(appleMusicExport.status).toBe('not_linked');
-    expect(appleMusicExport.playlistUrl).toBeNull();
-  });
-
-  // The bug in #73: one broken link used to 500 the whole request, throwing away a playlist the
-  // other service had already built and persisted.
-  it('settles each service independently, so one failure cannot take the others down', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
-    appleMusicAdapter.createPlaylist = async () => {
-      throw new Error('apple music create playlist failed: 500');
-    };
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, members[0].token);
-
-    expect(res.status).toBe(200);
-    const byService: Map<string, { status: string; playlistUrl: string | null }> = new Map(
-      res.body.services.map((s: { service: string }) => [s.service, s]),
-    );
-    expect(byService.get('apple_music')!.status).toBe('failed');
-    expect(byService.get('apple_music')!.playlistUrl).toBeNull();
-    expect(byService.get('youtube_music')!.status).toBe('ok');
-    expect(byService.get('youtube_music')!.playlistUrl).toBeTruthy();
-  });
-
-  it('marks an account the service refused separately from a generic failure', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
-    appleMusicAdapter.createPlaylist = async () => {
-      throw new ServiceAccountError('apple_music', 'apple music create playlist rejected the account: 403');
-    };
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, members[0].token);
-
-    expect(res.status).toBe(200);
-    const appleMusicExport = res.body.services.find((s: { service: string }) => s.service === 'apple_music');
-    expect(appleMusicExport.status).toBe('denied');
   });
 
   // youtube_music runs on one server-held account, so its outage is app-wide -- still a failure, but
   // not one the requester can act on.
   it('reports an unreachable service as failed', async () => {
-    const { app, appleMusicAdapter, youtubeMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
+    const { app, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     youtubeMusicAdapter.createPlaylist = async () => {
       throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable');
     };
@@ -315,21 +185,21 @@ describe('POST /rounds/:roundId/export', () => {
     expect(res.status).toBe(200);
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(youtubeMusicExport.status).toBe('failed');
+    expect(youtubeMusicExport.playlistUrl).toBeNull();
   });
 
   it('runs the export once per round, reusing the same playlist on a repeat request', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 4);
-    await linkFakeAppleMusic(app, appleMusicAdapter, members[0].token);
+    const { app, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
 
     const first = await exportRound(app, roundId, members[0].token);
     const second = await exportRound(app, roundId, members[0].token);
 
-    const firstAppleMusic = first.body.services.find((s: { service: string }) => s.service === 'apple_music');
-    const secondAppleMusic = second.body.services.find((s: { service: string }) => s.service === 'apple_music');
-    expect(secondAppleMusic.playlistExternalId).toBe(firstAppleMusic.playlistExternalId);
-    expect(appleMusicAdapter.playlists.size).toBe(1);
+    const firstExport = first.body.services.find((s: { service: string }) => s.service === 'youtube_music');
+    const secondExport = second.body.services.find((s: { service: string }) => s.service === 'youtube_music');
+    expect(secondExport.playlistExternalId).toBe(firstExport.playlistExternalId);
+    expect(youtubeMusicAdapter.playlists.size).toBe(1);
   });
 });

@@ -64,22 +64,13 @@ describe('migrate', () => {
       await db.teardown();
     });
 
-    it.each(['service_links', 'submissions', 'track_matches', 'round_exports'])(
+    it.each(['submissions', 'track_matches', 'round_exports'])(
       'deletes legacy spotify rows from %s',
       async (table) => {
         const { rows } = await db.pool.query(`SELECT * FROM ${table} WHERE service = 'spotify'`);
         expect(rows).toHaveLength(0);
       },
     );
-
-    it('rejects a new spotify service_links row', async () => {
-      await expect(
-        db.pool.query(
-          "INSERT INTO service_links (account_id, service, service_user_id, access_token) VALUES ($1, 'spotify', 'new-user', 'new-token')",
-          [accountId],
-        ),
-      ).rejects.toThrow(/violates check constraint/);
-    });
 
     it('rejects a new spotify submissions row', async () => {
       await expect(
@@ -105,13 +96,15 @@ describe('migrate', () => {
       ).rejects.toThrow(/violates check constraint/);
     });
 
-    it('still accepts a supported service on service_links', async () => {
+    it('drops service_links along with apple_music (0004)', async () => {
+      const { rows } = await db.pool.query("SELECT to_regclass('service_links') AS t");
+      expect(rows[0].t).toBeNull();
       await expect(
         db.pool.query(
-          "INSERT INTO service_links (account_id, service, service_user_id, access_token) VALUES ($1, 'bandcamp', 'new-user', 'new-token')",
-          [accountId],
+          "INSERT INTO submissions (round_id, account_id, service, external_id, title, artist) VALUES ($1, $2, 'apple_music', 'x', 'x', 'x')",
+          [roundId, accountId],
         ),
-      ).resolves.toBeDefined();
+      ).rejects.toThrow(/violates check constraint/);
     });
 
     it('is safe to run again', async () => {

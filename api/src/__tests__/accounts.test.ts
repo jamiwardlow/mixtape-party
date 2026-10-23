@@ -87,16 +87,6 @@ describe('POST /sessions', () => {
 });
 
 describe('GET /accounts/me', () => {
-  it('reports an empty services list for a new account with zero linked services', async () => {
-    const app = buildApp();
-    const signup = await request(app).post('/accounts').send({ email: 'fresh@example.com', password: 'password123' });
-
-    const res = await request(app).get('/accounts/me').set('Authorization', `Bearer ${signup.body.token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.services).toEqual([]);
-  });
-
   it('rejects requests without a valid session token', async () => {
     const app = buildApp();
     const res = await request(app).get('/accounts/me').set('Authorization', 'Bearer garbage');

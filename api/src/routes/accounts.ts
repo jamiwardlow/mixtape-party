@@ -130,19 +130,10 @@ async function sendProfile(pool: Pool, accountId: string, res: Response): Promis
     res.status(404).json({ error: 'account not found' });
     return;
   }
-  const linksResult = await pool.query<{ service: string; service_user_id: string; created_at: string }>(
-    'SELECT service, service_user_id, created_at FROM service_links WHERE account_id = $1',
-    [accountId],
-  );
   res.json({
     id: account.id,
     email: account.email,
     displayName: account.display_name,
-    services: linksResult.rows.map((row) => ({
-      service: row.service,
-      serviceUserId: row.service_user_id,
-      linkedAt: row.created_at,
-    })),
   });
 }
 

@@ -57,8 +57,7 @@ through React Native's untranspiled source.
 `api`'s unit tests need no local database — each file boots a throwaway embedded Postgres
 (`api/src/__tests__/embeddedPg.ts`). Integration tests call real third-party APIs; most need real
 credentials. The YouTube Music and Bandcamp contract tests run in CI, daily, via
-`.github/workflows/music-service-contract.yml` (one matrix leg per service). Apple Music's is
-excluded — it needs a Music User Token no environment holds.
+`.github/workflows/music-service-contract.yml` (one matrix leg per service).
 
 `embeddedPg.ts` owns port selection and the timeouts around cluster start/stop — read its comment
 before touching it. Getting that wrong surfaces as an entire unrelated test file failing at

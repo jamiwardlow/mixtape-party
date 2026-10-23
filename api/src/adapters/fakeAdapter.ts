@@ -1,6 +1,5 @@
 import {
   ServiceUnavailableError,
-  type AppleMusicLinkableAdapter,
   type EmbedOnlyMusicServiceAdapter,
   type MusicServiceAdapter,
   type PlaybackLaunchHandle,
@@ -20,15 +19,12 @@ export const SEARCH_UNAVAILABLE_QUERY = 'SEARCH_UNAVAILABLE';
  * In-memory stand-in for a real music-service adapter, used to exercise the
  * backend API (Seam 1) without hitting a real third-party service.
  */
-export class FakeMusicServiceAdapter implements MusicServiceAdapter, AppleMusicLinkableAdapter {
+export class FakeMusicServiceAdapter implements MusicServiceAdapter {
   private nextTrackId = 1;
   private nextPlaylistId = 1;
   readonly playlists = new Map<string, TrackResult[]>();
 
-  constructor(readonly service: ServiceName = 'apple_music') {}
-
-  /** Test hook: Music User Tokens this fake will accept, mapped to the profile they resolve to. */
-  readonly validMusicUserTokens = new Map<string, { serviceUserId: string }>();
+  constructor(readonly service: ServiceName = 'youtube_music') {}
 
   /** Test hook: titles that this specific adapter instance (i.e. this one service) will fail to match, to exercise cross-service export fallback. */
   readonly forcedNoMatchTitles = new Set<string>();
@@ -72,16 +68,6 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter, AppleMusicL
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `fake://play/${track.externalId}` };
-  }
-
-  async getDeveloperToken(): Promise<string> {
-    return 'fake-developer-token';
-  }
-
-  async linkMusicUserToken(musicUserToken: string): Promise<{ serviceUserId: string }> {
-    const profile = this.validMusicUserTokens.get(musicUserToken);
-    if (!profile) throw new Error('invalid_music_user_token');
-    return profile;
   }
 }
 

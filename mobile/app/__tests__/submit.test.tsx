@@ -37,10 +37,9 @@ function lastPost() {
 // The chip row used to be built from the player's linked services, which are always none -- so
 // the search branch below this never rendered and only Bandcamp was ever offered.
 describe('service chips', () => {
-  it('offers all three services without asking what the player has linked', async () => {
+  it('offers both services without asking what the player has linked', async () => {
     await render(<SubmitTrack />);
 
-    expect(screen.getByText('Apple Music')).toBeTruthy();
     expect(screen.getByText('YouTube Music')).toBeTruthy();
     expect(screen.getByText('Bandcamp')).toBeTruthy();
     expect(fetch).not.toHaveBeenCalled();
@@ -90,13 +89,12 @@ describe('search and submit', () => {
     });
   });
 
-  // Apple Music search dies without app-level MusicKit credentials, which the API reports as a
-  // 503. The player gets told, rather than staring at an empty result list.
+  // A search that dies reports a 503. The player gets told, rather than staring at an empty result list.
   it('says so when the service reports search unavailable', async () => {
     (fetch as jest.Mock).mockResolvedValue(new Response(JSON.stringify({ error: 'search unavailable' }), { status: 503 }));
     await render(<SubmitTrack />);
 
-    await fireEvent.press(screen.getByText('Apple Music'));
+    await fireEvent.press(screen.getByText('YouTube Music'));
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
 

@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
-import { FAKE_BANDCAMP_URL, FakeMusicServiceAdapter, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
+import { FAKE_BANDCAMP_URL, SEARCH_UNAVAILABLE_QUERY } from '../adapters/fakeAdapter.js';
 import { startTestDb, type TestDb } from './testDb.js';
-import { buildApp as sharedBuildApp, closeSubmissionWindow, linkFakeAppleMusic } from './testHelpers.js';
+import { buildApp as sharedBuildApp, closeSubmissionWindow } from './testHelpers.js';
 
 let testDb: TestDb;
 
@@ -35,7 +35,6 @@ const round1 = {
 
 async function createLeagueWithPlayer(
   app: Express,
-  appleMusicAdapter: FakeMusicServiceAdapter,
   roundOverrides: Partial<typeof round1> = {},
 ) {
   const host = await signUp(app, `host-${Date.now()}-${Math.random()}@example.com`);
@@ -46,7 +45,6 @@ async function createLeagueWithPlayer(
   const roundId = created.body.round.id as string;
 
   const player = await signUp(app, `player-${Date.now()}-${Math.random()}@example.com`);
-  await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
   await request(app)
     .post(`/leagues/invite/${created.body.inviteCode}/join`)
     .set('Authorization', `Bearer ${player.token}`);
@@ -76,21 +74,6 @@ describe('GET /search', () => {
       .query({ q: 'never gonna give you up' })
       .set('Authorization', `Bearer ${host.token}`);
     expect(res.status).toBe(400);
-  });
-
-  it('searches Apple Music catalog when service=apple_music', async () => {
-    const { app } = buildApp();
-    const host = await signUp(app, 'searcher3@example.com');
-
-    const res = await request(app)
-      .get('/search')
-      .query({ q: 'never gonna give you up', service: 'apple_music' })
-      .set('Authorization', `Bearer ${host.token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.results).toEqual([
-      expect.objectContaining({ title: 'never gonna give you up', service: 'apple_music' }),
-    ]);
   });
 
   it('searches YouTube Music catalog when service=youtube_music', async () => {
@@ -139,12 +122,12 @@ describe('POST /rounds/:roundId/submissions', () => {
     externalId: 'fake-track-99',
     title: 'Never Gonna Give You Up',
     artist: 'Rick Astley',
-    service: 'apple_music',
+    service: 'youtube_music',
   };
 
   it('accepts a player submission without attributing it to them in the response', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -157,8 +140,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('stores a trimmed comment, clears it on a comment-less resubmit, and rejects an over-long one', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
     const post = (body: object) =>
       request(app).post(`/rounds/${roundId}/submissions`).set('Authorization', `Bearer ${player.token}`).send(body);
     const stored = async () =>
@@ -172,8 +155,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('edits only the comment of an existing track', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
     const auth = { Authorization: `Bearer ${player.token}` };
     const patch = (comment: string) =>
       request(app).patch(`/rounds/${roundId}/submissions/mine`).set(auth).send({ comment });
@@ -187,8 +170,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects requests without a session', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId } = await createLeagueWithPlayer(app);
 
     const res = await request(app).post(`/rounds/${roundId}/submissions`).send(track);
     expect(res.status).toBe(401);
@@ -205,8 +188,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   }
 
   it('replaces a player’s track when they submit again in the same round', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const first = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -237,8 +220,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('clears the old isrc when the replacement comes from a service that has none', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -256,8 +239,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a replacement once the submission deadline has passed', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -275,8 +258,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a submission from someone who has not joined the league', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId } = await createLeagueWithPlayer(app);
     const outsider = await signUp(app, 'outsider@example.com');
 
     const res = await request(app)
@@ -288,8 +271,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('404s for an unknown round', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post('/rounds/00000000-0000-0000-0000-000000000000/submissions')
@@ -300,8 +283,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a missing title or artist', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -312,8 +295,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a submission after the round submission deadline has passed', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter, {
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app, {
       submissionDeadline: '2020-01-10T00:00:00.000Z',
     });
 
@@ -326,8 +309,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a track that does not match the catalog', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -337,26 +320,9 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect(res.status).toBe(400);
   });
 
-  it('a player with both services linked chooses Apple Music for this submission', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
-    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
-
-    const res = await request(app)
-      .post(`/rounds/${roundId}/submissions`)
-      .set('Authorization', `Bearer ${player.token}`)
-      .send({ ...track, service: 'apple_music' });
-
-    expect(res.status).toBe(201);
-    expect(res.body.submissionId).toBeTruthy();
-
-    const row = await testDb.pool.query('SELECT service FROM submissions WHERE id = $1', [res.body.submissionId]);
-    expect(row.rows[0].service).toBe('apple_music');
-  });
-
   it('a player chooses YouTube Music for this submission', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -371,8 +337,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('a player submits a bandcamp track by pasting its URL', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -393,8 +359,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a bandcamp submission missing a url', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)
@@ -405,8 +371,8 @@ describe('POST /rounds/:roundId/submissions', () => {
   });
 
   it('rejects a bandcamp submission whose url cannot be resolved', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, player } = await createLeagueWithPlayer(app, appleMusicAdapter);
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
 
     const res = await request(app)
       .post(`/rounds/${roundId}/submissions`)

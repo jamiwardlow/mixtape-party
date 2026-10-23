@@ -1,26 +1,10 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
-import type { ServiceName } from '../adapters/types.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
 export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
-
-/**
- * Whether this guesser can play a track on its native service without leaving the app.
- * Bandcamp and YouTube Music play through a public embed that needs no personal account.
- * Apple Music's subscription gate is enforced natively via MusicSubscription.canPlayCatalogContent
- * at actual playback time, so a link is the most this backend can confirm for it.
- */
-async function canPlayInApp(pool: Pool, accountId: string, service: ServiceName): Promise<boolean> {
-  if (service === 'bandcamp' || service === 'youtube_music') return true;
-  const link = await pool.query('SELECT 1 FROM service_links WHERE account_id = $1 AND service = $2', [
-    accountId,
-    service,
-  ]);
-  return (link.rowCount ?? 0) > 0;
-}
 
 async function guessingGuardError(
   pool: Pool,
@@ -63,7 +47,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const submissions = await deps.pool.query<{
       id: string;
-      service: 'apple_music' | 'youtube_music' | 'bandcamp';
+      service: 'youtube_music' | 'bandcamp';
       external_id: string;
       title: string;
       artist: string;
@@ -80,23 +64,19 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const tracks = await Promise.all(
       submissions.rows.map(async (row) => {
-        const [playback, canPlay] = await Promise.all([
-          playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle({
-            externalId: row.external_id,
-            title: row.title,
-            artist: row.artist,
-            isrc: row.isrc ?? undefined,
-            service: row.service,
-          }),
-          canPlayInApp(deps.pool, accountId, row.service),
-        ]);
+        const playback = await playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle({
+          externalId: row.external_id,
+          title: row.title,
+          artist: row.artist,
+          isrc: row.isrc ?? undefined,
+          service: row.service,
+        });
         return {
           submissionId: row.id,
           service: row.service,
           title: row.title,
           artist: row.artist,
           playback,
-          canPlayInApp: canPlay,
           guessedAccountId: row.guessed_account_id,
           excludedFromExport: row.service === 'bandcamp',
         };

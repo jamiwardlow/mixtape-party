@@ -1,7 +1,6 @@
 import { createApp } from './app.js';
 import { createGoogleTokenExchange } from './routes/googleAuth.js';
 import { createPool } from './db/pool.js';
-import { AppleMusicAdapter } from './adapters/appleMusicAdapter.js';
 import { YouTubeMusicAdapter } from './adapters/youtubeMusicAdapter.js';
 import { BandcampAdapter } from './adapters/bandcampAdapter.js';
 import { ExpoWebPushChannel, NoopEmailChannel, ResendEmailChannel } from './notifications/channels.js';
@@ -12,13 +11,6 @@ if (!sessionSecret) throw new Error('SESSION_SECRET is not set');
 // No default: a fallback to localhost would silently email unreachable reset links from Cloud Run.
 const appBaseUrl = process.env.APP_BASE_URL;
 if (!appBaseUrl) throw new Error('APP_BASE_URL is not set');
-
-const appleMusicAdapter = new AppleMusicAdapter({
-  teamId: process.env.APPLE_MUSIC_TEAM_ID ?? '',
-  keyId: process.env.APPLE_MUSIC_KEY_ID ?? '',
-  privateKey: process.env.APPLE_MUSIC_PRIVATE_KEY ?? '',
-  storefront: process.env.APPLE_MUSIC_STOREFRONT,
-});
 
 // Google sign-in is optional, so a missing variable disables it rather than throwing. All three
 // or nothing, decided here: a half-configured client would still redirect users to Google and only
@@ -51,7 +43,6 @@ const app = createApp({
   googleClientId,
   googleRedirectUri,
   googleTokenExchange,
-  appleMusicAdapter,
   youtubeMusicAdapter,
   youtubeMusicCookie: process.env.YOUTUBE_MUSIC_COOKIE,
   bandcampAdapter,

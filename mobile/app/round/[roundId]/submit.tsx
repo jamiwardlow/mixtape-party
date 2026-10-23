@@ -8,8 +8,7 @@ import { SERVICE_META, useTheme } from '../../../lib/theme';
 import { BodyText, ErrorNote, JCard, Label, PressScale, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
-// A service_links row authorizes writing to a user's library, which only export cares about.
-const SERVICES: ServiceName[] = ['apple_music', 'youtube_music', 'bandcamp'];
+const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
 
 interface TrackResult {
   externalId: string;

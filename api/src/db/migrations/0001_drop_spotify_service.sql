@@ -1,3 +1,5 @@
+-- service_links statements removed when Apple Music was dropped (0004 drops the table, and a fresh
+-- database never creates it); databases that already ran this migration are unaffected.
 -- #51 removed 'spotify' from schema.sql's CHECK constraints, but on a database where
 -- service_links/submissions/track_matches/round_exports already exist, schema.sql's
 -- CREATE TABLE IF NOT EXISTS is a no-op and the old constraints (and any 'spotify' rows)
@@ -5,12 +7,8 @@
 -- throws), so legacy rows are deleted rather than rewritten to another service -- there is
 -- no service a Spotify submission or link correctly maps to.
 DELETE FROM submissions WHERE service = 'spotify';
-DELETE FROM service_links WHERE service = 'spotify';
 DELETE FROM track_matches WHERE service = 'spotify';
 DELETE FROM round_exports WHERE service = 'spotify';
-
-ALTER TABLE service_links DROP CONSTRAINT IF EXISTS service_links_service_check;
-ALTER TABLE service_links ADD CONSTRAINT service_links_service_check CHECK (service IN ('apple_music', 'youtube_music', 'bandcamp'));
 
 ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_service_check;
 ALTER TABLE submissions ADD CONSTRAINT submissions_service_check CHECK (service IN ('apple_music', 'youtube_music', 'bandcamp'));

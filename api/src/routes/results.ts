@@ -79,7 +79,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
 
     const submissionsResult = await deps.pool.query<{
       id: string;
-      service: 'apple_music' | 'youtube_music' | 'bandcamp';
+      service: 'youtube_music' | 'bandcamp';
       title: string;
       artist: string;
       comment: string | null;

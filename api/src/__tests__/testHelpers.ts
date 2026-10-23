@@ -31,7 +31,6 @@ export function buildApp(
     sweepSecret = 'test-sweep-secret',
   }: { youtubeMusicCookie?: string; googleConfigured?: boolean; appBaseUrl?: string; sweepSecret?: string | null } = {},
 ) {
-  const appleMusicAdapter = new FakeMusicServiceAdapter('apple_music');
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const bandcampAdapter = new FakeBandcampAdapter();
   const pushChannel = new FakePushChannel();
@@ -45,7 +44,6 @@ export function buildApp(
     googleClientId: googleConfigured ? 'test-google-client-id' : undefined,
     googleRedirectUri: googleConfigured ? 'https://api.test/auth/google/callback' : undefined,
     googleTokenExchange: googleTokenExchange.exchange,
-    appleMusicAdapter,
     youtubeMusicAdapter,
     youtubeMusicCookie,
     bandcampAdapter,
@@ -53,21 +51,12 @@ export function buildApp(
     emailChannel,
     sweepSecret: sweepSecret ?? undefined,
   });
-  return { app, appleMusicAdapter, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange };
+  return { app, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange };
 }
 
 export async function signUp(app: Express, email: string) {
   const res = await request(app).post('/accounts').send({ email, password: 'password123' });
   return { accountId: res.body.accountId as string, token: res.body.token as string };
-}
-
-export async function linkFakeAppleMusic(app: Express, appleMusicAdapter: FakeMusicServiceAdapter, token: string) {
-  const musicUserToken = `mut-${token}`;
-  appleMusicAdapter.validMusicUserTokens.set(musicUserToken, { serviceUserId: `apple-music-${token}` });
-  await request(app)
-    .post('/auth/apple-music/callback')
-    .set('Authorization', `Bearer ${token}`)
-    .send({ musicUserToken });
 }
 
 export const round1 = {
@@ -85,7 +74,7 @@ export function submitTrack(app: Express, roundId: string, member: { accountId: 
       externalId: `track-${roundId}-${member.accountId}`,
       title: `Song by ${member.accountId}`,
       artist: 'Artist',
-      service: 'apple_music',
+      service: 'youtube_music',
     });
 }
 
@@ -98,7 +87,6 @@ export function guess(app: Express, roundId: string, submissionId: string, token
 
 export async function createLeagueWithPlayers(
   app: Express,
-  appleMusicAdapter: FakeMusicServiceAdapter,
   playerCount: number,
   overrides: Partial<typeof round1 & { seasonLength: number }> = {},
 ) {
@@ -113,7 +101,6 @@ export async function createLeagueWithPlayers(
   const members = [host];
   for (let i = 1; i < playerCount; i++) {
     const player = await signUp(app, `player-${i}-${Date.now()}-${Math.random()}@example.com`);
-    await linkFakeAppleMusic(app, appleMusicAdapter, player.token);
     await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
     members.push(player);
   }

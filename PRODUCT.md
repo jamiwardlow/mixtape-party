@@ -23,7 +23,7 @@ A social music-discovery game built around anonymous submission + guessing, rath
 ## Operating Context
 
 - Rounds move through three phases: submission → guessing → results.
-- Players search and submit from any supported music service (Apple Music, YouTube Music, Bandcamp) without linking an account; Bandcamp is embed/URL-only (no search API). Linking is export-only: it stores the per-user credential Apple Music playlist export needs.
+- Players search and submit from any supported music service (YouTube Music, Bandcamp) without linking an account; Bandcamp is embed/URL-only (no search API).
 - Track playback during guessing depends on whether the guesser can play that track's service in-app (deep link) vs. web fallback.
 - Leagues are joined via invite code/link.
 - Cross-service playlist consolidation/export exists after rounds complete.
@@ -31,7 +31,7 @@ A social music-discovery game built around anonymous submission + guessing, rath
 
 ## Capabilities and Constraints
 
-- Three supported services, each with a distinct brand identity to surface per track: Apple Music, YouTube Music, Bandcamp.
+- Two supported services, each with a distinct brand identity to surface per track: YouTube Music, Bandcamp.
 - No official brand logo asset files are present in the repo yet — badges must be built from brand color + wordmark/monogram until real logo assets are supplied.
 - Mobile app currently has no design system, no NativeWind, and no dark/light theming — all screens use unstyled default React Native `Button`/`StyleSheet` primitives.
 

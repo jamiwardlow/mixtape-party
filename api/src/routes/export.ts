@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { adapterFor, playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { resolveMatch } from '../adapters/matchCache.js';
-import { ServiceAccountError, type PlaybackLaunchHandle, type ServiceName, type TrackResult } from '../adapters/types.js';
+import type { PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 
@@ -10,7 +10,7 @@ export interface ExportDeps extends AccountsDeps, AdapterRegistry {
 }
 
 type ExportableService = Exclude<ServiceName, 'bandcamp'>;
-const EXPORTABLE_SERVICES: ExportableService[] = ['apple_music', 'youtube_music'];
+const EXPORTABLE_SERVICES: ExportableService[] = ['youtube_music'];
 
 /**
  * Web address of an exported playlist, the only form of it a client can open (#69). Per-track
@@ -18,8 +18,6 @@ const EXPORTABLE_SERVICES: ExportableService[] = ['apple_music', 'youtube_music'
  * out of `round_exports` is all there is to build one from.
  */
 const PLAYLIST_URL: Record<ExportableService, (externalId: string) => string> = {
-  // A library playlist is addressed without a storefront, and only its owner can open it.
-  apple_music: (externalId) => `https://music.apple.com/library/playlist/${externalId}`,
   // UNLISTED under the shared server-held account, so this link plays for anyone who has it.
   youtube_music: (externalId) => `https://music.youtube.com/playlist?list=${externalId}`,
 };
@@ -41,15 +39,11 @@ interface SkippedTrack {
 }
 
 /**
- * What became of one service's leg of the export (#73). Without this, "the export blew up",
- * "nothing matched" and "you never linked" all reach the client as the same absent playlist url,
- * and the screen has nothing to say beyond silence.
- *
- * `denied` is deliberately not called "no subscription": it is what Apple answers to a library
- * write it refuses, and it will not say why (a lapsed subscription and a revoked Music User Token
- * look identical), so the name records the refusal rather than guessing at the cause.
+ * What became of one service's leg of the export (#73). Without this, "the export blew up" and
+ * "nothing matched" both reach the client as the same absent playlist url, and the screen has
+ * nothing to say beyond silence.
  */
-type ExportStatus = 'ok' | 'no_matches' | 'not_linked' | 'denied' | 'failed';
+type ExportStatus = 'ok' | 'no_matches' | 'failed';
 
 interface ServiceExport {
   service: ExportableService;
@@ -58,15 +52,6 @@ interface ServiceExport {
   playlistUrl: string | null;
   matchedCount: number;
   skipped: SkippedTrack[];
-}
-
-/**
- * Whether the service exports through one app-held account rather than a per-user link. Everything
- * that differs between the two -- who the playlist belongs to, whether a missing token is the
- * user's problem -- keys off this one fact, so it is named once rather than re-derived per site.
- */
-function isAppOwned(service: ExportableService): boolean {
-  return service === 'youtube_music';
 }
 
 /** A leg that produced no playlist, for any of the reasons that can end one: there is no link to give. */
@@ -85,15 +70,14 @@ async function exportForService(
 ): Promise<ServiceExport> {
   const adapter = adapterFor(deps, service);
 
-  // An app-owned service's playlist belongs to the round rather than the player: whoever opens the
-  // results first builds it and every other player links to that same playlist. Keyed per-account, a
-  // four-player round would instead build four identical unlisted playlists and hand out four links.
-  const sharedAcrossAccounts = isAppOwned(service);
+  // The playlist belongs to the round rather than the player: whoever opens the results first builds
+  // it under the one app-held account and every other player links to that same playlist. Keyed
+  // per-account, a four-player round would instead build four identical unlisted playlists.
   const existing = await deps.pool.query<{ playlist_external_id: string | null; matched_submission_ids: string[] }>(
     `SELECT playlist_external_id, matched_submission_ids FROM round_exports
-     WHERE round_id = $1 AND service = $2 AND ($3::boolean OR account_id = $4)
+     WHERE round_id = $1 AND service = $2
      ORDER BY created_at LIMIT 1`,
-    [roundId, service, sharedAcrossAccounts, accountId],
+    [roundId, service],
   );
 
   let playlistExternalId: string | null;
@@ -133,7 +117,7 @@ async function exportForService(
 
     // ponytail: no locking against two concurrent exports of the same round reaching this point
     // together -- the UNIQUE constraint keeps one account's *record* to one row, but a genuine race
-    // (or two players racing on a shared-account service) could still create two playlists upstream.
+    // (or two players racing on the shared account) could still create two playlists upstream.
     // Add a per-round+service advisory lock if double-exports show up in practice.
     await deps.pool.query(
       `INSERT INTO round_exports (round_id, account_id, service, playlist_external_id, matched_submission_ids)
@@ -195,14 +179,8 @@ export function createExportRouter(deps: ExportDeps): Router {
       [req.params.roundId],
     );
 
-    const linksResult = await deps.pool.query<{ service: ExportableService; access_token: string }>(
-      'SELECT service, access_token FROM service_links WHERE account_id = $1 AND service = $2',
-      [accountId, 'apple_music'],
-    );
-    const accessTokenByService = new Map<ExportableService, string>(
-      linksResult.rows.map((row) => [row.service, row.access_token]),
-    );
-    // youtube_music has no per-user link: every export uses the one server-held account cookie.
+    // Every export uses the one server-held YouTube Music account cookie.
+    const accessTokenByService = new Map<ExportableService, string>();
     if (deps.youtubeMusicCookie) {
       accessTokenByService.set('youtube_music', deps.youtubeMusicCookie);
     }
@@ -216,12 +194,9 @@ export function createExportRouter(deps: ExportDeps): Router {
     const services = await Promise.all(
       EXPORTABLE_SERVICES.flatMap((service): Array<ServiceExport | Promise<ServiceExport>> => {
         const accessToken = accessTokenByService.get(service);
-        if (!accessToken) {
-          // An app-owned service's token is the one server-held cookie, not a user link: a missing
-          // one is app config nobody signed in can act on, so it stays out of the response entirely
-          // rather than being reported to this user as something they failed to link.
-          return isAppOwned(service) ? [] : [noPlaylistExport(service, 'not_linked')];
-        }
+        // A missing cookie is app config nobody signed in can act on, so the service stays out of
+        // the response entirely.
+        if (!accessToken) return [];
         return [
           exportForService(
             deps,
@@ -233,16 +208,15 @@ export function createExportRouter(deps: ExportDeps): Router {
             submissionsResult.rows,
           ).catch((err: unknown) => {
             // Logged rather than returned: the message names internals, and the client's copy keys
-            // off the status. Nothing is persisted, so the next results view retries from scratch --
-            // which is what a user who fixes their subscription wants.
+            // off the status. Nothing is persisted, so the next results view retries from scratch.
             //
-            // ponytail: that retry is unbounded and not free. An account the service keeps refusing
+            // ponytail: that retry is unbounded and not free. A service that keeps refusing
             // re-hits it on every results view, and a leg that fails *between* createPlaylist and
-            // appendToPlaylist leaves an empty playlist behind in the user's library each time,
+            // appendToPlaylist leaves an empty playlist behind in the app account each time,
             // since no round_exports row records the one already made. Record an attempted_at on
             // round_exports (and reuse the orphaned playlist id) if either starts to bite.
             console.error(err);
-            return noPlaylistExport(service, err instanceof ServiceAccountError ? 'denied' : 'failed');
+            return noPlaylistExport(service, 'failed');
           }),
         ];
       }),

@@ -4,9 +4,7 @@
 # going unnoticed in production.
 #
 # One matrix leg per service, so a failure names the service that broke and files an issue with
-# that service's remediation steps. Apple Music has no leg: its contract test needs a Music User
-# Token that no environment holds (production only has the developer-token secrets). Add a leg
-# once it has a credential.
+# that service's remediation steps.
 #
 # Requires one repo secret: YOUTUBE_MUSIC_COOKIE — the same app-account cookie the API runs on
 # (see Secret Manager). Reusing it means this job also detects cookie expiry, the standing risk in

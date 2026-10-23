@@ -36,7 +36,6 @@ export function useTheme(): Theme {
 }
 
 export const SERVICE_META: Record<ServiceName, { label: string; color: string }> = {
-  apple_music: { label: 'Apple Music', color: '#FA2D48' },
   youtube_music: { label: 'YouTube Music', color: '#FF0000' },
   bandcamp: { label: 'Bandcamp', color: '#1DA0C3' },
 };
