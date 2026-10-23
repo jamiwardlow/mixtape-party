@@ -6,11 +6,9 @@ import { fetchApi } from '../../../lib/api';
 import {
   PHASE_META,
   phaseLabel,
-  WAITING_ON_PLAYERS,
   nameOf,
   type Player,
   type RoundPhase,
-  waitingOnPlayers,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import {
@@ -40,7 +38,6 @@ interface OverviewRound {
   phase: RoundPhase;
   submittedCount: number;
   /** False while the league is too small to guess in, even though the clock says guessing. */
-  guessingOpen: boolean;
   /**
    * Optional because the server *omits* it while guessing is open: naming who has not submitted
    * narrows the pool. Its absence is the only signal this screen is allowed to branch on — the
@@ -69,14 +66,6 @@ interface Overview {
   winners: Score[];
   rounds: OverviewRound[];
 }
-
-/**
- * Guessing refuses to run below this (`api/src/routes/rounds.ts`), and until now a host
- * found that out only when the phase quietly did nothing. Duplicated rather than shared: there is
- * no module the API and the app both import, and a wrong number here under-promises rather than
- * breaking anything.
- */
-const MIN_PLAYERS = 4;
 
 export default function LeagueOverview() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -108,7 +97,6 @@ export default function LeagueOverview() {
   // The API marks exactly one round current, and keeps marking the last one between seasons.
   const current = rounds.find((round) => round.isCurrent);
   const iSubmitted = !!current?.submitters?.some((s) => s.accountId === profile?.id);
-  const shortBy = MIN_PLAYERS - members.length;
 
   return (
     <Screen label={league.name}>
@@ -138,20 +126,15 @@ export default function LeagueOverview() {
               guessingDeadline={new Date(current.guessingDeadline)}
               testID="current-round"
             />
-            {/* No way in until the league has MIN_PLAYERS: the guess screen 403s below it. */}
-            {waitingOnPlayers(current) ? (
-              <Label testID="current-round-cta-note">{WAITING_ON_PLAYERS}</Label>
-            ) : (
-              <TapeButton
-                title={phaseLabel(current.phase, iSubmitted)}
-                onPress={() =>
-                  router.push({
-                    pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
-                    params: current.phase === 'submission' && iSubmitted ? { roundId: current.id, edit: '1' } : { roundId: current.id },
-                  })
-                }
-              />
-            )}
+            <TapeButton
+              title={phaseLabel(current.phase, iSubmitted)}
+              onPress={() =>
+                router.push({
+                  pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
+                  params: current.phase === 'submission' && iSubmitted ? { roundId: current.id, edit: '1' } : { roundId: current.id },
+                })
+              }
+            />
           </JCard>
         )}
 
@@ -243,11 +226,6 @@ export default function LeagueOverview() {
         <Sprocket />
         <JCard>
           <BodyText>Invite code: {league.inviteCode}</BodyText>
-          {shortBy > 0 && (
-            <Label testID="min-players-note">
-              {`${shortBy} more player${shortBy === 1 ? '' : 's'} needed before guessing can start`}
-            </Label>
-          )}
           <TapeButton
             title="Share invite"
             onPress={() =>

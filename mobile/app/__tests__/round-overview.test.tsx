@@ -31,7 +31,6 @@ const submissionRound = {
   guessingDeadline: at(7),
   phase: 'submission',
   submittedCount: 3,
-  guessingOpen: false,
   submitters: [ada, bo, cy],
   guessedPlayers: [],
   you: { submitted: true, guessesRemaining: 2, submission: mine },
@@ -48,14 +47,13 @@ const guessingRound = (() => {
     submissionDeadline: at(-1),
     phase: 'guessing',
     submittedCount: 4,
-    guessingOpen: true,
     guessedPlayers: [ada],
     you: { submitted: true, guessesRemaining: 2, submission: mine },
   };
 })();
 
 /** Past the deadline with a track still missing: the clock says guessing, the playlist disagrees. */
-const stillCollectingRound = { ...guessingRound, submittedCount: 3, guessingOpen: false };
+const stillCollectingRound = { ...guessingRound, submittedCount: 3 };
 
 const resultsRound = {
   ...submissionRound,
@@ -63,7 +61,6 @@ const resultsRound = {
   guessingDeadline: at(-7),
   phase: 'results',
   submittedCount: 4,
-  guessingOpen: false,
   submitters: roster,
   guessedPlayers: roster,
   you: { submitted: true, guessesRemaining: 0, submission: mine },
@@ -135,14 +132,6 @@ it('names nobody as a submitter once guessing opens, but still counts them', asy
     expect(screen.queryByText(player.displayName)).toBeNull();
   }
   expect(screen.getByTestId('submitted-count').props.children).toBe('3 tracks in');
-});
-
-// A round nobody can guess on must not offer the way in — the guess screen would 403 (too few players).
-it('says it needs four players, with no CTA, while the league is too small to guess', async () => {
-  await show(stillCollectingRound);
-
-  expect(screen.getByTestId('round-phase').props.children).toBe('Needs 4 players to guess');
-  expect(screen.queryByText('Guess the submitters')).toBeNull();
 });
 
 // Who has answered, never what they answered — safe in every phase.

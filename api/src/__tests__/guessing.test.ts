@@ -119,17 +119,6 @@ describe('GET /rounds/:roundId/guessing', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rejects guessing when the round has fewer than 4 players', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, appleMusicAdapter, 3);
-    await closeSubmissionWindow(roundId);
-
-    const res = await request(app)
-      .get(`/rounds/${roundId}/guessing`)
-      .set('Authorization', `Bearer ${members[0].token}`);
-    expect(res.status).toBe(403);
-  });
-
   it('flags a bandcamp track as excluded from export and still resolves its playback handle', async () => {
     const { app, appleMusicAdapter } = buildApp();
     const host = await signUp(app, `host-${Date.now()}@example.com`);
@@ -363,18 +352,5 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
       .set('Authorization', `Bearer ${members[0].token}`)
       .send({ guessedAccountId: outsider.accountId });
     expect(res.status).toBe(400);
-  });
-
-  it('rejects guessing when the round has fewer than 4 players', async () => {
-    const { app, appleMusicAdapter } = buildApp();
-    const { roundId, members, submissions } = await createLeagueWithPlayers(app, appleMusicAdapter, 3);
-    await closeSubmissionWindow(roundId);
-    const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
-
-    const res = await request(app)
-      .post(`/rounds/${roundId}/submissions/${target.submissionId}/guesses`)
-      .set('Authorization', `Bearer ${members[0].token}`)
-      .send({ guessedAccountId: members[1].accountId });
-    expect(res.status).toBe(403);
   });
 });

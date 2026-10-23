@@ -5,12 +5,10 @@ import { fetchApi } from '../../../lib/api';
 import {
   PHASE_META,
   phaseLabel,
-  WAITING_ON_PLAYERS,
   nameOf,
   type Player,
   type RoundPhase,
   type ServiceName,
-  waitingOnPlayers,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton } from '../../../lib/ui';
@@ -26,7 +24,6 @@ interface RoundDetail {
   phase: RoundPhase;
   submittedCount: number;
   /** False while the league is too small to guess in, even though the clock says guessing. */
-  guessingOpen: boolean;
   /**
    * Optional because the server *omits* it while guessing is open: naming who has not submitted
    * narrows the pool. Its absence is the only signal this screen may branch on — the phase is
@@ -103,7 +100,7 @@ export default function RoundOverview() {
             testID="round"
           />
           <Label testID="round-phase">
-            {waitingOnPlayers(round) ? WAITING_ON_PLAYERS : PHASE_STATUS[round.phase]}
+            {PHASE_STATUS[round.phase]}
           </Label>
         </JCard>
 
@@ -149,18 +146,15 @@ export default function RoundOverview() {
           )}
         </JCard>
 
-        {/* Nothing to tap: the guess screen 403s below MIN_PLAYERS. */}
-        {!waitingOnPlayers(round) && (
-          <TapeButton
-            title={phaseLabel(round.phase, !!round.you.submission)}
-            onPress={() =>
-              router.push({
-                pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
-                params: round.phase === 'submission' && round.you.submission ? { roundId: round.id, edit: '1' } : { roundId: round.id },
-              })
-            }
-          />
-        )}
+        <TapeButton
+          title={phaseLabel(round.phase, !!round.you.submission)}
+          onPress={() =>
+            router.push({
+              pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
+              params: round.phase === 'submission' && round.you.submission ? { roundId: round.id, edit: '1' } : { roundId: round.id },
+            })
+          }
+        />
       </ScrollView>
       <TapeButton
         title={`Back to ${leagueName}`}

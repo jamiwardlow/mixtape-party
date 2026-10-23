@@ -29,7 +29,6 @@ const round1 = {
   guessingDeadline: at(-7),
   phase: 'results',
   submittedCount: 4,
-  guessingOpen: false,
   submitters: roster,
   guessedPlayers: [ada, bo],
   you: { submitted: true, guessesRemaining: 0 },
@@ -45,7 +44,6 @@ const round3 = {
   guessingDeadline: at(21),
   phase: 'submission',
   submittedCount: 0,
-  guessingOpen: false,
   submitters: [],
   guessedPlayers: [],
   you: { submitted: false, guessesRemaining: 0 },
@@ -86,7 +84,6 @@ const submissionRound = {
   guessingDeadline: at(7),
   phase: 'submission',
   submittedCount: 3,
-  guessingOpen: false,
   submitters: [ada, bo, cy],
   guessedPlayers: [],
   you: { submitted: true, guessesRemaining: 0 },
@@ -104,13 +101,12 @@ const guessingRound = (() => {
     submissionDeadline: at(-1),
     phase: 'guessing',
     submittedCount: 4,
-    guessingOpen: true,
     guessedPlayers: [ada],
   };
 })();
 
 /** Past the deadline with a track still missing: the clock says guessing, the playlist disagrees. */
-const stillCollectingRound = { ...guessingRound, submittedCount: 3, guessingOpen: false };
+const stillCollectingRound = { ...guessingRound, submittedCount: 3 };
 
 const inRound = (round: unknown, overrides: Record<string, unknown> = {}) =>
   body({ rounds: [round1, round, round3], ...overrides });
@@ -216,22 +212,6 @@ it('names the winners once the season is over', async () => {
   expect(screen.getByTestId('standings-caption').props.children).toBe('Final standings');
 });
 
-// Guessing cannot run below MIN_PLAYERS at all, and the host currently discovers that only when
-// the phase silently does nothing. Say it where the invite already is.
-it('tells a short-handed league how many more players it needs', async () => {
-  await show(inRound(submissionRound, { members: roster.slice(0, 2).map((p) => ({ ...p, joinedAt: at(-30) })) }));
-
-  expect(screen.getByTestId('min-players-note').props.children).toBe(
-    '2 more players needed before guessing can start',
-  );
-});
-
-it('says nothing about the minimum once the league is big enough', async () => {
-  await show(inRound(submissionRound));
-
-  expect(screen.queryByTestId('min-players-note')).toBeNull();
-});
-
 it('gives the host the schedule editor and everyone else nothing to be refused by', async () => {
   await show(inRound(submissionRound, { league: { ...body().league, isHost: true } }));
   expect(screen.getByText('Edit the season schedule')).toBeTruthy();
@@ -249,14 +229,6 @@ it('routes the current round’s CTA into the screen its phase calls for', async
     pathname: '/round/[roundId]/guess',
     params: { roundId: 'r2' },
   });
-});
-
-// A round nobody can guess on must not offer the way in — the guess screen would 403 (too few players).
-it('replaces the guess CTA with a status while the league is too small to guess', async () => {
-  await show(inRound(stillCollectingRound));
-
-  expect(screen.getByTestId('current-round-cta-note').props.children).toBe('Needs 4 players to guess');
-  expect(screen.queryByText('Guess the submitters')).toBeNull();
 });
 
 it('links a finished round to its results and gives a future round no CTA', async () => {

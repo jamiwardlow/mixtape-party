@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
-import { phaseLabel, WAITING_ON_PLAYERS, type RoundPhase, waitingOnPlayers } from '../lib/rounds';
+import { phaseLabel, type RoundPhase } from '../lib/rounds';
 import { BodyText, HandText, JCard, Label, PressScale, ReelHoles, Screen, TapeButton } from '../lib/ui';
 import { useTheme } from '../lib/theme';
 
@@ -14,7 +14,6 @@ interface RoundSummary {
   theme: string | null;
   phase: RoundPhase;
   /** False while the league is too small to guess in, even though the clock says guessing. */
-  guessingOpen: boolean;
   submitted: boolean;
 }
 
@@ -73,11 +72,7 @@ export default function Home() {
               <HandText>{league.name}</HandText>
               {league.round && (
                 <Label>
-                  {`${league.round.theme ?? `Round ${league.round.number}`}: ${
-                    waitingOnPlayers(league.round)
-                      ? WAITING_ON_PLAYERS
-                      : phaseLabel(league.round.phase, league.round.submitted)
-                  }`}
+                  {`${league.round.theme ?? `Round ${league.round.number}`}: ${phaseLabel(league.round.phase, league.round.submitted)}`}
                 </Label>
               )}
             </JCard>

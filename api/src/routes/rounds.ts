@@ -106,19 +106,6 @@ export function isSeasonConcluded(league: LeagueInfo, current: CurrentRoundInfo 
 
 export type RoundPhase = 'submission' | 'guessing' | 'results';
 
-/** Guessing refuses to run below this -- see {@link isGuessingOpen}. */
-export const MIN_PLAYERS = 4;
-
-/**
- * Whether the guess screen is worth opening: the submission deadline has passed and the league is
- * big enough for guessing to mean anything. The playlist is final at the deadline -- submitting
- * closes there for good -- so a round missing a no-show's track is guessed on as it stands rather
- * than waiting for a track that can never arrive.
- */
-export function isGuessingOpen(phase: RoundPhase, memberCount: number): boolean {
-  return phase === 'guessing' && memberCount >= MIN_PLAYERS;
-}
-
 /** Derived from the two deadlines, never stored. The one phase rule, GET /leagues/mine included. */
 export function roundPhase(round: { submissionDeadline: string; guessingDeadline: string }, now: Date): RoundPhase {
   if (now < new Date(round.submissionDeadline)) return 'submission';
@@ -148,8 +135,8 @@ export function emptyRoundActivity(): RoundActivity {
  * `submitters` is present while submissions are open -- nobody is guessing yet and nagging the
  * stragglers is the point -- and again at results, where GET /rounds/:roundId/results already
  * names every submitter. It is *omitted by the server* during guessing, because naming who has
- * not submitted narrows the pool: with MIN_PLAYERS = 4, one missing name in a five-player round
- * is close to decisive about the fifth track. A field the client is trusted not to render is a
+ * not submitted narrows the pool: in a small round one missing name
+ * is close to decisive about the last track. A field the client is trusted not to render is a
  * field that leaks the first time someone opens devtools.
  *
  * `guessedPlayers` is safe in every phase: it says who has answered, never what they answered.
@@ -172,7 +159,6 @@ export function describeRound(
     ...round,
     phase,
     submittedCount: submitters.size,
-    guessingOpen: isGuessingOpen(phase, players.size),
     ...(phase === 'guessing'
       ? {}
       : {

@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import type { ServiceName } from '../adapters/types.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { MIN_PLAYERS, isLeagueMember, loadRound } from './rounds.js';
+import { isLeagueMember, loadRound } from './rounds.js';
 
 export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
 
@@ -22,13 +22,6 @@ async function canPlayInApp(pool: Pool, accountId: string, service: ServiceName)
   return (link.rowCount ?? 0) > 0;
 }
 
-async function countLeagueMembers(pool: Pool, leagueId: string): Promise<number> {
-  const result = await pool.query('SELECT count(*)::int AS count FROM league_members WHERE league_id = $1', [
-    leagueId,
-  ]);
-  return result.rows[0].count;
-}
-
 async function guessingGuardError(
   pool: Pool,
   leagueId: string,
@@ -40,9 +33,6 @@ async function guessingGuardError(
   }
   if (new Date(submissionDeadline) > new Date()) {
     return { status: 403, error: 'guessing has not opened yet for this round' };
-  }
-  if ((await countLeagueMembers(pool, leagueId)) < MIN_PLAYERS) {
-    return { status: 403, error: `this round needs at least ${MIN_PLAYERS} players before guessing can proceed` };
   }
   return null;
 }
