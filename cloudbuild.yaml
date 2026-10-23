@@ -6,41 +6,58 @@ substitutions:
   _API_URL: https://api.mixtape-party.com
 
 steps:
+  # Writes /workspace/.skip-api and .skip-web for services unchanged since the last deploy;
+  # every step below that belongs to a skipped service exits early. A failed build leaves the
+  # old commit deployed, so the next build re-covers its changes.
+  - id: detect
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args: ['scripts/detect-changes.sh']
+    env: ['REGION=${_REGION}']
+
   # Runs here, not in the runtime image: `migrate` uses tsx, a devDependency.
   - id: migrate
     name: node:22-slim
     dir: api
     entrypoint: bash
-    args: ['-c', 'npm ci --ignore-scripts && npm run migrate']
+    args: ['-c', '[ -e /workspace/.skip-api ] && exit 0; npm ci --ignore-scripts && npm run migrate']
     secretEnv: ['DATABASE_URL']
+    waitFor: ['detect']
 
   - id: build-api
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
-    args: ['-c', 'docker pull ${_REPO}/api:latest || true; docker build --cache-from ${_REPO}/api:latest -t ${_REPO}/api:$COMMIT_SHA -t ${_REPO}/api:latest api']
+    args: ['-c', '[ -e .skip-api ] && exit 0; docker pull ${_REPO}/api:latest || true; docker build --cache-from ${_REPO}/api:latest -t ${_REPO}/api:$COMMIT_SHA -t ${_REPO}/api:latest api']
     waitFor: ['migrate']
   - id: push-api
     name: gcr.io/cloud-builders/docker
-    args: ['push', '--all-tags', '${_REPO}/api']
+    entrypoint: bash
+    args: ['-c', '[ -e .skip-api ] && exit 0; docker push --all-tags ${_REPO}/api']
+    waitFor: ['build-api']
   # Secrets are already bound to the service (#93); deploy updates only the image.
   - id: deploy-api
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
-    args: ['run', 'deploy', 'mixtape-party-api', '--image', '${_REPO}/api:$COMMIT_SHA', '--region', '${_REGION}']
+    entrypoint: bash
+    args: ['-c', '[ -e .skip-api ] && exit 0; gcloud run deploy mixtape-party-api --image ${_REPO}/api:$COMMIT_SHA --region ${_REGION}']
+    waitFor: ['push-api']
 
   # EXPO_PUBLIC_API_URL is baked into the web bundle at build time.
   - id: build-web
     name: gcr.io/cloud-builders/docker
     entrypoint: bash
-    args: ['-c', 'docker pull ${_REPO}/web:latest || true; docker build --cache-from ${_REPO}/web:latest --build-arg EXPO_PUBLIC_API_URL=${_API_URL} -t ${_REPO}/web:$COMMIT_SHA -t ${_REPO}/web:latest mobile']
-    waitFor: ['migrate']
+    args: ['-c', '[ -e .skip-web ] && exit 0; docker pull ${_REPO}/web:latest || true; docker build --cache-from ${_REPO}/web:latest --build-arg EXPO_PUBLIC_API_URL=${_API_URL} -t ${_REPO}/web:$COMMIT_SHA -t ${_REPO}/web:latest mobile']
+    waitFor: ['detect']
   - id: push-web
     name: gcr.io/cloud-builders/docker
-    args: ['push', '--all-tags', '${_REPO}/web']
+    entrypoint: bash
+    args: ['-c', '[ -e .skip-web ] && exit 0; docker push --all-tags ${_REPO}/web']
+    waitFor: ['build-web']
+  # Waits for migrate too, so no deploy happens before the schema is current.
   - id: deploy-web
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
-    args: ['run', 'deploy', 'mixtape-party-web', '--image', '${_REPO}/web:$COMMIT_SHA', '--region', '${_REGION}']
+    entrypoint: bash
+    args: ['-c', '[ -e .skip-web ] && exit 0; gcloud run deploy mixtape-party-web --image ${_REPO}/web:$COMMIT_SHA --region ${_REGION}']
+    waitFor: ['push-web', 'migrate']
 
 availableSecrets:
   secretManager:
