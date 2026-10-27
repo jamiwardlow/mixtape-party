@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useLastNotificationResponse } from 'expo-notifications';
 
 /**
@@ -20,12 +20,15 @@ export function useOpenTappedNotification(enabled: boolean) {
   const screen = data?.screen === 'results' ? 'results' : 'guess';
   // Keyed on the response object, not roundId: a second tap on the same round is a new response,
   // while a sign-out/in re-render must not replay one already handled.
+  // On cold start the index route's <Redirect> is still replacing '/' with '/home'; a push issued
+  // before it settles gets replaced along with it, so wait until we've left '/'.
+  const atIndex = usePathname() === '/';
   const handled = useRef<typeof response>(null);
 
   useEffect(() => {
-    if (enabled && response && response !== handled.current && typeof roundId === 'string') {
+    if (enabled && !atIndex && response && response !== handled.current && typeof roundId === 'string') {
       handled.current = response;
       router.push({ pathname: `/round/[roundId]/${screen}`, params: { roundId, ...(focus && { focus }) } });
     }
-  }, [enabled, response, roundId, screen, focus]);
+  }, [enabled, atIndex, response, roundId, screen, focus]);
 }

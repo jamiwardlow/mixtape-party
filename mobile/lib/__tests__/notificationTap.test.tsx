@@ -5,8 +5,9 @@ import { useOpenTappedNotification } from '../notificationTap';
 const mockPush = jest.fn();
 let mockResponse: unknown = null;
 let mockThrows = false;
+let mockPathname = '/home';
 
-jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) } }));
+jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) }, usePathname: () => mockPathname }));
 jest.mock('expo-notifications', () => ({
   useLastNotificationResponse: () => {
     if (mockThrows) throw new Error('ExpoNotifications.getLastNotificationResponse is not available on web');
@@ -20,12 +21,23 @@ beforeEach(() => {
   mockPush.mockClear();
   mockResponse = null;
   mockThrows = false;
+  mockPathname = '/home';
 });
 
 it('opens the guess screen for a tapped notification with a round id', async () => {
   mockResponse = tapped({ roundId: 'round-1' });
   await renderHook(() => useOpenTappedNotification(true));
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/round/[roundId]/guess', params: { roundId: 'round-1' } });
+});
+
+it('waits out the index redirect on cold start before pushing', async () => {
+  mockResponse = tapped({ roundId: 'round-1' });
+  mockPathname = '/';
+  const { rerender } = await renderHook(() => useOpenTappedNotification(true));
+  expect(mockPush).not.toHaveBeenCalled();
+  mockPathname = '/home';
+  await rerender({});
+  expect(mockPush).toHaveBeenCalledTimes(1);
 });
 
 it('opens the results screen when the push says so', async () => {
