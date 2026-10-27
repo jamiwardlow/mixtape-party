@@ -8,10 +8,6 @@ Issues live in this repo's GitHub Issues (uses the `gh` CLI). See `docs/agents/i
 
 Default canonical labels: `ready-for-agent`, `ready-for-human`. See `docs/agents/triage-labels.md`.
 
-### Domain docs
-
-Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
-
 ## Working in this repo
 
 ### Layout
