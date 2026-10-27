@@ -26,6 +26,12 @@ it('opens the results screen when the push says so', async () => {
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/round/[roundId]/results', params: { roundId: 'round-1' } });
 });
 
+it('passes the focused comment or reply along to the results screen', async () => {
+  mockResponse = tapped({ roundId: 'round-1', screen: 'results', focus: 'reply-1' });
+  await renderHook(() => useOpenTappedNotification(true));
+  expect(mockPush).toHaveBeenCalledWith({ pathname: '/round/[roundId]/results', params: { roundId: 'round-1', focus: 'reply-1' } });
+});
+
 it('does nothing without a round id or while signed out', async () => {
   mockResponse = tapped({});
   await renderHook(() => useOpenTappedNotification(true));

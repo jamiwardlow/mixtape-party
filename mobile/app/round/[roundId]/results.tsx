@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import type { Player, ServiceName } from '../../../lib/rounds';
@@ -138,6 +138,8 @@ interface ThreadActions {
   editReply: (replyId: string, body: string) => Promise<void>;
   deleteReply: (replyId: string) => Promise<void>;
   react: (path: string, emoji: string) => Promise<void>;
+  /** Comment or reply a link or push pointed at; drawn with a marker. */
+  focus?: string;
 }
 
 /** A reply, the replies under it, and the controls its viewer is allowed: anyone replies, only its author edits or deletes. */
@@ -168,7 +170,13 @@ function ReplyNode({
 
   return (
     // Indent stops growing after a few levels so a long back-and-forth stays on screen.
-    <View style={{ marginLeft: depth < 4 ? 16 : 0, gap: 6 }}>
+    <View
+      style={{
+        marginLeft: depth < 4 ? 16 : 0,
+        gap: 6,
+        ...(actions.focus === reply.replyId && { borderLeftWidth: 3, paddingLeft: 6 }),
+      }}
+    >
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
         <HandText>{reply.mine ? 'You' : (reply.author.displayName ?? 'A player')}</HandText>
         <BodyText>{reply.body}</BodyText>
@@ -199,7 +207,7 @@ function ReplyNode({
 function CommentThread({ comment, actions }: { comment: Comment; actions: ThreadActions }) {
   const [reply, setReply] = useState('');
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 6, ...(actions.focus === comment.guessId && { borderLeftWidth: 3, paddingLeft: 6 }) }}>
       {/* Your own comment is already on screen in its editor. */}
       {comment.mine ? null : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
@@ -242,7 +250,8 @@ function MyComment({ saved, onSave }: { saved: string | null; onSave: (comment: 
 }
 
 export default function RoundResults() {
-  const { roundId } = useLocalSearchParams<{ roundId: string }>();
+  const { roundId, focus } = useLocalSearchParams<{ roundId: string; focus?: string }>();
+  const list = useRef<FlatList<Track>>(null);
   const { token } = useSession();
   const [results, setResults] = useState<Results | null>(null);
   const [exports, setExports] = useState<ServiceExport[]>([]);
@@ -272,7 +281,20 @@ export default function RoundResults() {
     editReply: (replyId, body) => act(`/replies/${replyId}`, 'PUT', { body }),
     deleteReply: (replyId) => act(`/replies/${replyId}`, 'DELETE'),
     react: (path, emoji) => act(path, 'POST', { emoji }),
+    focus,
   };
+
+  // Scroll to the track holding the linked comment/reply once, on first load -- not after each reaction.
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (!focus || !results || scrolled.current) return;
+    scrolled.current = true;
+    const index = results.tracks.findIndex(
+      (t) =>
+        t.submissionId === focus || t.comments.some((c) => c.guessId === focus || c.replies.some((r) => r.replyId === focus)),
+    );
+    if (index > 0) list.current?.scrollToIndex({ index });
+  }, [focus, results]);
 
   useEffect(() => {
     if (!token) return;
@@ -344,6 +366,9 @@ export default function RoundResults() {
           </JCard>
         ) : null}
         <FlatList
+          ref={list}
+          // ponytail: rows vary in height, so a miss (not yet laid out) just stays at the top.
+          onScrollToIndexFailed={() => {}}
           data={results?.tracks ?? []}
           keyExtractor={(item) => item.submissionId}
           ItemSeparatorComponent={Sprocket}

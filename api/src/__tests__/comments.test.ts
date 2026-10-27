@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { startTestDb, type TestDb } from './testDb.js';
 import {
@@ -23,7 +23,7 @@ afterAll(async () => {
 });
 
 async function setup() {
-  const { app } = buildTestApp();
+  const { app, pushChannel, emailChannel } = buildTestApp();
   const league = await createLeagueWithPlayers(app, 4);
   await closeSubmissionWindow(testDb.pool, league.roundId);
   const [a, b, c] = league.members;
@@ -38,7 +38,7 @@ async function setup() {
       .put(`/rounds/${league.roundId}/submissions/${track.submissionId}/guesses/comment`)
       .set(auth(m))
       .send({ comment });
-  return { app, ...league, a, b, c, track, auth, results, putComment };
+  return { app, pushChannel, emailChannel, ...league, a, b, c, track, auth, results, putComment };
 }
 
 function buildTestApp() {
@@ -159,5 +159,38 @@ describe('guess comments, replies and reactions (#101)', () => {
     await closeGuessingWindow(testDb.pool, roundId);
     expect((await request(app).post(path).set(auth(c)).send({ emoji: '🎸' })).body.reacted).toBe(true);
     expect((await results(c)).reactions).toEqual([{ emoji: '🎸', count: 1, mine: true }]);
+  });
+
+  it('pushes (never emails) whoever was reacted to, skips self-reactions and removals, and links emailed replies to the reply', async () => {
+    const { app, roundId, a, b, c, track, auth, pushChannel, emailChannel } = await setup();
+    const guessId = (
+      await request(app)
+        .post(`/rounds/${roundId}/submissions/${track.submissionId}/guesses`)
+        .set(auth(a))
+        .send({ guessedAccountId: b.accountId, comment: 'hm' })
+    ).body.guessId;
+    await closeGuessingWindow(testDb.pool, roundId);
+    await testDb.pool.query("INSERT INTO push_tokens (account_id, platform, token) VALUES ($1, 'expo', 'tok-a')", [a.accountId]);
+    const react = (path: string, who: { token: string }, emoji = '🔥') =>
+      request(app).post(path).set(auth(who)).send({ emoji });
+    const inbox = async (who: { accountId: string }, type: string) =>
+      (await testDb.pool.query('SELECT title, body FROM notifications WHERE account_id = $1 AND type = $2', [who.accountId, type])).rows;
+
+    await react(`/guesses/${guessId}/reactions`, c);
+    await vi.waitFor(async () => expect(await inbox(a, 'comment_reaction')).toEqual([{ title: expect.stringContaining('🔥'), body: 'hm' }]));
+    await vi.waitFor(() => expect(pushChannel.sent).toHaveLength(1));
+    expect(pushChannel.sent[0].payload.data).toEqual({ roundId, screen: 'results', focus: guessId });
+    expect(emailChannel.sent).toHaveLength(0);
+
+    await react(`/guesses/${guessId}/reactions`, c); // taking it back tells nobody
+    await react(`/guesses/${guessId}/reactions`, a, '👏'); // your own comment: nobody to tell
+    await react(`/submissions/${track.submissionId}/reactions`, c, '🎸');
+    await vi.waitFor(async () => expect(await inbox(b, 'comment_reaction')).toHaveLength(1));
+    expect(await inbox(a, 'comment_reaction')).toHaveLength(1);
+    expect(emailChannel.sent).toHaveLength(0);
+
+    const reply = await request(app).post(`/guesses/${guessId}/replies`).set(auth(b)).send({ body: 'it was me' });
+    await vi.waitFor(() => expect(emailChannel.sent).toHaveLength(1));
+    expect(emailChannel.sent[0].payload.link).toBe(`https://app.test/round/${roundId}/results?focus=${reply.body.replyId}`);
   });
 });

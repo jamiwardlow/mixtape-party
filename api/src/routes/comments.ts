@@ -8,6 +8,8 @@ import { isLeagueMember } from './rounds.js';
 export interface CommentsDeps extends AccountsDeps {
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
+  /** Origin of the web client; emailed links to a comment or reply start here. */
+  appBaseUrl: string;
 }
 
 const MAX_LENGTH = 500;
@@ -34,6 +36,19 @@ const REACTION_TARGETS: Record<ReactionColumn, string> = {
              JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE p.id = $1`,
 };
 
+// Who a reaction is for, and what they wrote: $1 is the target, $2 the reactor (for their name).
+const REACTOR = `(SELECT display_name FROM accounts WHERE id = $2) AS name`;
+const REACTION_OWNERS: Record<ReactionColumn, string> = {
+  submission_id: `SELECT s.account_id AS recipient, r.id AS round_id, r.league_id, s.title AS text, ${REACTOR}
+                  FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
+  guess_id: `SELECT g.guesser_account_id AS recipient, r.id AS round_id, r.league_id, g.comment AS text, ${REACTOR}
+             FROM guesses g JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE g.id = $1`,
+  reply_id: `SELECT p.account_id AS recipient, r.id AS round_id, r.league_id, p.body AS text, ${REACTOR}
+             FROM guess_replies p JOIN guesses g ON g.id = p.guess_id JOIN submissions s ON s.id = g.submission_id
+             JOIN rounds r ON r.id = s.round_id WHERE p.id = $1`,
+};
+const REACTION_LABEL: Record<ReactionColumn, string> = { submission_id: 'track', guess_id: 'comment', reply_id: 'reply' };
+
 /** Replies and reactions share the results' rule: league members only, once results are open. */
 async function guardError(pool: Pool, sql: string, id: string, accountId: string) {
   const round = (await pool.query<{ league_id: string; guessing_deadline: string }>(sql, [id])).rows[0];
@@ -57,6 +72,8 @@ function parseBody(value: unknown): { ok: true; body: string } | { ok: false; er
 export function createCommentsRouter(deps: CommentsDeps): Router {
   const router = Router();
   const authed = (req: Request) => (req as unknown as AuthedRequest).accountId;
+  // The results screen scrolls to and highlights `focus`, a track, comment or reply id.
+  const focusLink = (roundId: string, focus: string) => `${deps.appBaseUrl}/round/${roundId}/results?focus=${focus}`;
 
   // Replies to the guess's comment, or to another reply on it when parentReplyId is given.
   router.post('/guesses/:guessId/replies', requireAuth(deps), async (req, res) => {
@@ -102,6 +119,7 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
       )
     ).rows[0];
     const recipient = notifyId ?? target.guesser;
+    const focus = reply.rows[0].id;
     if (recipient === accountId) return;
     try {
       await notifyAccounts(
@@ -111,7 +129,8 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
         {
           title: `${target.name ?? 'Someone'} replied to your ${notifyId ? 'reply' : 'comment'}`,
           body: parsed.body,
-          data: { roundId: target.round_id, screen: 'results' },
+          link: focusLink(target.round_id, focus),
+          data: { roundId: target.round_id, screen: 'results', focus },
         },
         { roundId: target.round_id, leagueId: target.league_id },
       );
@@ -174,6 +193,32 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
       ]);
     }
     res.json({ reacted: !removed.rowCount });
+    if (removed.rowCount) return;
+
+    // Push only: a reaction is too light for an email. Sent after the response, like reply notifications.
+    try {
+      const owner = (
+        await deps.pool.query<{ recipient: string; round_id: string; league_id: string; text: string; name: string | null }>(
+          REACTION_OWNERS[column],
+          [id, accountId],
+        )
+      ).rows[0];
+      if (!owner || owner.recipient === accountId) return;
+      await notifyAccounts(
+        deps,
+        [owner.recipient],
+        'comment_reaction',
+        {
+          title: `${owner.name ?? 'Someone'} reacted ${emoji} to your ${REACTION_LABEL[column]}`,
+          body: owner.text,
+          data: { roundId: owner.round_id, screen: 'results', focus: id },
+        },
+        { roundId: owner.round_id, leagueId: owner.league_id },
+        { email: false },
+      );
+    } catch (err) {
+      console.error('reaction notification failed', err);
+    }
   }
 
   for (const [path, column] of [

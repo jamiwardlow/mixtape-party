@@ -26,6 +26,7 @@ export async function notifyAccounts(
   type: NotificationType,
   payload: NotificationPayload,
   refs: { roundId?: string; leagueId?: string },
+  { email = true }: { email?: boolean } = {},
 ): Promise<void> {
   if (accountIds.length === 0) return;
 
@@ -41,7 +42,7 @@ export async function notifyAccounts(
   );
   const settingsByAccount = new Map(settingsResult.rows.map((row) => [row.account_id, row]));
   const pushEnabledIds = accountIds.filter((id) => settingsByAccount.get(id)?.push_enabled ?? true);
-  const emailEnabledIds = accountIds.filter((id) => settingsByAccount.get(id)?.email_enabled ?? true);
+  const emailEnabledIds = email ? accountIds.filter((id) => settingsByAccount.get(id)?.email_enabled ?? true) : [];
 
   const sends: Promise<unknown>[] = [];
 
