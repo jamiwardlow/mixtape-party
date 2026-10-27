@@ -1,13 +1,18 @@
 import { Router } from 'express';
+import type { Pool } from 'pg';
 import { adapterFor, playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { resolveMatch } from '../adapters/matchCache.js';
 import type { PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadRound } from './rounds.js';
+import { isLeagueMember, loadRound, type RoundInfo } from './rounds.js';
 
-export interface ExportDeps extends AccountsDeps, AdapterRegistry {
+/** What building a round's playlists needs; the sweep builds them too (#99), with no request behind it. */
+export interface RoundExportDeps extends AdapterRegistry {
+  pool: Pool;
   youtubeMusicCookie?: string;
 }
+
+export interface ExportDeps extends AccountsDeps, RoundExportDeps {}
 
 type ExportableService = Exclude<ServiceName, 'bandcamp'>;
 const EXPORTABLE_SERVICES: ExportableService[] = ['youtube_music'];
@@ -60,7 +65,7 @@ function noPlaylistExport(service: ExportableService, status: ExportStatus): Ser
 }
 
 async function exportForService(
-  deps: ExportDeps,
+  deps: RoundExportDeps,
   roundId: string,
   accountId: string,
   service: ExportableService,
@@ -154,6 +159,67 @@ async function exportForService(
   };
 }
 
+/**
+ * Builds (once per round and service) the playlist of every non-Bandcamp submission, returning each
+ * service's leg. `accountId` only owns the round_exports row; the playlist itself is the round's.
+ */
+export async function buildRoundExports(
+  deps: RoundExportDeps,
+  roundId: string,
+  round: RoundInfo,
+  accountId: string,
+): Promise<ServiceExport[]> {
+  const submissionsResult = await deps.pool.query<SubmissionRow>(
+    `SELECT id, service, external_id, title, artist, isrc FROM submissions
+     WHERE round_id = $1 AND service != 'bandcamp' ORDER BY id`,
+    [roundId],
+  );
+
+  // Every export uses the one server-held YouTube Music account cookie.
+  const accessTokenByService = new Map<ExportableService, string>();
+  if (deps.youtubeMusicCookie) {
+    accessTokenByService.set('youtube_music', deps.youtubeMusicCookie);
+  }
+
+  // A round scheduled up front has no theme until the host names one, and "Round 3: null" is
+  // not a playlist anyone wants in their library.
+  const playlistName = `Mixtape Party — Round ${round.roundNumber}${round.theme ? `: ${round.theme}` : ''}`;
+  // Settled one service at a time so a single broken link cannot take the others down with it
+  // (#73). A bare Promise.all rejected the whole request, throwing away a playlist another
+  // service had already built and written to round_exports -- the client then saw only a 500.
+  const services = await Promise.all(
+    EXPORTABLE_SERVICES.flatMap((service): Array<ServiceExport | Promise<ServiceExport>> => {
+      const accessToken = accessTokenByService.get(service);
+      // A missing cookie is app config nobody signed in can act on, so the service stays out of
+      // the response entirely.
+      if (!accessToken) return [];
+      return [
+        exportForService(
+          deps,
+          roundId,
+          accountId,
+          service,
+          accessToken,
+          playlistName,
+          submissionsResult.rows,
+        ).catch((err: unknown) => {
+          // Logged rather than returned: the message names internals, and the client's copy keys
+          // off the status. Nothing is persisted, so the next sweep or export request retries from scratch.
+          //
+          // ponytail: that retry is unbounded and not free. A service that keeps refusing
+          // re-hits it on every results view, and a leg that fails *between* createPlaylist and
+          // appendToPlaylist leaves an empty playlist behind in the app account each time,
+          // since no round_exports row records the one already made. Record an attempted_at on
+          // round_exports (and reuse the orphaned playlist id) if either starts to bite.
+          console.error(err);
+          return noPlaylistExport(service, 'failed');
+        }),
+      ];
+    }),
+  );
+  return services;
+}
+
 export function createExportRouter(deps: ExportDeps): Router {
   const router = Router();
 
@@ -168,60 +234,12 @@ export function createExportRouter(deps: ExportDeps): Router {
       res.status(403).json({ error: 'join the league before exporting this round' });
       return;
     }
-    if (new Date(round.guessingDeadline) > new Date()) {
-      res.status(403).json({ error: 'export is not available until the guessing deadline passes' });
+    if (new Date(round.submissionDeadline) > new Date()) {
+      res.status(403).json({ error: 'export is not available until the submission deadline passes' });
       return;
     }
 
-    const submissionsResult = await deps.pool.query<SubmissionRow>(
-      `SELECT id, service, external_id, title, artist, isrc FROM submissions
-       WHERE round_id = $1 AND service != 'bandcamp' ORDER BY id`,
-      [req.params.roundId],
-    );
-
-    // Every export uses the one server-held YouTube Music account cookie.
-    const accessTokenByService = new Map<ExportableService, string>();
-    if (deps.youtubeMusicCookie) {
-      accessTokenByService.set('youtube_music', deps.youtubeMusicCookie);
-    }
-
-    // A round scheduled up front has no theme until the host names one, and "Round 3: null" is
-    // not a playlist anyone wants in their library.
-    const playlistName = `Mixtape Party — Round ${round.roundNumber}${round.theme ? `: ${round.theme}` : ''}`;
-    // Settled one service at a time so a single broken link cannot take the others down with it
-    // (#73). A bare Promise.all rejected the whole request, throwing away a playlist another
-    // service had already built and written to round_exports -- the client then saw only a 500.
-    const services = await Promise.all(
-      EXPORTABLE_SERVICES.flatMap((service): Array<ServiceExport | Promise<ServiceExport>> => {
-        const accessToken = accessTokenByService.get(service);
-        // A missing cookie is app config nobody signed in can act on, so the service stays out of
-        // the response entirely.
-        if (!accessToken) return [];
-        return [
-          exportForService(
-            deps,
-            req.params.roundId,
-            accountId,
-            service,
-            accessToken,
-            playlistName,
-            submissionsResult.rows,
-          ).catch((err: unknown) => {
-            // Logged rather than returned: the message names internals, and the client's copy keys
-            // off the status. Nothing is persisted, so the next results view retries from scratch.
-            //
-            // ponytail: that retry is unbounded and not free. A service that keeps refusing
-            // re-hits it on every results view, and a leg that fails *between* createPlaylist and
-            // appendToPlaylist leaves an empty playlist behind in the app account each time,
-            // since no round_exports row records the one already made. Record an attempted_at on
-            // round_exports (and reuse the orphaned playlist id) if either starts to bite.
-            console.error(err);
-            return noPlaylistExport(service, 'failed');
-          }),
-        ];
-      }),
-    );
-
+    const services = await buildRoundExports(deps, req.params.roundId, round, accountId);
     res.json({ services });
   });
 

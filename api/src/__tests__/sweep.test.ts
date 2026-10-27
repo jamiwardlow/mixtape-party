@@ -1,8 +1,9 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { startTestDb, type TestDb } from './testDb.js';
 import { buildApp, signUp } from './testHelpers.js';
 import { FakeEmailChannel, FakePushChannel } from '../notifications/fakeChannels.js';
+import { FakeBandcampAdapter, FakeMusicServiceAdapter } from '../adapters/fakeAdapter.js';
 import { runNotificationSweep } from '../notifications/sweep.js';
 
 let testDb: TestDb;
@@ -279,5 +280,86 @@ describe('runNotificationSweep', () => {
     expect(deps.pushChannel.sent).toHaveLength(1);
     expect(deps.pushChannel.sent[0].tokens).toEqual([{ platform: 'expo', token: 'tok-1' }]);
     expect(deps.emailChannel.sent).toHaveLength(1);
+  });
+
+  describe('playlist build', () => {
+    async function closedRound(service: string) {
+      const host = await createAccount(`host-${Math.random()}@example.com`);
+      const leagueId = await createLeague(host);
+      await addMember(leagueId, host);
+      const roundId = await createRound(
+        leagueId,
+        1,
+        new Date('2030-01-01T00:00:00Z'),
+        new Date('2000-01-01T00:00:00Z'),
+        new Date('2031-01-01T00:00:00Z'),
+      );
+      await testDb.pool.query(
+        `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist)
+         VALUES ($1, $2, $3, 'x', 'Song', 'Artist')`,
+        [roundId, host, service],
+      );
+      return roundId;
+    }
+
+    function playlistDeps() {
+      const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+      const deps = {
+        ...buildDeps(),
+        playlists: {
+          youtubeMusicAdapter,
+          bandcampAdapter: new FakeBandcampAdapter(),
+          youtubeMusicCookie: 'cookie',
+        },
+      };
+      return { deps, youtubeMusicAdapter };
+    }
+
+    const exportRows = (roundId: string) =>
+      testDb.pool.query<{ playlist_external_id: string | null }>(
+        'SELECT playlist_external_id FROM round_exports WHERE round_id = $1',
+        [roundId],
+      );
+
+    it('builds the playlist once after the submission deadline, while guessing is open', async () => {
+      const roundId = await closedRound('youtube_music');
+      const { deps, youtubeMusicAdapter } = playlistDeps();
+
+      await runNotificationSweep(deps);
+      await runNotificationSweep(deps);
+
+      const rows = await exportRows(roundId);
+      expect(rows.rows).toHaveLength(1);
+      expect(rows.rows[0].playlist_external_id).toBeTruthy();
+      expect(youtubeMusicAdapter.playlists.size).toBe(1);
+    });
+
+    it('builds nothing for a bandcamp-only round', async () => {
+      const roundId = await closedRound('bandcamp');
+      const { deps, youtubeMusicAdapter } = playlistDeps();
+
+      await runNotificationSweep(deps);
+
+      expect((await exportRows(roundId)).rows).toHaveLength(0);
+      expect(youtubeMusicAdapter.playlists.size).toBe(0);
+    });
+
+    it('retries on the next sweep when a build fails', async () => {
+      const roundId = await closedRound('youtube_music');
+      const { deps, youtubeMusicAdapter } = playlistDeps();
+      const createPlaylist = youtubeMusicAdapter.createPlaylist.bind(youtubeMusicAdapter);
+      youtubeMusicAdapter.createPlaylist = async () => {
+        throw new Error('boom');
+      };
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await runNotificationSweep(deps);
+      expect((await exportRows(roundId)).rows).toHaveLength(0);
+
+      youtubeMusicAdapter.createPlaylist = createPlaylist;
+      await runNotificationSweep(deps);
+      expect((await exportRows(roundId)).rows).toHaveLength(1);
+      log.mockRestore();
+    });
   });
 });

@@ -2,9 +2,11 @@ import { timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { runNotificationSweep } from '../notifications/sweep.js';
+import type { AdapterRegistry } from '../adapters/registry.js';
 import type { EmailChannel, PushChannel } from '../notifications/types.js';
 
-export interface SweepDeps {
+export interface SweepDeps extends AdapterRegistry {
+  youtubeMusicCookie?: string;
   pool: Pool;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
@@ -33,7 +35,12 @@ export function createSweepRouter(deps: SweepDeps): Router {
       res.status(401).json({ error: 'unauthorized' });
       return;
     }
-    await runNotificationSweep({ pool: deps.pool, pushChannel: deps.pushChannel, emailChannel: deps.emailChannel });
+    await runNotificationSweep({
+      pool: deps.pool,
+      pushChannel: deps.pushChannel,
+      emailChannel: deps.emailChannel,
+      playlists: deps,
+    });
     res.json({ ok: true });
   });
 

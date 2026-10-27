@@ -22,6 +22,7 @@ export default function GuessRound() {
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -34,6 +35,17 @@ export default function GuessRound() {
       const body = await res.json();
       setTracks(body.tracks);
       setPlayers(body.players);
+
+      // The sweep builds the playlist when submissions close; this reads its url back (the route
+      // builds it if the sweep hasn't yet). A failure or a Bandcamp-only round leaves no link.
+      try {
+        const exported = await fetchApi(`/rounds/${roundId}/export`, { method: 'POST', token });
+        if (!exported.ok) return;
+        const { services } = (await exported.json()) as { services: { playlistUrl: string | null }[] };
+        setPlaylistUrl(services.find((s) => s.playlistUrl)?.playlistUrl ?? null);
+      } catch {
+        // The link is a convenience; the guessing screen already works without it.
+      }
     })();
   }, [token, roundId]);
 
@@ -56,6 +68,7 @@ export default function GuessRound() {
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
       <Screen label="Guess the submitters">
+        {playlistUrl ? <TapeButton title="Open playlist" onPress={() => Linking.openURL(playlistUrl)} /> : null}
         <FlatList
           data={tracks ?? []}
           keyExtractor={(item) => item.submissionId}

@@ -63,13 +63,22 @@ describe('POST /rounds/:roundId/export', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rejects export before the guessing deadline passes', async () => {
+  it('rejects export before the submission deadline passes', async () => {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
+
+    const res = await exportRound(app, roundId, members[0].token);
+    expect(res.status).toBe(403);
+  });
+
+  it('serves the export while guessing is still open', async () => {
     const { app } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
 
     const res = await exportRound(app, roundId, members[0].token);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body.services[0].status).toBe('ok');
   });
 
   it('builds a youtube_music playlist on the shared server-held account, matching every non-bandcamp submission', async () => {

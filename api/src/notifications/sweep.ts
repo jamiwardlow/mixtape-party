@@ -1,10 +1,14 @@
 import type { Pool } from 'pg';
+import { buildRoundExports, type RoundExportDeps } from '../routes/export.js';
+import { loadRound } from '../routes/rounds.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
 export interface NotificationSweepDeps {
   pool: Pool;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
+  /** Adapters and cookie for building playlists (#99). Unset skips that step. */
+  playlists?: Omit<RoundExportDeps, 'pool'>;
 }
 
 // ponytail: a single fixed fraction for both reminder types, not configurable per league/round.
@@ -213,10 +217,32 @@ async function sweepSeasonConcluded(deps: NotificationSweepDeps, now: Date): Pro
   }
 }
 
+/**
+ * Builds each round's playlist as soon as submissions close, so players can open it while guessing.
+ * A round with no export row yet is due, so a build that threw (no row written) retries next sweep.
+ * Owned by the league host: round_exports needs an account, and the playlist is the round's anyway.
+ */
+async function sweepPlaylists(deps: NotificationSweepDeps, now: Date): Promise<void> {
+  if (!deps.playlists) return;
+  const due = await deps.pool.query<{ id: string; host_account_id: string }>(
+    `SELECT r.id, l.host_account_id FROM rounds r
+     JOIN leagues l ON l.id = r.league_id
+     WHERE r.submission_deadline <= $1
+       AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.service != 'bandcamp')
+       AND NOT EXISTS (SELECT 1 FROM round_exports e WHERE e.round_id = r.id)`,
+    [now.toISOString()],
+  );
+  for (const { id, host_account_id } of due.rows) {
+    const round = await loadRound(deps.pool, id);
+    if (round) await buildRoundExports({ pool: deps.pool, ...deps.playlists }, id, round, host_account_id);
+  }
+}
+
 /** Finds every due reminder/alert across all leagues and dispatches it, exactly once each. Safe to call repeatedly. */
 export async function runNotificationSweep(deps: NotificationSweepDeps, now: Date = new Date()): Promise<void> {
   await sweepSubmissionReminders(deps, now);
   await sweepGuessingReminders(deps, now);
   await sweepResultsReady(deps, now);
   await sweepSeasonConcluded(deps, now);
+  await sweepPlaylists(deps, now);
 }
