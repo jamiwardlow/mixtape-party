@@ -16,7 +16,33 @@ import {
   ServiceBadge,
   Sprocket,
   TapeButton,
+  TapeInput,
 } from '../../../lib/ui';
+
+interface Reaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
+}
+
+interface Reply {
+  replyId: string;
+  author: Player;
+  body: string;
+  reactions: Reaction[];
+}
+
+interface Comment {
+  guessId: string;
+  guesser: Player;
+  mine: boolean;
+  comment: string;
+  reactions: Reaction[];
+  replies: Reply[];
+}
+
+// Mirrors the API's REACTION_EMOJI.
+const REACTION_EMOJI = ['❤️', '😂', '🔥', '👏', '😮'];
 
 interface Track {
   submissionId: string;
@@ -26,6 +52,8 @@ interface Track {
   comment: string | null;
   submitter: Player;
   correctGuessers: Player[];
+  comments: Comment[];
+  yourGuess: { comment: string | null } | null;
 }
 
 interface Score extends Player {
@@ -69,6 +97,82 @@ function exportProblem({ service, status }: ServiceExport): string | null {
   }
 }
 
+/** Tap an emoji to react, tap again to take it back; counts for every emoji already in use. */
+function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onToggle: (emoji: string) => void }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+      {REACTION_EMOJI.map((emoji) => {
+        const reaction = reactions.find((r) => r.emoji === emoji);
+        return (
+          <TapeButton
+            key={emoji}
+            title={reaction ? `${emoji} ${reaction.count}${reaction.mine ? ' ✓' : ''}` : emoji}
+            onPress={() => onToggle(emoji)}
+            variant="secondary"
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+function CommentThread({
+  comment,
+  onReply,
+  onReact,
+}: {
+  comment: Comment;
+  onReply: (guessId: string, body: string) => Promise<void>;
+  onReact: (path: string, emoji: string) => Promise<void>;
+}) {
+  const [reply, setReply] = useState('');
+  return (
+    <View style={{ gap: 6 }}>
+      {/* Your own comment is already on screen in its editor. */}
+      {comment.mine ? null : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          <HandText>{comment.guesser.displayName ?? 'A player'}</HandText>
+          <BodyText>“{comment.comment}”</BodyText>
+        </View>
+      )}
+      <Reactions reactions={comment.reactions} onToggle={(e) => onReact(`/guesses/${comment.guessId}/reactions`, e)} />
+      {comment.replies.map((r) => (
+        <View key={r.replyId} style={{ marginLeft: 16, gap: 6 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            <HandText>{r.author.displayName ?? 'A player'}</HandText>
+            <BodyText>{r.body}</BodyText>
+          </View>
+          <Reactions reactions={r.reactions} onToggle={(e) => onReact(`/replies/${r.replyId}/reactions`, e)} />
+        </View>
+      ))}
+      <TapeInput placeholder="Reply" value={reply} onChangeText={setReply} maxLength={500} />
+      {reply.trim() ? (
+        <TapeButton
+          title="Send reply"
+          variant="secondary"
+          onPress={async () => {
+            await onReply(comment.guessId, reply);
+            setReply('');
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** Your own comment on a track you guessed, editable here for as long as the results are up. */
+function MyComment({ saved, onSave }: { saved: string | null; onSave: (comment: string) => Promise<void> }) {
+  const [draft, setDraft] = useState(saved ?? '');
+  return (
+    <View style={{ gap: 6 }}>
+      <TapeInput placeholder="Your comment on this track" value={draft} onChangeText={setDraft} maxLength={500} multiline />
+      {draft.trim() !== (saved ?? '') ? (
+        <TapeButton title="Save comment" variant="secondary" onPress={() => onSave(draft)} />
+      ) : null}
+    </View>
+  );
+}
+
 export default function RoundResults() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   const { token } = useSession();
@@ -76,15 +180,32 @@ export default function RoundResults() {
   const [exports, setExports] = useState<ServiceExport[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  async function loadResults(): Promise<boolean> {
+    if (!token) return false;
+    const res = await fetchApi(`/rounds/${roundId}/results`, { token });
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error ?? 'Results are not available for this round');
+      return false;
+    }
+    setResults(await res.json());
+    return true;
+  }
+
+  // Each comment action posts, then re-reads the results so counts and threads match the server.
+  async function act(path: string, method: string, body: object) {
+    if (!token) return;
+    await fetchApi(path, { method, token, body });
+    await loadResults();
+  }
+  const saveComment = (submissionId: string, comment: string) =>
+    act(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, 'PUT', { comment });
+  const reply = (guessId: string, body: string) => act(`/guesses/${guessId}/replies`, 'POST', { body });
+  const react = (path: string, emoji: string) => act(path, 'POST', { emoji });
+
   useEffect(() => {
     if (!token) return;
     (async () => {
-      const res = await fetchApi(`/rounds/${roundId}/results`, { token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Results are not available for this round');
-        return;
-      }
-      setResults(await res.json());
+      if (!(await loadResults())) return;
 
       // First view of the results is what triggers the export; the route builds each playlist once
       // per round, so a revisit -- or another player's first view -- reads back the same one. It can
@@ -173,6 +294,21 @@ export default function RoundResults() {
                   <Label>Nobody</Label>
                 )}
               </View>
+              {item.yourGuess ? (
+                <MyComment
+                  key={item.yourGuess.comment ?? ''}
+                  saved={item.yourGuess.comment}
+                  onSave={(comment) => saveComment(item.submissionId, comment)}
+                />
+              ) : null}
+              {item.comments.map((c) => (
+                <CommentThread
+                  key={c.guessId}
+                  comment={c}
+                  onReply={reply}
+                  onReact={react}
+                />
+              ))}
             </JCard>
           )}
         />

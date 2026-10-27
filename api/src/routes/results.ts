@@ -92,8 +92,10 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       submission_id: string;
       guesser_account_id: string;
       correct: boolean;
+      id: string;
+      comment: string | null;
     }>(
-      `SELECT g.submission_id, g.guesser_account_id, (g.guessed_account_id = s.account_id) AS correct
+      `SELECT g.id, g.comment, g.submission_id, g.guesser_account_id, (g.guessed_account_id = s.account_id) AS correct
        FROM guesses g
        JOIN submissions s ON s.id = g.submission_id
        WHERE s.round_id = $1`,
@@ -112,6 +114,48 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       correctGuessersBySubmission.set(guess.submission_id, existing);
     }
 
+    const guessIds = guessesResult.rows.map((g) => g.id);
+    const repliesResult = await deps.pool.query<{ id: string; guess_id: string; account_id: string; body: string; created_at: string }>(
+      'SELECT id, guess_id, account_id, body, created_at FROM guess_replies WHERE guess_id = ANY($1) ORDER BY created_at, id',
+      [guessIds],
+    );
+    const reactionsResult = await deps.pool.query<{ guess_id: string | null; reply_id: string | null; account_id: string; emoji: string }>(
+      'SELECT guess_id, reply_id, account_id, emoji FROM comment_reactions WHERE guess_id = ANY($1) OR reply_id = ANY($2)',
+      [guessIds, repliesResult.rows.map((r) => r.id)],
+    );
+    const reactionsFor = (targetId: string) => {
+      const counts = new Map<string, { emoji: string; count: number; mine: boolean }>();
+      for (const r of reactionsResult.rows) {
+        if ((r.guess_id ?? r.reply_id) !== targetId) continue;
+        const entry = counts.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+        entry.count += 1;
+        entry.mine ||= r.account_id === accountId;
+        counts.set(r.emoji, entry);
+      }
+      return [...counts.values()];
+    };
+    const playerOf = (id: string): Player => players.get(id) ?? { accountId: id, displayName: null };
+    const commentsBySubmission = new Map<string, unknown[]>();
+    for (const g of guessesResult.rows) {
+      if (!g.comment) continue;
+      const list = commentsBySubmission.get(g.submission_id) ?? [];
+      list.push({
+        guessId: g.id,
+        guesser: playerOf(g.guesser_account_id),
+        mine: g.guesser_account_id === accountId,
+        comment: g.comment,
+        reactions: reactionsFor(g.id),
+        replies: repliesResult.rows
+          .filter((r) => r.guess_id === g.id)
+          .map((r) => ({ replyId: r.id, author: playerOf(r.account_id), body: r.body, createdAt: r.created_at, reactions: reactionsFor(r.id) })),
+      });
+      commentsBySubmission.set(g.submission_id, list);
+    }
+
+    const yourGuessBySubmission = new Map(
+      guessesResult.rows.filter((g) => g.guesser_account_id === accountId).map((g) => [g.submission_id, { comment: g.comment }]),
+    );
+
     const tracks = submissionsResult.rows.map((row) => ({
       submissionId: row.id,
       service: row.service,
@@ -121,6 +165,8 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
       excludedFromExport: row.service === 'bandcamp',
+      comments: commentsBySubmission.get(row.id) ?? [],
+      yourGuess: yourGuessBySubmission.get(row.id) ?? null,
     }));
 
     res.json({ tracks, ...scoreboard([...players.values()], scores) });

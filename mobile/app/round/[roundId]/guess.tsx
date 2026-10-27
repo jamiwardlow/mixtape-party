@@ -5,7 +5,7 @@ import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton } from '../../../lib/ui';
+import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
@@ -14,6 +14,7 @@ interface Track {
   artist: string;
   playback: { deepLink: string; webUrl?: string };
   guessedAccountId: string | null;
+  comment: string | null;
 }
 
 export default function GuessRound() {
@@ -23,6 +24,8 @@ export default function GuessRound() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  // Per-track comment drafts, sent with the guess and editable (saved separately) after it.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -34,6 +37,7 @@ export default function GuessRound() {
       }
       const body = await res.json();
       setTracks(body.tracks);
+      setDrafts(Object.fromEntries(body.tracks.map((t: Track) => [t.submissionId, t.comment ?? ''])));
       setPlayers(body.players);
 
       // The sweep builds the playlist when submissions close; this reads its url back (the route
@@ -54,10 +58,23 @@ export default function GuessRound() {
     const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses`, {
       method: 'POST',
       token,
-      body: { guessedAccountId },
+      body: { guessedAccountId, comment: drafts[submissionId] },
     });
     if (res.ok) {
-      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId } : t)) ?? null);
+      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId, comment: drafts[submissionId]?.trim() || null } : t)) ?? null);
+    }
+  }
+
+  async function saveComment(submissionId: string) {
+    if (!token) return;
+    const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, {
+      method: 'PUT',
+      token,
+      body: { comment: drafts[submissionId] },
+    });
+    if (res.ok) {
+      const { comment } = await res.json();
+      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, comment } : t)) ?? null);
     }
   }
 
@@ -82,6 +99,16 @@ export default function GuessRound() {
               <BodyText>
                 {item.title} — {item.artist}
               </BodyText>
+              <TapeInput
+                placeholder="Add a comment (optional) — shown with the results"
+                value={drafts[item.submissionId] ?? ''}
+                onChangeText={(text) => setDrafts((prev) => ({ ...prev, [item.submissionId]: text }))}
+                maxLength={500}
+                multiline
+              />
+              {item.guessedAccountId && (drafts[item.submissionId] ?? '').trim() !== (item.comment ?? '') ? (
+                <TapeButton title="Save comment" onPress={() => saveComment(item.submissionId)} variant="secondary" />
+              ) : null}
               {item.guessedAccountId ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Label>Guessed:</Label>

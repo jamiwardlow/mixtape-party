@@ -13,7 +13,7 @@ function parseService(value: unknown): ServiceName | null {
   return null;
 }
 
-function parseComment(value: unknown): { ok: true; comment: string | null } | { ok: false; error: string } {
+export function parseComment(value: unknown): { ok: true; comment: string | null } | { ok: false; error: string } {
   if (value !== undefined && value !== null && typeof value !== 'string') {
     return { ok: false, error: 'comment must be a string' };
   }

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
+import { parseComment } from './submissions.js';
 
 export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
 
@@ -53,8 +54,9 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       artist: string;
       isrc: string | null;
       guessed_account_id: string | null;
+      comment: string | null;
     }>(
-      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, g.guessed_account_id
+      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, g.guessed_account_id, g.comment
        FROM submissions s
        LEFT JOIN guesses g ON g.submission_id = s.id AND g.guesser_account_id = $1
        WHERE s.round_id = $2 AND s.account_id != $1
@@ -78,6 +80,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
           artist: row.artist,
           playback,
           guessedAccountId: row.guessed_account_id,
+          comment: row.comment,
           excludedFromExport: row.service === 'bandcamp',
         };
       }),
@@ -94,6 +97,12 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     const { guessedAccountId } = req.body ?? {};
     if (typeof guessedAccountId !== 'string' || guessedAccountId.trim().length === 0) {
       res.status(400).json({ error: 'guessedAccountId is required' });
+      return;
+    }
+
+    const parsed = parseComment(req.body?.comment);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
       return;
     }
 
@@ -130,8 +139,8 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     try {
       const guess = await deps.pool.query<{ id: string }>(
-        'INSERT INTO guesses (submission_id, guesser_account_id, guessed_account_id) VALUES ($1, $2, $3) RETURNING id',
-        [req.params.submissionId, accountId, guessedAccountId],
+        'INSERT INTO guesses (submission_id, guesser_account_id, guessed_account_id, comment) VALUES ($1, $2, $3, $4) RETURNING id',
+        [req.params.submissionId, accountId, guessedAccountId, parsed.comment],
       );
       res.status(201).json({ guessId: guess.rows[0].id });
     } catch (err) {
@@ -141,6 +150,26 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       }
       throw err;
     }
+  });
+
+  // Edits (or clears) your comment on a guess you've made. Allowed at any time, results included.
+  router.put('/rounds/:roundId/submissions/:submissionId/guesses/comment', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const parsed = parseComment(req.body?.comment);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const updated = await deps.pool.query(
+      `UPDATE guesses g SET comment = $1 FROM submissions s
+       WHERE g.submission_id = s.id AND s.id = $2 AND s.round_id = $3 AND g.guesser_account_id = $4`,
+      [parsed.comment, req.params.submissionId, req.params.roundId, accountId],
+    );
+    if (!updated.rowCount) {
+      res.status(404).json({ error: 'you have not guessed on this track' });
+      return;
+    }
+    res.json({ comment: parsed.comment });
   });
 
   return router;

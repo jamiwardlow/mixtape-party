@@ -7,6 +7,7 @@ import type {
 } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createCommentsRouter } from './routes/comments.js';
 import { createExportRouter } from './routes/export.js';
 import { createGoogleAuthRouter, type GoogleProfile } from './routes/googleAuth.js';
 import { createGuessingRouter } from './routes/guessing.js';
@@ -60,6 +61,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(createSubmissionsRouter(deps));
   app.use(createGuessingRouter(deps));
   app.use(createResultsRouter(deps));
+  app.use(createCommentsRouter(deps));
   app.use(createExportRouter(deps));
   app.use(createNotificationsRouter(deps));
   app.use(createSweepRouter(deps));

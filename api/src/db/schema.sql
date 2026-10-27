@@ -73,9 +73,29 @@ CREATE TABLE IF NOT EXISTS guesses (
   submission_id UUID NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
   guesser_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   guessed_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  comment TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (submission_id, guesser_account_id)
 );
+
+-- #101: replies to a guess's comment, and emoji reactions on a comment (the guess) or a reply.
+CREATE TABLE IF NOT EXISTS guess_replies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  guess_id UUID NOT NULL REFERENCES guesses(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS comment_reactions (
+  guess_id UUID REFERENCES guesses(id) ON DELETE CASCADE,
+  reply_id UUID REFERENCES guess_replies(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL,
+  CHECK ((guess_id IS NULL) != (reply_id IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_guess_uniq ON comment_reactions (guess_id, account_id, emoji) WHERE guess_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_reply_uniq ON comment_reactions (reply_id, account_id, emoji) WHERE reply_id IS NOT NULL;
 
 -- Global, permanent cross-service match cache (#29): a track is only ever searched for once per
 -- service, keyed by ISRC when known else normalized artist+title. A NULL external_id records a

@@ -85,3 +85,46 @@ describe('failed export', () => {
     expect(screen.getByText('Results')).toBeTruthy();
   });
 });
+
+describe('comment threads', () => {
+  it('shows a guesser’s comment and posts a reply to it', async () => {
+    const track = {
+      submissionId: 's1',
+      service: 'youtube_music',
+      title: 'T',
+      artist: 'A',
+      comment: null,
+      submitter: { accountId: 'u1', displayName: 'Sam' },
+      correctGuessers: [],
+      yourGuess: null,
+      comments: [
+        {
+          guessId: 'g1',
+          guesser: { accountId: 'u2', displayName: 'Kim' },
+          mine: false,
+          comment: 'so Sam',
+          reactions: [{ emoji: '🔥', count: 2, mine: true }],
+          replies: [],
+        },
+      ],
+    };
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export')
+        ? new Response(JSON.stringify({ services: [] }), { status: 200 })
+        : ok({ ...results, tracks: [track] }),
+    ) as unknown as typeof fetch;
+    await render(<RoundResults />);
+
+    expect(await screen.findByText('“so Sam”')).toBeTruthy();
+    expect(screen.getByText('🔥 2 ✓')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'agreed');
+    await fireEvent.press(screen.getByText('Send reply'));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/guesses/g1/replies'),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ body: 'agreed' }) }),
+      ),
+    );
+  });
+});
