@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS rounds (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   submission_reminder_sent_at TIMESTAMPTZ,
   guessing_reminder_sent_at TIMESTAMPTZ,
+  guessing_notified_at TIMESTAMPTZ,
   results_notified_at TIMESTAMPTZ,
   UNIQUE (league_id, round_number)
 );
@@ -130,7 +131,7 @@ CREATE TABLE IF NOT EXISTS push_tokens (
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('submission_reminder', 'guessing_reminder', 'results_ready', 'season_concluded')),
+  type TEXT NOT NULL CHECK (type IN ('submission_reminder', 'guessing_reminder', 'guessing_open', 'results_ready', 'season_concluded')),
   round_id UUID REFERENCES rounds(id) ON DELETE CASCADE,
   league_id UUID REFERENCES leagues(id) ON DELETE CASCADE,
   title TEXT NOT NULL,

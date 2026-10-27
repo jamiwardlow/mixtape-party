@@ -50,7 +50,7 @@ export class ResendEmailChannel implements EmailChannel {
     const res = await fetch(RESEND_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: this.from, to: email, subject: payload.title, text: payload.body }),
+      body: JSON.stringify({ from: this.from, to: email, subject: payload.title, text: payload.link ? `${payload.body}\n\n${payload.link}` : payload.body }),
     });
     // Log and throw. The auth routes catch it and still answer 204 — a failed send must not be
     // distinguishable from a successful one, or the response reveals whether the address exists.

@@ -148,7 +148,7 @@ describe('runNotificationSweep', () => {
     const deps = buildDeps();
     await runNotificationSweep(deps, new Date('2030-01-10T00:00:00Z'));
 
-    const notifs = await testDb.pool.query('SELECT account_id, type FROM notifications');
+    const notifs = await testDb.pool.query("SELECT account_id, type FROM notifications WHERE type = 'guessing_reminder'");
     expect(notifs.rows).toEqual([{ account_id: laggard, type: 'guessing_reminder' }]);
   });
 
@@ -277,9 +277,10 @@ describe('runNotificationSweep', () => {
     const deps = buildDeps();
     await runNotificationSweep(deps);
 
-    expect(deps.pushChannel.sent).toHaveLength(1);
-    expect(deps.pushChannel.sent[0].tokens).toEqual([{ platform: 'expo', token: 'tok-1' }]);
-    expect(deps.emailChannel.sent).toHaveLength(1);
+    const results = (sent: Array<{ payload: { title: string } }>) => sent.filter((s) => s.payload.title.includes('results'));
+    expect(results(deps.pushChannel.sent)).toHaveLength(1);
+    expect(results(deps.pushChannel.sent)[0]).toMatchObject({ tokens: [{ platform: 'expo', token: 'tok-1' }] });
+    expect(results(deps.emailChannel.sent)).toHaveLength(1);
   });
 
   describe('playlist build', () => {
@@ -360,6 +361,53 @@ describe('runNotificationSweep', () => {
       await runNotificationSweep(deps);
       expect((await exportRows(roundId)).rows).toHaveLength(1);
       log.mockRestore();
+    });
+
+    describe('guessing_open notification', () => {
+      const openRows = () => testDb.pool.query("SELECT account_id FROM notifications WHERE type = 'guessing_open'");
+      const openEmails = (deps: ReturnType<typeof buildDeps>) =>
+        deps.emailChannel.sent.filter((e) => e.payload.title.includes('guessing is open'));
+
+      it('goes once to every member, with the playlist link in the email', async () => {
+        const roundId = await closedRound('youtube_music');
+        const other = await createAccount(`other-${Math.random()}@example.com`);
+        const { rows } = await testDb.pool.query<{ league_id: string }>('SELECT league_id FROM rounds WHERE id = $1', [roundId]);
+        await addMember(rows[0].league_id, other);
+        const { deps } = playlistDeps();
+
+        await runNotificationSweep(deps);
+        await runNotificationSweep(deps);
+
+        expect((await openRows()).rowCount).toBe(2);
+        expect(openEmails(deps)).toHaveLength(2);
+        expect(openEmails(deps)[0].payload.link).toMatch(/^https:\/\/music\.youtube\.com\/playlist\?list=/);
+      });
+
+      it('sends no link when there is no playlist', async () => {
+        await closedRound('bandcamp');
+        const { deps } = playlistDeps();
+
+        await runNotificationSweep(deps);
+
+        expect(openEmails(deps)).toHaveLength(1);
+        expect(openEmails(deps)[0].payload.link).toBeUndefined();
+      });
+
+      it('skips rounds with no submissions and respects the email setting', async () => {
+        const host = await createAccount(`host-${Math.random()}@example.com`);
+        const leagueId = await createLeague(host);
+        await addMember(leagueId, host);
+        const roundId = await createRound(leagueId, 1, new Date('2030-01-01T00:00:00Z'), new Date('2000-01-01T00:00:00Z'), new Date('2031-01-01T00:00:00Z'));
+        const deps = buildDeps();
+        await runNotificationSweep(deps);
+        expect((await openRows()).rowCount).toBe(0);
+
+        await submit(roundId, host);
+        await testDb.pool.query('INSERT INTO notification_settings (account_id, email_enabled) VALUES ($1, false)', [host]);
+        await runNotificationSweep(deps);
+        expect((await openRows()).rowCount).toBe(1);
+        expect(openEmails(deps)).toHaveLength(0);
+      });
     });
   });
 });

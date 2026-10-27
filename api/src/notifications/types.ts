@@ -1,8 +1,10 @@
-export type NotificationType = 'submission_reminder' | 'guessing_reminder' | 'results_ready' | 'season_concluded';
+export type NotificationType = 'submission_reminder' | 'guessing_reminder' | 'guessing_open' | 'results_ready' | 'season_concluded';
 
 export interface NotificationPayload {
   title: string;
   body: string;
+  /** Optional URL; emailed under the body. Push ignores it. */
+  link?: string;
 }
 
 export interface PushToken {

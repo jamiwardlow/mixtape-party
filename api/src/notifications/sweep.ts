@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { buildRoundExports, type RoundExportDeps } from '../routes/export.js';
+import { buildRoundExports, PLAYLIST_URL, type ExportableService, RoundExportDeps } from '../routes/export.js';
 import { loadRound } from '../routes/rounds.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
@@ -238,6 +238,36 @@ async function sweepPlaylists(deps: NotificationSweepDeps, now: Date): Promise<v
   }
 }
 
+/** Tells every member guessing is open, with the playlist link when one was built. Runs after sweepPlaylists. */
+async function sweepGuessingOpen(deps: NotificationSweepDeps, now: Date): Promise<void> {
+  const dueRounds = await deps.pool.query<{ id: string; league_id: string; round_number: number; theme: string }>(
+    `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
+     WHERE guessing_notified_at IS NULL AND submission_deadline <= $1
+       AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = rounds.id)`,
+    [now.toISOString()],
+  );
+
+  for (const round of dueRounds.rows) {
+    const exported = await deps.pool.query<{ service: ExportableService; playlist_external_id: string }>(
+      'SELECT service, playlist_external_id FROM round_exports WHERE round_id = $1 AND playlist_external_id IS NOT NULL LIMIT 1',
+      [round.id],
+    );
+    const playlist = exported.rows[0];
+    await notifyAccounts(
+      deps,
+      await leagueMemberIds(deps.pool, round.league_id),
+      'guessing_open',
+      {
+        title: `Round ${round.round_number}: guessing is open`,
+        body: `Submissions are in for "${round.theme}". Guess who submitted each track.`,
+        link: playlist ? PLAYLIST_URL[playlist.service](playlist.playlist_external_id) : undefined,
+      },
+      { roundId: round.id, leagueId: round.league_id },
+    );
+    await deps.pool.query('UPDATE rounds SET guessing_notified_at = $1 WHERE id = $2', [now.toISOString(), round.id]);
+  }
+}
+
 /** Finds every due reminder/alert across all leagues and dispatches it, exactly once each. Safe to call repeatedly. */
 export async function runNotificationSweep(deps: NotificationSweepDeps, now: Date = new Date()): Promise<void> {
   await sweepSubmissionReminders(deps, now);
@@ -245,4 +275,5 @@ export async function runNotificationSweep(deps: NotificationSweepDeps, now: Dat
   await sweepResultsReady(deps, now);
   await sweepSeasonConcluded(deps, now);
   await sweepPlaylists(deps, now);
+  await sweepGuessingOpen(deps, now);
 }

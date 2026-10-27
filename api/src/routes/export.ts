@@ -14,7 +14,7 @@ export interface RoundExportDeps extends AdapterRegistry {
 
 export interface ExportDeps extends AccountsDeps, RoundExportDeps {}
 
-type ExportableService = Exclude<ServiceName, 'bandcamp'>;
+export type ExportableService = Exclude<ServiceName, 'bandcamp'>;
 const EXPORTABLE_SERVICES: ExportableService[] = ['youtube_music'];
 
 /**
@@ -22,7 +22,7 @@ const EXPORTABLE_SERVICES: ExportableService[] = ['youtube_music'];
  * launch handles come from the adapters; a playlist has no adapter method because the id read back
  * out of `round_exports` is all there is to build one from.
  */
-const PLAYLIST_URL: Record<ExportableService, (externalId: string) => string> = {
+export const PLAYLIST_URL: Record<ExportableService, (externalId: string) => string> = {
   // UNLISTED under the shared server-held account, so this link plays for anyone who has it.
   youtube_music: (externalId) => `https://music.youtube.com/playlist?list=${externalId}`,
 };
