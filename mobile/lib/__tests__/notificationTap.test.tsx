@@ -1,17 +1,25 @@
+import { Platform } from 'react-native';
 import { renderHook } from '@testing-library/react-native';
 import { useOpenTappedNotification } from '../notificationTap';
 
 const mockPush = jest.fn();
 let mockResponse: unknown = null;
+let mockThrows = false;
 
 jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) } }));
-jest.mock('expo-notifications', () => ({ useLastNotificationResponse: () => mockResponse }));
+jest.mock('expo-notifications', () => ({
+  useLastNotificationResponse: () => {
+    if (mockThrows) throw new Error('ExpoNotifications.getLastNotificationResponse is not available on web');
+    return mockResponse;
+  },
+}));
 
 const tapped = (data: object) => ({ notification: { request: { content: { data } } } });
 
 beforeEach(() => {
   mockPush.mockClear();
   mockResponse = null;
+  mockThrows = false;
 });
 
 it('opens the guess screen for a tapped notification with a round id', async () => {
@@ -49,4 +57,16 @@ it('routes a second tap on the same round, but does not replay one when re-enabl
   await rerender({ on: false });
   await rerender({ on: true });
   expect(mockPush).toHaveBeenCalledTimes(2);
+});
+
+it('does not touch the notification response API on web, where it throws and blanks the app', async () => {
+  const os = Platform.OS;
+  Platform.OS = 'web';
+  mockThrows = true;
+  try {
+    await renderHook(() => useOpenTappedNotification(true));
+  } finally {
+    Platform.OS = os;
+  }
+  expect(mockPush).not.toHaveBeenCalled();
 });
