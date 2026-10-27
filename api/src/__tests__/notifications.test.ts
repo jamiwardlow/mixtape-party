@@ -84,6 +84,21 @@ describe('push token registration', () => {
     expect(again.status).toBe(201);
   });
 
+  it("removes only the caller's own token on delete", async () => {
+    const { app } = buildApp();
+    const a = await signUp(app, 'dev-a@example.com');
+    const b = await signUp(app, 'dev-b@example.com');
+    for (const { token } of [a, b]) {
+      await request(app).post('/notifications/push-tokens').set('Authorization', `Bearer ${token}`).send({ platform: 'expo', token: 'shared-device' });
+    }
+
+    const res = await request(app).delete('/notifications/push-tokens').set('Authorization', `Bearer ${a.token}`).send({ token: 'shared-device' });
+    expect(res.status).toBe(204);
+
+    const left = await testDb.pool.query('SELECT account_id FROM push_tokens WHERE token = $1', ['shared-device']);
+    expect(left.rows.map((r) => r.account_id)).toEqual([b.accountId]);
+  });
+
   it('rejects an unknown platform', async () => {
     const { app } = buildApp();
     const { token } = await signUp(app, 'device2@example.com');

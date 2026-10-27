@@ -75,5 +75,17 @@ export function createNotificationsRouter(deps: AccountsDeps): Router {
     res.status(201).json({ ok: true });
   });
 
+  // Sign-out: a shared device must stop receiving the previous account's pushes.
+  router.delete('/notifications/push-tokens', auth, async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const { token } = req.body ?? {};
+    if (typeof token !== 'string' || token.length === 0) {
+      res.status(400).json({ error: 'token is required' });
+      return;
+    }
+    await deps.pool.query('DELETE FROM push_tokens WHERE account_id = $1 AND token = $2', [accountId, token]);
+    res.status(204).end();
+  });
+
   return router;
 }

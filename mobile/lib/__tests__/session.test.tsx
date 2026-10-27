@@ -2,6 +2,9 @@ import { type PropsWithChildren } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { SessionProvider, useSession } from '../session';
 import type { SessionStorage } from '../storage';
+import { unregisterPushToken } from '../pushToken';
+
+jest.mock('../pushToken', () => ({ unregisterPushToken: jest.fn(async () => {}) }));
 
 function fakeStorage(): SessionStorage {
   const map = new Map<string, string>();
@@ -101,6 +104,20 @@ describe('useSession', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer tok-abc' }),
       }),
     );
+  });
+
+  // A shared device must stop getting the previous account's pushes; the removal needs the session token.
+  it('removes the push token on signOut', async () => {
+    const result = await mountSession();
+    await act(async () => {
+      await result.current.signIn('tok-abc');
+    });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(unregisterPushToken).toHaveBeenCalledWith('tok-abc');
   });
 
   // Offline, or the API cold-starting on Cloud Run: the local session must still be cleared, and

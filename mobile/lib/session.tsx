@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { fetchApi } from './api';
+import { unregisterPushToken } from './pushToken';
 import { deviceStorage, type SessionStorage } from './storage';
 
 const TOKEN_KEY = 'session_token';
@@ -76,7 +77,11 @@ export function SessionProvider({ children, storage = deviceStorage }: PropsWith
     //
     // ponytail: best effort, so a sign-out made offline never revokes. A retry queue is the fix if
     // that matters; the local clear below happens either way.
-    if (token) void fetchApi('/sessions', { method: 'DELETE', token }).catch(() => {});
+    // The push-token removal goes first: it needs the session token the revoke is about to kill.
+    if (token) {
+      void unregisterPushToken(token);
+      void fetchApi('/sessions', { method: 'DELETE', token }).catch(() => {});
+    }
     await storage.set(TOKEN_KEY, null);
     // Goes with the session: a code left behind outlives the account that opened the invite, and
     // the next person to sign in on this browser would silently auto-join their league.
