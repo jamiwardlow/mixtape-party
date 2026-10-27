@@ -69,6 +69,10 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter {
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `fake://play/${track.externalId}` };
   }
+
+  async getPreviewUrl(track: TrackResult): Promise<string | null> {
+    return track.title === 'NO_PREVIEW' ? null : `https://fake.test/preview/${track.externalId}.mp3`;
+  }
 }
 
 /** In-memory stand-in for {@link BandcampAdapter}, used to exercise the submit-by-URL flow without hitting Bandcamp. */
@@ -88,5 +92,9 @@ export class FakeBandcampAdapter implements EmbedOnlyMusicServiceAdapter {
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `fake://bandcamp-play/${track.externalId}` };
+  }
+
+  async getPreviewUrl(track: TrackResult): Promise<string | null> {
+    return `https://fake.test/bandcamp-preview/${track.externalId}.mp3`;
   }
 }

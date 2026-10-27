@@ -92,6 +92,44 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     });
   });
 
+  // Resolved at play time because Bandcamp's stream URLs are signed and expire. Carries nothing
+  // about the submitter; `url: null` tells the client to fall back to the playback link.
+  router.get('/rounds/:roundId/submissions/:submissionId/preview', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const found = await deps.pool.query<{
+      service: 'youtube_music' | 'bandcamp';
+      external_id: string;
+      title: string;
+      artist: string;
+      isrc: string | null;
+      league_id: string;
+      submission_deadline: string;
+    }>(
+      `SELECT s.service, s.external_id, s.title, s.artist, s.isrc, r.league_id, r.submission_deadline
+       FROM submissions s JOIN rounds r ON r.id = s.round_id
+       WHERE s.id = $1 AND s.round_id = $2`,
+      [req.params.submissionId, req.params.roundId],
+    );
+    const row = found.rows[0];
+    if (!row) {
+      res.status(404).json({ error: 'submission not found' });
+      return;
+    }
+    const guardError = await guessingGuardError(deps.pool, row.league_id, accountId, row.submission_deadline);
+    if (guardError) {
+      res.status(guardError.status).json({ error: guardError.error });
+      return;
+    }
+    const url = await playbackAdapterFor(deps, row.service).getPreviewUrl({
+      externalId: row.external_id,
+      title: row.title,
+      artist: row.artist,
+      isrc: row.isrc ?? undefined,
+      service: row.service,
+    });
+    res.json({ url });
+  });
+
   router.post('/rounds/:roundId/submissions/:submissionId/guesses', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const { guessedAccountId } = req.body ?? {};

@@ -57,6 +57,13 @@ export function runMusicServiceAdapterContractTests(
       expect(typeof handle.deepLink).toBe('string');
       expect(handle.deepLink.length).toBeGreaterThan(0);
     });
+
+    it('getPreviewUrl returns a url or null', async () => {
+      const adapter = makeAdapter();
+      const [track] = await adapter.search('test query');
+      const preview = await adapter.getPreviewUrl(track);
+      expect(preview === null || /^https?:\/\//.test(preview)).toBe(true);
+    });
   });
 }
 
@@ -95,6 +102,13 @@ export function runEmbedOnlyAdapterContractTests(
       expect(handle.service).toBe(adapter.service);
       expect(typeof handle.deepLink).toBe('string');
       expect(handle.deepLink.length).toBeGreaterThan(0);
+    });
+
+    it('getPreviewUrl returns a url or null', async () => {
+      const adapter = makeAdapter();
+      const track = (await adapter.submit(await validUrl()))!;
+      const preview = await adapter.getPreviewUrl(track);
+      expect(preview === null || /^https?:\/\//.test(preview)).toBe(true);
     });
   });
 }

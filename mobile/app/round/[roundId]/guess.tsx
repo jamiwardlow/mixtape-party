@@ -1,8 +1,9 @@
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
+import { usePreview } from '../../../lib/preview';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
@@ -78,9 +79,15 @@ export default function GuessRound() {
     }
   }
 
-  function play(track: Track) {
-    Linking.openURL(track.playback.webUrl ?? track.playback.deepLink);
-  }
+  // No in-app preview for a track: open it in its service instead.
+  const openInService = useCallback(
+    (submissionId: string) => {
+      const track = tracks?.find((t) => t.submissionId === submissionId);
+      if (track) Linking.openURL(track.playback.webUrl ?? track.playback.deepLink);
+    },
+    [tracks],
+  );
+  const { playingId, toggle } = usePreview(roundId, token, openInService);
 
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
@@ -94,7 +101,11 @@ export default function GuessRound() {
             <JCard>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <ServiceBadge service={item.service} />
-                <TapeButton title="Play" onPress={() => play(item)} variant="secondary" />
+                <TapeButton
+                  title={playingId === item.submissionId ? 'Stop' : 'Play'}
+                  onPress={() => toggle(item.submissionId)}
+                  variant="secondary"
+                />
               </View>
               <BodyText>
                 {item.title} — {item.artist}

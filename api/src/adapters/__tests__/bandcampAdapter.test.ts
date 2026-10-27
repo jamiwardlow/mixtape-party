@@ -104,3 +104,25 @@ describe('BandcampAdapter.submit', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('BandcampAdapter.getPreviewUrl', () => {
+  const track = { externalId: 'track=148177487', title: 'Awake', artist: 'Tycho', service: 'bandcamp' as const };
+
+  it('reads the mp3-128 stream off the embedded player page', async () => {
+    stubFetch(readFixture('bandcampPlayerPage.html'));
+
+    const url = await new BandcampAdapter().getPreviewUrl(track);
+
+    expect(url).toMatch(/^https:\/\/t\d\.bcbits\.com\/stream\/.+\/mp3-128\/148177487\?.*&ts=/);
+  });
+
+  it('is null for a track with no streamable file', async () => {
+    stubFetch('<div data-player-data="{&quot;tracks&quot;:[{&quot;title&quot;:&quot;x&quot;}]}"></div>');
+    expect(await new BandcampAdapter().getPreviewUrl(track)).toBeNull();
+  });
+
+  it('is null when Bandcamp errors', async () => {
+    stubFetch('', 503);
+    expect(await new BandcampAdapter().getPreviewUrl(track)).toBeNull();
+  });
+});

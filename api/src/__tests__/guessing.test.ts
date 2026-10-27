@@ -266,3 +266,48 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('GET /rounds/:roundId/submissions/:submissionId/preview', () => {
+  async function setup() {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 3);
+    await closeSubmissionWindow(roundId);
+    const guessing = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+    return { app, roundId, members, submissionId: guessing.body.tracks[0].submissionId as string };
+  }
+
+  it('returns a preview url for a track, without the submitter', async () => {
+    const { app, roundId, members, submissionId } = await setup();
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/submissions/${submissionId}/preview`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ url: expect.stringMatching(/^https:\/\/fake\.test\/preview\//) });
+  });
+
+  it('is closed until guessing opens', async () => {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 3);
+    const sub = await testDb.pool.query('SELECT id FROM submissions WHERE round_id = $1 LIMIT 1', [roundId]);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/submissions/${sub.rows[0].id}/preview`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('404s for a submission that is not in the round', async () => {
+    const { app, roundId, members } = await setup();
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/submissions/00000000-0000-0000-0000-000000000000/preview`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    expect(res.status).toBe(404);
+  });
+});

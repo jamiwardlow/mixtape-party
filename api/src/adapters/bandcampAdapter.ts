@@ -99,7 +99,33 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     const webUrl = `https://player.bandcamp.com/EmbeddedPlayer/${kind}=${id}/size=large/bgcol=333333/linkcol=0f91ff/tracklist=false/artwork=small/transparent=true/`;
     return { service: this.service, deepLink: webUrl, webUrl };
   }
+
+  async getPreviewUrl(track: TrackResult): Promise<string | null> {
+    const [, kind, id] = track.externalId.match(/^(track|album)=(\d+)$/) ?? [];
+    if (!kind || !id) return null;
+    try {
+      const res = await fetch(`https://bandcamp.com/EmbeddedPlayer/${kind}=${id}`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return null;
+      const encoded = (await res.text()).match(PLAYER_DATA_PATTERN)?.[1];
+      const data = encoded ? (safeParse(decodeHtmlEntities(encoded)) as PlayerData | null) : null;
+      return data?.tracks?.[0]?.file?.['mp3-128'] ?? null;
+    } catch {
+      return null;
+    }
+  }
 }
+
+interface PlayerData {
+  tracks?: { file?: Record<string, string> | null }[];
+}
+
+/**
+ * The embedded player page (the same one the playback handle points at) carries a
+ * `data-player-data` blob with each track's signed `mp3-128` stream, and is addressable by the id we
+ * store -- the track page isn't, since we never keep the pasted URL. For an album this is the first
+ * track. Tracks with no `file` aren't streamable, so they get null.
+ */
+const PLAYER_DATA_PATTERN = /data-player-data="([^"]*)"/;
 
 function safeParse(json: string): TralbumData | null {
   try {

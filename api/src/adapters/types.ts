@@ -30,6 +30,7 @@ export interface MusicServiceAdapter {
   createPlaylist(accessToken: string, name: string): Promise<PlaylistRef>;
   appendToPlaylist(accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void>;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
+  getPreviewUrl(track: TrackResult): Promise<string | null>;
 }
 
 /**
@@ -42,6 +43,7 @@ export interface EmbedOnlyMusicServiceAdapter {
   /** Resolves a pasted track/album URL into a track, or null if the URL isn't a valid/resolvable link. */
   submit(url: string): Promise<TrackResult | null>;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
+  getPreviewUrl(track: TrackResult): Promise<string | null>;
 }
 
 /**

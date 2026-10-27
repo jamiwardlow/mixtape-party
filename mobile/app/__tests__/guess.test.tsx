@@ -12,6 +12,9 @@ jest.mock('../../lib/session', () => ({
   useSession: () => ({ token: 'tok-1' }),
 }));
 
+// The native audio module isn't available under jest; lib/__tests__/preview.test.ts covers the player.
+jest.mock('expo-audio', () => ({ createAudioPlayer: jest.fn() }));
+
 jest.mock('expo-linking', () => ({
   openURL: (...args: unknown[]) => mockOpenURL(...args),
 }));

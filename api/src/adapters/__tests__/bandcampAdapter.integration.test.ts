@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { BandcampAdapter } from '../bandcampAdapter.js';
 import { runEmbedOnlyAdapterContractTests } from '../contract.js';
 
@@ -17,3 +18,12 @@ runEmbedOnlyAdapterContractTests(
   () => new BandcampAdapter(),
   () => process.env.BANDCAMP_TEST_URL || 'https://tycho.bandcamp.com/track/awake',
 );
+
+// #102: the preview reads the `file` shape off the embedded player page, which can change without notice.
+describe('bandcamp preview (real API)', () => {
+  it('finds a streamable mp3 for a known streamable track', async () => {
+    const adapter = new BandcampAdapter();
+    const track = await adapter.submit(process.env.BANDCAMP_TEST_URL || 'https://tycho.bandcamp.com/track/awake');
+    expect(await adapter.getPreviewUrl(track!)).toMatch(/^https:\/\/.+\/mp3-128\//);
+  });
+});

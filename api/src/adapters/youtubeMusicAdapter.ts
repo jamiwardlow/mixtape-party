@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { findDeezerPreview } from './deezerPreview.js';
 import {
   ServiceUnavailableError,
   type MusicServiceAdapter,
@@ -161,5 +162,9 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `${ORIGIN}/watch?v=${track.externalId}` };
+  }
+
+  getPreviewUrl(track: TrackResult): Promise<string | null> {
+    return findDeezerPreview(track);
   }
 }
