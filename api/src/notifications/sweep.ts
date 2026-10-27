@@ -20,7 +20,7 @@ const REMINDER_REMAINING_FRACTION = 0.2;
 // "null".
 const THEME_OR_ROUND = `COALESCE(theme, 'Round ' || round_number) AS theme`;
 
-async function notifyAccounts(
+export async function notifyAccounts(
   deps: NotificationSweepDeps,
   accountIds: string[],
   type: NotificationType,

@@ -96,6 +96,7 @@ describe('comment threads', () => {
       comment: null,
       submitter: { accountId: 'u1', displayName: 'Sam' },
       correctGuessers: [],
+      reactions: [],
       yourGuess: null,
       comments: [
         {
@@ -125,6 +126,33 @@ describe('comment threads', () => {
         expect.stringContaining('/guesses/g1/replies'),
         expect.objectContaining({ method: 'POST', body: JSON.stringify({ body: 'agreed' }) }),
       ),
+    );
+  });
+
+  it('nests replies under replies, and lets you delete only your own', async () => {
+    const reply = (replyId: string, parentReplyId: string | null, mine: boolean, body: string) => ({
+      replyId, parentReplyId, mine, author: { accountId: 'u9', displayName: 'Pat' }, body, createdAt: '', reactions: [],
+    });
+    const track = {
+      submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', comment: null,
+      submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [], yourGuess: null,
+      comments: [{
+        guessId: 'g1', guesser: { accountId: 'u2', displayName: 'Kim' }, mine: false, comment: 'so Sam', reactions: [],
+        replies: [reply('r1', null, false, 'first'), reply('r2', 'r1', true, 'nested')],
+      }],
+    };
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export')
+        ? new Response(JSON.stringify({ services: [] }), { status: 200 })
+        : ok({ ...results, tracks: [track] }),
+    ) as unknown as typeof fetch;
+    await render(<RoundResults />);
+
+    expect(await screen.findByText('nested')).toBeTruthy();
+    expect(screen.getAllByText('Delete')).toHaveLength(1);
+    await fireEvent.press(screen.getByText('Delete'));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/replies/r2'), expect.objectContaining({ method: 'DELETE' })),
     );
   });
 });

@@ -27,6 +27,8 @@ interface Reaction {
 
 interface Reply {
   replyId: string;
+  parentReplyId: string | null;
+  mine: boolean;
   author: Player;
   body: string;
   reactions: Reaction[];
@@ -41,8 +43,7 @@ interface Comment {
   replies: Reply[];
 }
 
-// Mirrors the API's REACTION_EMOJI.
-const REACTION_EMOJI = ['❤️', '😂', '🔥', '👏', '😮'];
+const DEFAULT_REACTIONS = ['❤️', '😂', '🔥', '👏', '😮'];
 
 interface Track {
   submissionId: string;
@@ -52,6 +53,7 @@ interface Track {
   comment: string | null;
   submitter: Player;
   correctGuessers: Player[];
+  reactions: Reaction[];
   comments: Comment[];
   yourGuess: { comment: string | null } | null;
 }
@@ -97,11 +99,16 @@ function exportProblem({ service, status }: ServiceExport): string | null {
   }
 }
 
-/** Tap an emoji to react, tap again to take it back; counts for every emoji already in use. */
+/**
+ * Tap a chip to react or take your reaction back; the box adds any emoji, since the API takes any
+ * single one. The defaults are only a head start -- anything already in use gets its own chip.
+ */
 function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onToggle: (emoji: string) => void }) {
+  const [custom, setCustom] = useState('');
+  const emojis = [...new Set([...DEFAULT_REACTIONS, ...reactions.map((r) => r.emoji)])];
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-      {REACTION_EMOJI.map((emoji) => {
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+      {emojis.map((emoji) => {
         const reaction = reactions.find((r) => r.emoji === emoji);
         return (
           <TapeButton
@@ -112,19 +119,84 @@ function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onToggle: (
           />
         );
       })}
+      <TapeInput
+        placeholder="Any emoji"
+        value={custom}
+        onChangeText={setCustom}
+        onSubmitEditing={() => {
+          if (custom.trim()) onToggle(custom.trim());
+          setCustom('');
+        }}
+        style={{ minWidth: 90 }}
+      />
     </View>
   );
 }
 
-function CommentThread({
-  comment,
-  onReply,
-  onReact,
+interface ThreadActions {
+  reply: (guessId: string, body: string, parentReplyId?: string) => Promise<void>;
+  editReply: (replyId: string, body: string) => Promise<void>;
+  deleteReply: (replyId: string) => Promise<void>;
+  react: (path: string, emoji: string) => Promise<void>;
+}
+
+/** A reply, the replies under it, and the controls its viewer is allowed: anyone replies, only its author edits or deletes. */
+function ReplyNode({
+  reply,
+  guessId,
+  replies,
+  actions,
+  depth,
 }: {
-  comment: Comment;
-  onReply: (guessId: string, body: string) => Promise<void>;
-  onReact: (path: string, emoji: string) => Promise<void>;
+  reply: Reply;
+  guessId: string;
+  replies: Reply[];
+  actions: ThreadActions;
+  depth: number;
 }) {
+  const [mode, setMode] = useState<'view' | 'reply' | 'edit'>('view');
+  const [draft, setDraft] = useState('');
+  const children = replies.filter((r) => r.parentReplyId === reply.replyId);
+
+  async function submit() {
+    if (!draft.trim()) return;
+    if (mode === 'edit') await actions.editReply(reply.replyId, draft);
+    else await actions.reply(guessId, draft, reply.replyId);
+    setMode('view');
+    setDraft('');
+  }
+
+  return (
+    // Indent stops growing after a few levels so a long back-and-forth stays on screen.
+    <View style={{ marginLeft: depth < 4 ? 16 : 0, gap: 6 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+        <HandText>{reply.mine ? 'You' : (reply.author.displayName ?? 'A player')}</HandText>
+        <BodyText>{reply.body}</BodyText>
+      </View>
+      <Reactions reactions={reply.reactions} onToggle={(e) => actions.react(`/replies/${reply.replyId}/reactions`, e)} />
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        <TapeButton title="Reply" variant="secondary" onPress={() => { setDraft(''); setMode(mode === 'reply' ? 'view' : 'reply'); }} />
+        {reply.mine ? (
+          <>
+            <TapeButton title="Edit" variant="secondary" onPress={() => { setDraft(reply.body); setMode(mode === 'edit' ? 'view' : 'edit'); }} />
+            <TapeButton title="Delete" variant="secondary" onPress={() => actions.deleteReply(reply.replyId)} />
+          </>
+        ) : null}
+      </View>
+      {mode !== 'view' ? (
+        <>
+          <TapeInput placeholder={mode === 'edit' ? 'Edit your reply' : 'Your reply'} value={draft} onChangeText={setDraft} maxLength={500} />
+          <TapeButton title={mode === 'edit' ? 'Save reply' : 'Send reply'} variant="secondary" onPress={submit} />
+        </>
+      ) : null}
+      {children.map((child) => (
+        <ReplyNode key={child.replyId} reply={child} guessId={guessId} replies={replies} actions={actions} depth={depth + 1} />
+      ))}
+    </View>
+  );
+}
+
+function CommentThread({ comment, actions }: { comment: Comment; actions: ThreadActions }) {
   const [reply, setReply] = useState('');
   return (
     <View style={{ gap: 6 }}>
@@ -135,23 +207,19 @@ function CommentThread({
           <BodyText>“{comment.comment}”</BodyText>
         </View>
       )}
-      <Reactions reactions={comment.reactions} onToggle={(e) => onReact(`/guesses/${comment.guessId}/reactions`, e)} />
-      {comment.replies.map((r) => (
-        <View key={r.replyId} style={{ marginLeft: 16, gap: 6 }}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-            <HandText>{r.author.displayName ?? 'A player'}</HandText>
-            <BodyText>{r.body}</BodyText>
-          </View>
-          <Reactions reactions={r.reactions} onToggle={(e) => onReact(`/replies/${r.replyId}/reactions`, e)} />
-        </View>
-      ))}
+      <Reactions reactions={comment.reactions} onToggle={(e) => actions.react(`/guesses/${comment.guessId}/reactions`, e)} />
+      {comment.replies
+        .filter((r) => r.parentReplyId === null)
+        .map((r) => (
+          <ReplyNode key={r.replyId} reply={r} guessId={comment.guessId} replies={comment.replies} actions={actions} depth={1} />
+        ))}
       <TapeInput placeholder="Reply" value={reply} onChangeText={setReply} maxLength={500} />
       {reply.trim() ? (
         <TapeButton
           title="Send reply"
           variant="secondary"
           onPress={async () => {
-            await onReply(comment.guessId, reply);
+            await actions.reply(comment.guessId, reply);
             setReply('');
           }}
         />
@@ -192,15 +260,19 @@ export default function RoundResults() {
   }
 
   // Each comment action posts, then re-reads the results so counts and threads match the server.
-  async function act(path: string, method: string, body: object) {
+  async function act(path: string, method: string, body?: object) {
     if (!token) return;
     await fetchApi(path, { method, token, body });
     await loadResults();
   }
   const saveComment = (submissionId: string, comment: string) =>
     act(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, 'PUT', { comment });
-  const reply = (guessId: string, body: string) => act(`/guesses/${guessId}/replies`, 'POST', { body });
-  const react = (path: string, emoji: string) => act(path, 'POST', { emoji });
+  const actions: ThreadActions = {
+    reply: (guessId, body, parentReplyId) => act(`/guesses/${guessId}/replies`, 'POST', { body, parentReplyId }),
+    editReply: (replyId, body) => act(`/replies/${replyId}`, 'PUT', { body }),
+    deleteReply: (replyId) => act(`/replies/${replyId}`, 'DELETE'),
+    react: (path, emoji) => act(path, 'POST', { emoji }),
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -294,6 +366,7 @@ export default function RoundResults() {
                   <Label>Nobody</Label>
                 )}
               </View>
+              <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
               {item.yourGuess ? (
                 <MyComment
                   key={item.yourGuess.comment ?? ''}
@@ -302,12 +375,7 @@ export default function RoundResults() {
                 />
               ) : null}
               {item.comments.map((c) => (
-                <CommentThread
-                  key={c.guessId}
-                  comment={c}
-                  onReply={reply}
-                  onReact={react}
-                />
+                <CommentThread key={c.guessId} comment={c} actions={actions} />
               ))}
             </JCard>
           )}

@@ -78,22 +78,26 @@ CREATE TABLE IF NOT EXISTS guesses (
   UNIQUE (submission_id, guesser_account_id)
 );
 
--- #101: replies to a guess's comment, and emoji reactions on a comment (the guess) or a reply.
+-- #101: replies to a guess's comment (or to another reply), and emoji reactions on a comment (the
+-- guess), a reply, or the submitted track itself. Deleting a reply deletes the replies under it.
 CREATE TABLE IF NOT EXISTS guess_replies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   guess_id UUID NOT NULL REFERENCES guesses(id) ON DELETE CASCADE,
+  parent_reply_id UUID REFERENCES guess_replies(id) ON DELETE CASCADE,
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   body TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS comment_reactions (
+  submission_id UUID REFERENCES submissions(id) ON DELETE CASCADE,
   guess_id UUID REFERENCES guesses(id) ON DELETE CASCADE,
   reply_id UUID REFERENCES guess_replies(id) ON DELETE CASCADE,
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   emoji TEXT NOT NULL,
-  CHECK ((guess_id IS NULL) != (reply_id IS NULL))
+  CHECK (num_nonnulls(submission_id, guess_id, reply_id) = 1)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_submission_uniq ON comment_reactions (submission_id, account_id, emoji) WHERE submission_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_guess_uniq ON comment_reactions (guess_id, account_id, emoji) WHERE guess_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_reply_uniq ON comment_reactions (reply_id, account_id, emoji) WHERE reply_id IS NOT NULL;
 
@@ -151,7 +155,7 @@ CREATE TABLE IF NOT EXISTS push_tokens (
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('submission_reminder', 'guessing_reminder', 'guessing_open', 'results_ready', 'season_concluded')),
+  type TEXT NOT NULL CHECK (type IN ('submission_reminder', 'guessing_reminder', 'guessing_open', 'results_ready', 'season_concluded', 'comment_reply')),
   round_id UUID REFERENCES rounds(id) ON DELETE CASCADE,
   league_id UUID REFERENCES leagues(id) ON DELETE CASCADE,
   title TEXT NOT NULL,

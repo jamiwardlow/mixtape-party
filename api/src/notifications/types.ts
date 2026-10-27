@@ -1,4 +1,4 @@
-export type NotificationType = 'submission_reminder' | 'guessing_reminder' | 'guessing_open' | 'results_ready' | 'season_concluded';
+export type NotificationType = 'submission_reminder' | 'guessing_reminder' | 'guessing_open' | 'results_ready' | 'season_concluded' | 'comment_reply';
 
 export interface NotificationPayload {
   title: string;
@@ -6,7 +6,7 @@ export interface NotificationPayload {
   /** Optional URL; emailed under the body. Push ignores it. */
   link?: string;
   /** Optional deep-link data; push delivers it to the app's tap handler. Email ignores it. */
-  data?: { roundId: string };
+  data?: { roundId: string; screen?: 'results' };
 }
 
 export interface PushToken {

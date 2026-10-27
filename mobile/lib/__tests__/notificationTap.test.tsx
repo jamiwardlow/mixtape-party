@@ -20,6 +20,12 @@ it('opens the guess screen for a tapped notification with a round id', async () 
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/round/[roundId]/guess', params: { roundId: 'round-1' } });
 });
 
+it('opens the results screen when the push says so', async () => {
+  mockResponse = tapped({ roundId: 'round-1', screen: 'results' });
+  await renderHook(() => useOpenTappedNotification(true));
+  expect(mockPush).toHaveBeenCalledWith({ pathname: '/round/[roundId]/results', params: { roundId: 'round-1' } });
+});
+
 it('does nothing without a round id or while signed out', async () => {
   mockResponse = tapped({});
   await renderHook(() => useOpenTappedNotification(true));

@@ -99,6 +99,9 @@ describe('guess comments, replies and reactions (#101)', () => {
     expect((await react(`/guesses/${guessId}/reactions`, c, '🔥')).body.reacted).toBe(true);
     expect((await react(`/replies/${reply.body.replyId}/reactions`, c, '😂')).status).toBe(200);
     expect((await react(`/guesses/${guessId}/reactions`, c, 'nope')).status).toBe(400);
+    expect((await react(`/guesses/${guessId}/reactions`, c, '👍🏽')).status).toBe(200);
+    expect((await react(`/guesses/${guessId}/reactions`, c, '🔥🔥')).status).toBe(400);
+    await react(`/guesses/${guessId}/reactions`, c, '👍🏽');
 
     let thread = (await results(c)).comments[0];
     expect(thread.reactions).toEqual([{ emoji: '🔥', count: 1, mine: true }]);
@@ -109,5 +112,52 @@ describe('guess comments, replies and reactions (#101)', () => {
     expect((await react(`/guesses/${guessId}/reactions`, c, '🔥')).body.reacted).toBe(false);
     thread = (await results(c)).comments[0];
     expect(thread.reactions).toEqual([]);
+  });
+
+  it('threads replies to replies, lets authors edit and delete them, and notifies whoever was replied to', async () => {
+    const { app, roundId, a, b, c, track, auth, results } = await setup();
+    const g = await request(app)
+      .post(`/rounds/${roundId}/submissions/${track.submissionId}/guesses`)
+      .set(auth(a))
+      .send({ guessedAccountId: b.accountId, comment: 'hm' });
+    const guessId = g.body.guessId;
+    await closeGuessingWindow(testDb.pool, roundId);
+    const post = (who: { token: string }, body: string, parentReplyId?: string) =>
+      request(app).post(`/guesses/${guessId}/replies`).set(auth(who)).send({ body, parentReplyId });
+
+    const first = await post(b, 'it was me');
+    const nested = await post(c, 'ha', first.body.replyId);
+    expect((await post(c, 'x', '00000000-0000-0000-0000-000000000000')).status).toBe(400);
+    await post(a, 'talking to myself'); // a replying to their own comment: no notification
+
+    const inbox = async (who: { accountId: string }) =>
+      (await testDb.pool.query('SELECT type, title, body FROM notifications WHERE account_id = $1 AND type = $2', [who.accountId, 'comment_reply'])).rows;
+    expect(await inbox(a)).toHaveLength(1);
+    expect(await inbox(a)).toEqual([expect.objectContaining({ body: 'it was me' })]);
+    expect(await inbox(b)).toEqual([expect.objectContaining({ body: 'ha' })]);
+    expect(await inbox(c)).toHaveLength(0);
+
+    const replies = (await results(a)).comments[0].replies;
+    expect(replies.find((r: { replyId: string }) => r.replyId === nested.body.replyId).parentReplyId).toBe(first.body.replyId);
+
+    const edit = (who: { token: string }, id: string) =>
+      request(app).put(`/replies/${id}`).set(auth(who)).send({ body: 'edited' });
+    expect((await edit(a, first.body.replyId)).status).toBe(404);
+    expect((await edit(b, first.body.replyId)).status).toBe(200);
+    expect((await results(a)).comments[0].replies[0]).toMatchObject({ body: 'edited', mine: false });
+
+    expect((await request(app).delete(`/replies/${first.body.replyId}`).set(auth(c))).status).toBe(404);
+    expect((await request(app).delete(`/replies/${first.body.replyId}`).set(auth(b))).status).toBe(204);
+    // The reply under it goes with it.
+    expect((await results(a)).comments[0].replies.map((r: { body: string }) => r.body)).toEqual(['talking to myself']);
+  });
+
+  it('lets members react to the submitted track once results open', async () => {
+    const { app, roundId, c, track, auth, results } = await setup();
+    const path = `/submissions/${track.submissionId}/reactions`;
+    expect((await request(app).post(path).set(auth(c)).send({ emoji: '🎸' })).status).toBe(403);
+    await closeGuessingWindow(testDb.pool, roundId);
+    expect((await request(app).post(path).set(auth(c)).send({ emoji: '🎸' })).body.reacted).toBe(true);
+    expect((await results(c)).reactions).toEqual([{ emoji: '🎸', count: 1, mine: true }]);
   });
 });

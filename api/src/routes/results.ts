@@ -115,18 +115,18 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     }
 
     const guessIds = guessesResult.rows.map((g) => g.id);
-    const repliesResult = await deps.pool.query<{ id: string; guess_id: string; account_id: string; body: string; created_at: string }>(
-      'SELECT id, guess_id, account_id, body, created_at FROM guess_replies WHERE guess_id = ANY($1) ORDER BY created_at, id',
+    const repliesResult = await deps.pool.query<{ id: string; guess_id: string; parent_reply_id: string | null; account_id: string; body: string; created_at: string }>(
+      'SELECT id, guess_id, parent_reply_id, account_id, body, created_at FROM guess_replies WHERE guess_id = ANY($1) ORDER BY created_at, id',
       [guessIds],
     );
-    const reactionsResult = await deps.pool.query<{ guess_id: string | null; reply_id: string | null; account_id: string; emoji: string }>(
-      'SELECT guess_id, reply_id, account_id, emoji FROM comment_reactions WHERE guess_id = ANY($1) OR reply_id = ANY($2)',
-      [guessIds, repliesResult.rows.map((r) => r.id)],
+    const reactionsResult = await deps.pool.query<{ submission_id: string | null; guess_id: string | null; reply_id: string | null; account_id: string; emoji: string }>(
+      'SELECT submission_id, guess_id, reply_id, account_id, emoji FROM comment_reactions WHERE submission_id = ANY($1) OR guess_id = ANY($2) OR reply_id = ANY($3)',
+      [submissionsResult.rows.map((s) => s.id), guessIds, repliesResult.rows.map((r) => r.id)],
     );
     const reactionsFor = (targetId: string) => {
       const counts = new Map<string, { emoji: string; count: number; mine: boolean }>();
       for (const r of reactionsResult.rows) {
-        if ((r.guess_id ?? r.reply_id) !== targetId) continue;
+        if ((r.submission_id ?? r.guess_id ?? r.reply_id) !== targetId) continue;
         const entry = counts.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
         entry.count += 1;
         entry.mine ||= r.account_id === accountId;
@@ -147,7 +147,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
         reactions: reactionsFor(g.id),
         replies: repliesResult.rows
           .filter((r) => r.guess_id === g.id)
-          .map((r) => ({ replyId: r.id, author: playerOf(r.account_id), body: r.body, createdAt: r.created_at, reactions: reactionsFor(r.id) })),
+          .map((r) => ({ replyId: r.id, parentReplyId: r.parent_reply_id, mine: r.account_id === accountId, author: playerOf(r.account_id), body: r.body, createdAt: r.created_at, reactions: reactionsFor(r.id) })),
       });
       commentsBySubmission.set(g.submission_id, list);
     }
@@ -165,6 +165,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
       excludedFromExport: row.service === 'bandcamp',
+      reactions: reactionsFor(row.id),
       comments: commentsBySubmission.get(row.id) ?? [],
       yourGuess: yourGuessBySubmission.get(row.id) ?? null,
     }));

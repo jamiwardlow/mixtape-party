@@ -1,83 +1,174 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { Pool } from 'pg';
+import { notifyAccounts } from '../notifications/sweep.js';
+import type { EmailChannel, PushChannel } from '../notifications/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember } from './rounds.js';
 
-export type CommentsDeps = AccountsDeps;
+export interface CommentsDeps extends AccountsDeps {
+  pushChannel: PushChannel;
+  emailChannel: EmailChannel;
+}
 
-// A fixed palette keeps reactions to a handful of tappable buttons, and arbitrary strings out of the table.
-export const REACTION_EMOJI = ['❤️', '😂', '🔥', '👏', '😮'];
+const MAX_LENGTH = 500;
+
+/** One grapheme (so 👍🏽 and 🏳️‍🌈 count) that is an emoji or a flag; nothing else gets stored as a reaction. */
+export function isEmoji(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 32 &&
+    /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(value) &&
+    [...new Intl.Segmenter().segment(value)].length === 1
+  );
+}
+
+type ReactionColumn = 'submission_id' | 'guess_id' | 'reply_id';
+
+// What a reaction can land on, each with the round it belongs to. A comment (guess) only exists to
+// react to once it has text; the track itself is reactable whether or not the submitter left a note.
+const REACTION_TARGETS: Record<ReactionColumn, string> = {
+  submission_id: `SELECT r.league_id, r.guessing_deadline FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
+  guess_id: `SELECT r.league_id, r.guessing_deadline FROM guesses g JOIN submissions s ON s.id = g.submission_id
+             JOIN rounds r ON r.id = s.round_id WHERE g.id = $1 AND g.comment IS NOT NULL`,
+  reply_id: `SELECT r.league_id, r.guessing_deadline FROM guess_replies p JOIN guesses g ON g.id = p.guess_id
+             JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE p.id = $1`,
+};
 
 /** Replies and reactions share the results' rule: league members only, once results are open. */
-async function threadGuardError(pool: Pool, guessId: string, accountId: string) {
-  const result = await pool.query<{ league_id: string; guessing_deadline: string; comment: string | null }>(
-    `SELECT r.league_id, r.guessing_deadline, g.comment FROM guesses g
-     JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id
-     WHERE g.id = $1`,
-    [guessId],
-  );
-  const guess = result.rows[0];
-  if (!guess?.comment) return { status: 404, error: 'comment not found' };
-  if (!(await isLeagueMember(pool, guess.league_id, accountId))) {
+async function guardError(pool: Pool, sql: string, id: string, accountId: string) {
+  const round = (await pool.query<{ league_id: string; guessing_deadline: string }>(sql, [id])).rows[0];
+  if (!round) return { status: 404, error: 'not found' };
+  if (!(await isLeagueMember(pool, round.league_id, accountId))) {
     return { status: 403, error: 'join the league before joining the conversation' };
   }
-  if (new Date(guess.guessing_deadline) > new Date()) {
+  if (new Date(round.guessing_deadline) > new Date()) {
     return { status: 403, error: 'comments open up once results are available' };
   }
   return null;
 }
 
+function parseBody(value: unknown): { ok: true; body: string } | { ok: false; error: string } {
+  const body = typeof value === 'string' ? value.trim() : '';
+  if (!body) return { ok: false, error: 'body is required' };
+  if (body.length > MAX_LENGTH) return { ok: false, error: `body must be ${MAX_LENGTH} characters or fewer` };
+  return { ok: true, body };
+}
+
 export function createCommentsRouter(deps: CommentsDeps): Router {
   const router = Router();
+  const authed = (req: Request) => (req as unknown as AuthedRequest).accountId;
 
+  // Replies to the guess's comment, or to another reply on it when parentReplyId is given.
   router.post('/guesses/:guessId/replies', requireAuth(deps), async (req, res) => {
-    const accountId = (req as unknown as AuthedRequest).accountId;
-    const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
-    if (!body) {
-      res.status(400).json({ error: 'body is required' });
+    const accountId = authed(req);
+    const parsed = parseBody(req.body?.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
       return;
     }
-    if (body.length > 500) {
-      res.status(400).json({ error: 'body must be 500 characters or fewer' });
+    const error = await guardError(deps.pool, REACTION_TARGETS.guess_id, req.params.guessId, accountId);
+    if (error) {
+      res.status(error.status).json({ error: error.error });
       return;
     }
-    const guardError = await threadGuardError(deps.pool, req.params.guessId, accountId);
-    if (guardError) {
-      res.status(guardError.status).json({ error: guardError.error });
-      return;
+    const parentReplyId = req.body?.parentReplyId ?? null;
+    let notifyId: string | undefined;
+    if (parentReplyId !== null) {
+      const parent = await deps.pool.query<{ account_id: string }>(
+        'SELECT account_id FROM guess_replies WHERE id = $1 AND guess_id = $2',
+        [parentReplyId, req.params.guessId],
+      );
+      if (!parent.rows[0]) {
+        res.status(400).json({ error: 'parentReplyId must be a reply on this comment' });
+        return;
+      }
+      notifyId = parent.rows[0].account_id;
     }
     const reply = await deps.pool.query<{ id: string }>(
-      'INSERT INTO guess_replies (guess_id, account_id, body) VALUES ($1, $2, $3) RETURNING id',
-      [req.params.guessId, accountId, body],
+      'INSERT INTO guess_replies (guess_id, parent_reply_id, account_id, body) VALUES ($1, $2, $3, $4) RETURNING id',
+      [req.params.guessId, parentReplyId, accountId, parsed.body],
     );
     res.status(201).json({ replyId: reply.rows[0].id });
+
+    // Whoever was replied to hears about it, unless they replied to themselves. Sent after the
+    // response: a flaky push or mail provider must not make a saved reply look like it failed.
+    const target = (
+      await deps.pool.query<{ round_id: string; league_id: string; guesser: string; name: string | null }>(
+        `SELECT r.id AS round_id, r.league_id, g.guesser_account_id AS guesser,
+                (SELECT display_name FROM accounts WHERE id = $2) AS name
+         FROM guesses g JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id
+         WHERE g.id = $1`,
+        [req.params.guessId, accountId],
+      )
+    ).rows[0];
+    const recipient = notifyId ?? target.guesser;
+    if (recipient === accountId) return;
+    try {
+      await notifyAccounts(
+        deps,
+        [recipient],
+        'comment_reply',
+        {
+          title: `${target.name ?? 'Someone'} replied to your ${notifyId ? 'reply' : 'comment'}`,
+          body: parsed.body,
+          data: { roundId: target.round_id, screen: 'results' },
+        },
+        { roundId: target.round_id, leagueId: target.league_id },
+      );
+    } catch (err) {
+      console.error('reply notification failed', err);
+    }
+  });
+
+  // Authors only; a missing reply and someone else's reply look the same.
+  router.put('/replies/:replyId', requireAuth(deps), async (req, res) => {
+    const parsed = parseBody(req.body?.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const updated = await deps.pool.query('UPDATE guess_replies SET body = $1 WHERE id = $2 AND account_id = $3', [
+      parsed.body,
+      req.params.replyId,
+      authed(req),
+    ]);
+    if (!updated.rowCount) {
+      res.status(404).json({ error: 'reply not found' });
+      return;
+    }
+    res.json({ body: parsed.body });
+  });
+
+  router.delete('/replies/:replyId', requireAuth(deps), async (req, res) => {
+    const deleted = await deps.pool.query('DELETE FROM guess_replies WHERE id = $1 AND account_id = $2', [
+      req.params.replyId,
+      authed(req),
+    ]);
+    if (!deleted.rowCount) {
+      res.status(404).json({ error: 'reply not found' });
+      return;
+    }
+    res.status(204).end();
   });
 
   // Toggles: reacting again with the same emoji takes the reaction back.
-  async function toggleReaction(
-    column: 'guess_id' | 'reply_id',
-    targetId: string,
-    guessId: string | undefined,
-    accountId: string,
-    emoji: unknown,
-    res: Response,
-  ) {
-    if (typeof emoji !== 'string' || !REACTION_EMOJI.includes(emoji)) {
-      res.status(400).json({ error: 'emoji is not one of the available reactions' });
+  async function toggleReaction(column: ReactionColumn, id: string, accountId: string, emoji: unknown, res: Response) {
+    if (!isEmoji(emoji)) {
+      res.status(400).json({ error: 'emoji must be a single emoji' });
       return;
     }
-    const guardError = guessId ? await threadGuardError(deps.pool, guessId, accountId) : { status: 404, error: 'reply not found' };
-    if (guardError) {
-      res.status(guardError.status).json({ error: guardError.error });
+    const error = await guardError(deps.pool, REACTION_TARGETS[column], id, accountId);
+    if (error) {
+      res.status(error.status).json({ error: error.error });
       return;
     }
     const removed = await deps.pool.query(
       `DELETE FROM comment_reactions WHERE ${column} = $1 AND account_id = $2 AND emoji = $3`,
-      [targetId, accountId, emoji],
+      [id, accountId, emoji],
     );
     if (!removed.rowCount) {
       await deps.pool.query(`INSERT INTO comment_reactions (${column}, account_id, emoji) VALUES ($1, $2, $3)`, [
-        targetId,
+        id,
         accountId,
         emoji,
       ]);
@@ -85,18 +176,15 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
     res.json({ reacted: !removed.rowCount });
   }
 
-  router.post('/guesses/:guessId/reactions', requireAuth(deps), async (req, res) => {
-    const accountId = (req as unknown as AuthedRequest).accountId;
-    await toggleReaction('guess_id', req.params.guessId, req.params.guessId, accountId, req.body?.emoji, res);
-  });
-
-  router.post('/replies/:replyId/reactions', requireAuth(deps), async (req, res) => {
-    const accountId = (req as unknown as AuthedRequest).accountId;
-    const parent = await deps.pool.query<{ guess_id: string }>('SELECT guess_id FROM guess_replies WHERE id = $1', [
-      req.params.replyId,
-    ]);
-    await toggleReaction('reply_id', req.params.replyId, parent.rows[0]?.guess_id, accountId, req.body?.emoji, res);
-  });
+  for (const [path, column] of [
+    ['submissions', 'submission_id'],
+    ['guesses', 'guess_id'],
+    ['replies', 'reply_id'],
+  ] as const) {
+    router.post(`/${path}/:id/reactions`, requireAuth(deps), (req, res) =>
+      toggleReaction(column, req.params.id, authed(req), req.body?.emoji, res),
+    );
+  }
 
   return router;
 }
