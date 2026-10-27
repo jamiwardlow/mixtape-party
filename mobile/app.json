@@ -32,6 +32,12 @@
       "@react-native-community/datetimepicker",
       "expo-audio",
       "expo-notifications"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2d41ab93-1fc9-465e-b698-06ebe83890cb"
+      }
+    },
+    "owner": "jamiwardlow"
   }
 }
