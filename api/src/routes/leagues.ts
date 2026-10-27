@@ -732,5 +732,22 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     res.json({ rounds: updated.rows.map(serializeRound) });
   });
 
+  // Rounds, memberships, submissions, guesses and notifications all hang off the league with
+  // ON DELETE CASCADE, so one DELETE removes the whole season.
+  router.delete('/leagues/:leagueId', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const league = await loadLeague(deps.pool, req.params.leagueId);
+    if (!league) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (league.hostAccountId !== accountId) {
+      res.status(403).json({ error: 'only the league host can delete a league' });
+      return;
+    }
+    await deps.pool.query('DELETE FROM leagues WHERE id = $1', [req.params.leagueId]);
+    res.status(204).end();
+  });
+
   return router;
 }

@@ -1306,3 +1306,22 @@ describe('GET /rounds/:roundId/overview', () => {
     expect(res.body.round).toEqual(await seasonEntry(app, leagueId, round2.id, members[0].token));
   });
 });
+
+describe('DELETE /leagues/:leagueId', () => {
+  it('lets the host delete the league and its rounds, and 403s a member', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, inviteCode } = await createSeason(app, 'delete-host@example.com');
+    const player = await signUp(app, 'delete-member@example.com');
+    await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${player.token}`);
+
+    const denied = await request(app).delete(`/leagues/${leagueId}`).set('Authorization', `Bearer ${player.token}`);
+    expect(denied.status).toBe(403);
+
+    const res = await request(app).delete(`/leagues/${leagueId}`).set('Authorization', `Bearer ${host.token}`);
+    expect(res.status).toBe(204);
+    expect(await scheduleOf(leagueId)).toHaveLength(0);
+
+    const again = await request(app).delete(`/leagues/${leagueId}`).set('Authorization', `Bearer ${host.token}`);
+    expect(again.status).toBe(404);
+  });
+});

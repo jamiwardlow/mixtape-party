@@ -72,6 +72,7 @@ export default function LeagueOverview() {
   const { token, profile } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -247,6 +248,20 @@ export default function LeagueOverview() {
           />
         )}
       </ScrollView>
+      {league.isHost &&
+        (confirmingDelete ? (
+          <TapeButton
+            title="Really delete this league? Tap to confirm"
+            variant="secondary"
+            onPress={async () => {
+              const res = await fetchApi(`/leagues/${league.id}`, { method: 'DELETE', token: token! });
+              if (res.ok) router.replace('/home');
+              else setError((await res.json().catch(() => null))?.error ?? 'Could not delete this league');
+            }}
+          />
+        ) : (
+          <TapeButton title="Delete league" variant="secondary" onPress={() => setConfirmingDelete(true)} />
+        ))}
       <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
     </Screen>
   );
