@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useLastNotificationResponse } from 'expo-notifications';
 
@@ -9,6 +10,9 @@ import { useLastNotificationResponse } from 'expo-notifications';
  * to your comment, or a reaction), scrolled to `focus`; others just open the app.
  */
 export function useOpenTappedNotification(enabled: boolean) {
+  // expo-notifications' response API throws on web at render time, which blanks the whole app.
+  // Platform.OS never changes at runtime, so the hook order is stable.
+  if (Platform.OS === 'web') return;
   const response = useLastNotificationResponse();
   const data = response?.notification.request.content.data;
   const roundId = data?.roundId;
