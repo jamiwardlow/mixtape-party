@@ -17,7 +17,7 @@ export class ExpoWebPushChannel implements PushChannel {
     await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(expoTokens.map((to) => ({ to, title: payload.title, body: payload.body }))),
+      body: JSON.stringify(expoTokens.map((to) => ({ to, title: payload.title, body: payload.body, data: payload.data }))),
     });
   }
 }

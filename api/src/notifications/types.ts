@@ -5,6 +5,8 @@ export interface NotificationPayload {
   body: string;
   /** Optional URL; emailed under the body. Push ignores it. */
   link?: string;
+  /** Optional deep-link data; push delivers it to the app's tap handler. Email ignores it. */
+  data?: { roundId: string };
 }
 
 export interface PushToken {

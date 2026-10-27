@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useOpenTappedNotification } from '../lib/notificationTap';
 import { SessionProvider, useSession } from '../lib/session';
 
 export default function RootLayout() {
@@ -15,9 +16,11 @@ export default function RootLayout() {
 function RootNavigator() {
   const { token, isLoading } = useSession();
 
-  if (isLoading) return null;
-
   const signedIn = token !== null;
+  // A tap while loading or signed out waits, then routes once the guarded screens exist.
+  useOpenTappedNotification(!isLoading && signedIn);
+
+  if (isLoading) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

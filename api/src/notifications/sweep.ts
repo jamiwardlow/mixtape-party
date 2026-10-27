@@ -261,6 +261,7 @@ async function sweepGuessingOpen(deps: NotificationSweepDeps, now: Date): Promis
         title: `Round ${round.round_number}: guessing is open`,
         body: `Submissions are in for "${round.theme}". Guess who submitted each track.`,
         link: playlist ? PLAYLIST_URL[playlist.service](playlist.playlist_external_id) : undefined,
+        data: { roundId: round.id },
       },
       { roundId: round.id, leagueId: round.league_id },
     );

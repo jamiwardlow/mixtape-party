@@ -381,6 +381,7 @@ describe('runNotificationSweep', () => {
         expect((await openRows()).rowCount).toBe(2);
         expect(openEmails(deps)).toHaveLength(2);
         expect(openEmails(deps)[0].payload.link).toMatch(/^https:\/\/music\.youtube\.com\/playlist\?list=/);
+        expect(openEmails(deps)[0].payload.data).toEqual({ roundId });
       });
 
       it('sends no link when there is no playlist', async () => {
