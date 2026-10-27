@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1044134776292",
+    "project_id": "mixtape-party-2cb07",
+    "storage_bucket": "mixtape-party-2cb07.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1044134776292:android:9ab6b401b0edbb8b034bf1",
+        "android_client_info": {
+          "package_name": "com.mixtapeparty.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3BSyDKwpAFchEE6Fq3MZeL-iliT_pcbQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
