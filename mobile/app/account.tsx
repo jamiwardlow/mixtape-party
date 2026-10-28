@@ -6,7 +6,7 @@ import { Image, Platform, Switch, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
-import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
+import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
 
 const AVATAR_SIZE = 96;
 
@@ -52,6 +52,33 @@ function Avatar({ url, token, initial }: { url?: string | null; token: string | 
     >
       <HandText>{initial}</HandText>
     </View>
+  );
+}
+
+interface LeagueRow {
+  id: string;
+  name: string;
+  concluded: boolean;
+  seasonLength: number;
+  joinedAt: string;
+}
+
+function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; leagues: LeagueRow[] }) {
+  return (
+    <>
+      <Label>{title}</Label>
+      {leagues.length === 0 && <BodyText>{empty}</BodyText>}
+      {leagues.map((l) => (
+        <PressScale
+          key={l.id}
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: '/league/[leagueId]', params: { leagueId: l.id } })}
+        >
+          <BodyText>{l.name}</BodyText>
+          <Label>{`${l.seasonLength} rounds · joined ${new Date(l.joinedAt).toLocaleDateString()}`}</Label>
+        </PressScale>
+      ))}
+    </>
   );
 }
 
@@ -114,6 +141,17 @@ export default function Account() {
       setAvatarBusy(false);
     }
   }
+
+  const [leagues, setLeagues] = useState<LeagueRow[] | null>(null);
+  const [leaguesError, setLeaguesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchApi('/leagues/mine', { token })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((body) => setLeagues(body.leagues))
+      .catch(() => setLeaguesError("Couldn't load your leagues."));
+  }, [token]);
 
   const [prefs, setPrefs] = useState({ pushEnabled: true, emailEnabled: true });
   const [prefsError, setPrefsError] = useState<string | null>(null);
@@ -227,6 +265,19 @@ export default function Account() {
           </View>
         ))}
         {prefsError && <ErrorNote>{prefsError}</ErrorNote>}
+      </JCard>
+      <JCard>
+        <HandText>League history</HandText>
+        {leaguesError ? (
+          <ErrorNote>{leaguesError}</ErrorNote>
+        ) : !leagues ? (
+          <ReelSpinner />
+        ) : (
+          <>
+            <LeagueGroup title="Active" empty="No active leagues." leagues={leagues.filter((l) => !l.concluded)} />
+            <LeagueGroup title="Past" empty="No past leagues yet." leagues={leagues.filter((l) => l.concluded)} />
+          </>
+        )}
       </JCard>
       <TapeButton title="Favorites" onPress={() => router.push('/favorites')} />
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />

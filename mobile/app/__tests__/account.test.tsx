@@ -19,12 +19,21 @@ jest.mock('../../lib/session', () => ({
   useSession: () => ({ token: 'session-tok', profile: mockProfile, refreshProfile: mockRefreshProfile }),
 }));
 
+let mockLeagues: { id: string; name: string; concluded: boolean; seasonLength: number; joinedAt: string }[];
+
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLeagues = [];
   mockProfile = { id: 'a1', email: 'jami@example.com' };
   globalThis.fetch = jest.fn(async (url: string) =>
     new Response(
-      JSON.stringify(url.includes('/notifications/settings') ? { pushEnabled: true, emailEnabled: true } : mockProfile),
+      JSON.stringify(
+        url.includes('/notifications/settings')
+          ? { pushEnabled: true, emailEnabled: true }
+          : url.includes('/leagues/mine')
+            ? { leagues: mockLeagues }
+            : mockProfile,
+      ),
       { status: 200 },
     ),
   ) as unknown as typeof fetch;
@@ -225,5 +234,55 @@ describe('avatar', () => {
 
     expect(screen.getByText('S')).toBeTruthy();
     expect(screen.queryByText('Remove photo')).toBeNull();
+  });
+});
+
+describe('league history', () => {
+  const league = (id: string, name: string, concluded: boolean) => ({
+    id,
+    name,
+    concluded,
+    seasonLength: 8,
+    joinedAt: '2026-03-01T00:00:00.000Z',
+  });
+
+  it('splits leagues into Active and Past', async () => {
+    mockLeagues = [league('l1', 'Road Trip', false), league('l2', 'Spring 2026', true)];
+
+    await render(<Account />);
+
+    expect(await screen.findByText('Road Trip')).toBeTruthy();
+    expect(screen.getByText('Spring 2026')).toBeTruthy();
+    expect(screen.getByText('Active')).toBeTruthy();
+    expect(screen.getByText('Past')).toBeTruthy();
+    expect(screen.getAllByText(/8 rounds/)).toHaveLength(2);
+  });
+
+  it('opens the league when a row is pressed', async () => {
+    mockLeagues = [league('l2', 'Spring 2026', true)];
+    await render(<Account />);
+
+    await fireEvent.press(await screen.findByText('Spring 2026'));
+
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/league/[leagueId]', params: { leagueId: 'l2' } });
+  });
+
+  it('says so when a group is empty', async () => {
+    await render(<Account />);
+
+    expect(await screen.findByText('No active leagues.')).toBeTruthy();
+    expect(screen.getByText('No past leagues yet.')).toBeTruthy();
+  });
+
+  it('shows an error when the leagues fail to load', async () => {
+    (fetch as jest.Mock).mockImplementation(async (url: string) =>
+      url.includes('/leagues/mine')
+        ? new Response('{}', { status: 500 })
+        : new Response(JSON.stringify({ pushEnabled: true, emailEnabled: true }), { status: 200 }),
+    );
+
+    await render(<Account />);
+
+    expect(await screen.findByText("Couldn't load your leagues.")).toBeTruthy();
   });
 });
