@@ -72,3 +72,28 @@ describe('guess screen preview', () => {
     );
   });
 });
+
+describe('guess screen editing', () => {
+  it('lets a player change an existing guess without resending the comment', async () => {
+    const track = {
+      submissionId: 's1', service: 'youtube_music', title: 'Song', artist: 'Artist',
+      playback: { deepLink: 'ytm://s1' }, guessedAccountId: 'a1', comment: 'groovy',
+    };
+    const players = [{ accountId: 'a1', displayName: 'Ann' }, { accountId: 'a2', displayName: 'Bo' }];
+    globalThis.fetch = jest.fn(async (url: string, init?: { method?: string }) =>
+      String(url).includes('/export')
+        ? new Response(JSON.stringify({ services: [] }), { status: 200 })
+        : init?.method === 'POST'
+          ? new Response(JSON.stringify({ guessId: 'g1' }), { status: 200 })
+          : new Response(JSON.stringify({ tracks: [track], players }), { status: 200 }),
+    ) as unknown as typeof fetch;
+    await render(<GuessRound />);
+
+    await fireEvent.press(await screen.findByText('Bo'));
+
+    await waitFor(() => expect(screen.getByText('Guessed:')).toBeTruthy());
+    expect(screen.getAllByText('Bo').length).toBeGreaterThan(0);
+    const post = (fetch as jest.Mock).mock.calls.find(([url, init]) => String(url).endsWith('/guesses') && init?.method === 'POST');
+    expect(JSON.parse(post[1].body)).toEqual({ guessedAccountId: 'a2' });
+  });
+});

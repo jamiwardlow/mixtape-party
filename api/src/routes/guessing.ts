@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
-import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
 import { PLAYLIST_URL } from './export.js';
 import { isLeagueMember, loadRound } from './rounds.js';
@@ -201,8 +201,9 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       submitter_account_id: string;
       league_id: string;
       submission_deadline: string;
+      guessing_deadline: string;
     }>(
-      `SELECT sub.account_id AS submitter_account_id, r.league_id, r.submission_deadline
+      `SELECT sub.account_id AS submitter_account_id, r.league_id, r.submission_deadline, r.guessing_deadline
        FROM submissions sub
        JOIN rounds r ON r.id = sub.round_id
        WHERE sub.id = $1 AND sub.round_id = $2`,
@@ -219,6 +220,10 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(guardError.status).json({ error: guardError.error });
       return;
     }
+    if (new Date(row.guessing_deadline) <= new Date()) {
+      res.status(403).json({ error: 'guessing has closed for this round' });
+      return;
+    }
     if (row.submitter_account_id === accountId) {
       res.status(403).json({ error: 'you cannot guess on your own submission' });
       return;
@@ -228,19 +233,18 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       return;
     }
 
-    try {
-      const guess = await deps.pool.query<{ id: string }>(
-        'INSERT INTO guesses (submission_id, guesser_account_id, guessed_account_id, comment) VALUES ($1, $2, $3, $4) RETURNING id',
-        [req.params.submissionId, accountId, guessedAccountId, parsed.comment],
-      );
-      res.status(201).json({ guessId: guess.rows[0].id });
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ error: 'already guessed on this track' });
-        return;
-      }
-      throw err;
-    }
+    // A repeat POST changes the guess; the comment is only touched when one is sent.
+    const upserted = await deps.pool.query<{ id: string; inserted: boolean }>(
+      `INSERT INTO guesses (submission_id, guesser_account_id, guessed_account_id, comment)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (submission_id, guesser_account_id) DO UPDATE
+         SET guessed_account_id = EXCLUDED.guessed_account_id,
+             comment = CASE WHEN $5 THEN EXCLUDED.comment ELSE guesses.comment END
+       RETURNING id, (xmax = 0) AS inserted`,
+      [req.params.submissionId, accountId, guessedAccountId, parsed.comment, req.body?.comment !== undefined],
+    );
+    const { id, inserted } = upserted.rows[0];
+    res.status(inserted ? 201 : 200).json({ guessId: id });
   });
 
   // Edits (or clears) your comment on a guess you've made. Allowed at any time, results included.

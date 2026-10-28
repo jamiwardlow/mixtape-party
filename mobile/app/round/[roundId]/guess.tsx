@@ -57,13 +57,21 @@ export default function GuessRound() {
 
   async function guess(submissionId: string, guessedAccountId: string) {
     if (!token) return;
+    // Changing a guess leaves the saved comment alone (Save comment owns it); a first guess carries the draft.
+    const changing = tracks?.find((t) => t.submissionId === submissionId)?.guessedAccountId != null;
     const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses`, {
       method: 'POST',
       token,
-      body: { guessedAccountId, comment: drafts[submissionId] },
+      body: changing ? { guessedAccountId } : { guessedAccountId, comment: drafts[submissionId] },
     });
     if (res.ok) {
-      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId, comment: drafts[submissionId]?.trim() || null } : t)) ?? null);
+      setTracks((prev) =>
+        prev?.map((t) =>
+          t.submissionId !== submissionId
+            ? t
+            : { ...t, guessedAccountId, comment: changing ? t.comment : drafts[submissionId]?.trim() || null },
+        ) ?? null,
+      );
     }
   }
 
@@ -130,9 +138,11 @@ export default function GuessRound() {
                   <Label>Guessed:</Label>
                   <HandText>{players.find((p) => p.accountId === item.guessedAccountId)?.displayName ?? 'a player'}</HandText>
                 </View>
-              ) : (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {players.map((player) => (
+              ) : null}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {players
+                  .filter((player) => player.accountId !== item.guessedAccountId)
+                  .map((player) => (
                     <TapeButton
                       key={player.accountId}
                       title={player.displayName ?? 'A player'}
@@ -140,8 +150,7 @@ export default function GuessRound() {
                       variant="secondary"
                     />
                   ))}
-                </View>
-              )}
+              </View>
             </JCard>
           )}
         />

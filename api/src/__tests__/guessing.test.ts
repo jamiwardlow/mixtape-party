@@ -3,6 +3,7 @@ import request from 'supertest';
 import { startTestDb, type TestDb } from './testDb.js';
 import {
   buildApp as buildTestApp,
+  closeGuessingWindow,
   closeSubmissionWindow as closeSubmissionWindowFor,
   createLeagueWithPlayers,
   signUp,
@@ -198,22 +199,44 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
     expect(res.status).toBe(403);
   });
 
-  it('rejects a second guess on the same track by the same guesser', async () => {
+  it('lets a guesser change their guess before the guessing deadline, keeping the comment', async () => {
     const { app } = buildApp();
     const { roundId, members, submissions } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     const target = submissions.find((s) => s.accountId !== members[0].accountId)!;
+    const url = `/rounds/${roundId}/submissions/${target.submissionId}/guesses`;
 
     await request(app)
-      .post(`/rounds/${roundId}/submissions/${target.submissionId}/guesses`)
+      .post(url)
       .set('Authorization', `Bearer ${members[0].token}`)
-      .send({ guessedAccountId: members[1].accountId });
+      .send({ guessedAccountId: members[1].accountId, comment: 'groovy' });
     const res = await request(app)
-      .post(`/rounds/${roundId}/submissions/${target.submissionId}/guesses`)
+      .post(url)
       .set('Authorization', `Bearer ${members[0].token}`)
       .send({ guessedAccountId: members[2].accountId });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    const row = await testDb.pool.query('SELECT guessed_account_id, comment FROM guesses WHERE submission_id = $1', [
+      target.submissionId,
+    ]);
+    expect(row.rows).toEqual([{ guessed_account_id: members[2].accountId, comment: 'groovy' }]);
+  });
+
+  it('rejects a new or changed guess after the guessing deadline', async () => {
+    const { app } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, 4);
+    await closeSubmissionWindow(roundId);
+    const [first, second] = submissions.filter((s) => s.accountId !== members[0].accountId);
+    const post = (submissionId: string, guessed: string) =>
+      request(app)
+        .post(`/rounds/${roundId}/submissions/${submissionId}/guesses`)
+        .set('Authorization', `Bearer ${members[0].token}`)
+        .send({ guessedAccountId: guessed });
+    await post(first.submissionId, members[1].accountId);
+    await closeGuessingWindow(testDb.pool, roundId);
+
+    expect((await post(first.submissionId, members[2].accountId)).status).toBe(403);
+    expect((await post(second.submissionId, members[2].accountId)).status).toBe(403);
   });
 
   it('rejects requests without a session', async () => {
