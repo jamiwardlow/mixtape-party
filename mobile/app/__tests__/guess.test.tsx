@@ -97,3 +97,44 @@ describe('guess screen editing', () => {
     expect(JSON.parse(post[1].body)).toEqual({ guessedAccountId: 'a2' });
   });
 });
+
+describe('guess screen own track', () => {
+  it('shows your track with a note box and no player buttons, and saves the note', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      if (String(url).includes('/export')) return new Response(JSON.stringify({ services: [] }), { status: 200 });
+      if (String(url).endsWith('/mine/note')) return new Response(JSON.stringify({ note: 'hint' }), { status: 200 });
+      return new Response(
+        JSON.stringify({
+          tracks: [
+            {
+              submissionId: 's1',
+              service: 'youtube_music',
+              title: 'Mine',
+              artist: 'Me',
+              thumbnailUrl: null,
+              playback: { deepLink: 'x' },
+              guessedAccountId: null,
+              comment: null,
+              mine: true,
+            },
+          ],
+          players: [{ accountId: 'p1', displayName: 'Pat' }],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    await render(<GuessRound />);
+
+    await fireEvent.changeText(await screen.findByPlaceholderText(/Your track/), 'hint');
+    await fireEvent.press(await screen.findByText('Save comment'));
+
+    expect(screen.queryByText('Pat')).toBeNull();
+    await waitFor(() => {
+      const put = calls.find((c) => c.url.endsWith('/rounds/round-1/submissions/mine/note'));
+      expect(put?.init?.method).toBe('PUT');
+      expect(JSON.parse(String(put?.init?.body))).toEqual({ note: 'hint' });
+    });
+  });
+});

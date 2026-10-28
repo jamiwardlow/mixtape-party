@@ -103,6 +103,25 @@ describe('GET /rounds/:roundId/results', () => {
     expect(revealed.correctGuessers.map((g: { accountId: string }) => g.accountId)).toEqual([members[0].accountId]);
   });
 
+  it('shows the submitter\'s guessing-time note beside, not in place of, their submit-time comment', async () => {
+    const { app } = buildApp();
+    const { roundId, members, submissions } = await createLeagueWithPlayers(app, 3);
+    await closeSubmissionWindow(roundId);
+    const own = submissions.find((s) => s.accountId === members[0].accountId)!;
+    await testDb.pool.query("UPDATE submissions SET comment = 'why I picked it' WHERE id = $1", [own.submissionId]);
+    await request(app)
+      .put(`/rounds/${roundId}/submissions/mine/note`)
+      .set('Authorization', `Bearer ${members[0].token}`)
+      .send({ note: 'the hint I left' });
+    await closeGuessingWindow(roundId);
+
+    const res = await request(app).get(`/rounds/${roundId}/results`).set('Authorization', `Bearer ${members[1].token}`);
+
+    const track = res.body.tracks.find((t: { submissionId: string }) => t.submissionId === own.submissionId);
+    expect(track.comment).toBe('why I picked it');
+    expect(track.note).toBe('the hint I left');
+  });
+
   it('scores guessers per correct guess and does not score submitters for being guessed correctly', async () => {
     const { app } = buildApp();
     const { roundId, members, submissions } = await createLeagueWithPlayers(app, 4);

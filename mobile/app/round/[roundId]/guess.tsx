@@ -17,6 +17,8 @@ interface Track {
   playback: { deepLink: string; webUrl?: string };
   guessedAccountId: string | null;
   comment: string | null;
+  /** Your own track: a note box, no player buttons. */
+  mine?: boolean;
 }
 
 export default function GuessRound() {
@@ -77,13 +79,14 @@ export default function GuessRound() {
 
   async function saveComment(submissionId: string) {
     if (!token) return;
-    const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, {
-      method: 'PUT',
-      token,
-      body: { comment: drafts[submissionId] },
-    });
+    const mine = tracks?.find((t) => t.submissionId === submissionId)?.mine;
+    const res = await fetchApi(
+      mine ? `/rounds/${roundId}/submissions/mine/note` : `/rounds/${roundId}/submissions/${submissionId}/guesses/comment`,
+      { method: 'PUT', token, body: mine ? { note: drafts[submissionId] } : { comment: drafts[submissionId] } },
+    );
     if (res.ok) {
-      const { comment } = await res.json();
+      const body = await res.json();
+      const comment = mine ? body.note : body.comment;
       setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, comment } : t)) ?? null);
     }
   }
@@ -124,13 +127,13 @@ export default function GuessRound() {
                 </BodyText>
               </View>
               <TapeInput
-                placeholder="Add a comment (optional) — shown with the results"
+                placeholder={item.mine ? 'Your track — add a note (optional), shown with the results' : 'Add a comment (optional) — shown with the results'}
                 value={drafts[item.submissionId] ?? ''}
                 onChangeText={(text) => setDrafts((prev) => ({ ...prev, [item.submissionId]: text }))}
                 maxLength={500}
                 multiline
               />
-              {item.guessedAccountId && (drafts[item.submissionId] ?? '').trim() !== (item.comment ?? '') ? (
+              {(item.mine || item.guessedAccountId) && (drafts[item.submissionId] ?? '').trim() !== (item.comment ?? '') ? (
                 <TapeButton title="Save comment" onPress={() => saveComment(item.submissionId)} variant="secondary" />
               ) : null}
               {item.guessedAccountId ? (
@@ -140,7 +143,7 @@ export default function GuessRound() {
                 </View>
               ) : null}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {players
+                {(item.mine ? [] : players)
                   .filter((player) => player.accountId !== item.guessedAccountId)
                   .map((player) => (
                     <TapeButton

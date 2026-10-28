@@ -75,11 +75,16 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       art_id: string | null;
       guessed_account_id: string | null;
       comment: string | null;
+      mine: boolean;
     }>(
-      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, s.art_id, g.guessed_account_id, g.comment
+      // Your own track comes back too, flagged `mine`, with your note in `comment`. The flag is
+      // computed per requester, so nothing here tells anyone else whose track is whose.
+      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, s.art_id, g.guessed_account_id,
+              CASE WHEN s.account_id = $1 THEN s.guessing_note ELSE g.comment END AS comment,
+              (s.account_id = $1) AS mine
        FROM submissions s
        LEFT JOIN guesses g ON g.submission_id = s.id AND g.guesser_account_id = $1
-       WHERE s.round_id = $2 AND s.account_id != $1
+       WHERE s.round_id = $2
        ORDER BY s.id`,
       [accountId, req.params.roundId],
     );
@@ -102,6 +107,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
           playback,
           guessedAccountId: row.guessed_account_id,
           comment: row.comment,
+          mine: row.mine,
           excludedFromExport: row.service === 'bandcamp',
         };
       }),
@@ -265,6 +271,39 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       return;
     }
     res.json({ comment: parsed.comment });
+  });
+
+  // Your note on your own track; open until the guessing deadline, like guesses.
+  router.put('/rounds/:roundId/submissions/mine/note', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const parsed = parseComment(req.body?.note);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    const round = await loadRound(deps.pool, req.params.roundId);
+    if (!round) {
+      res.status(404).json({ error: 'round not found' });
+      return;
+    }
+    if (new Date(round.submissionDeadline) > new Date()) {
+      res.status(403).json({ error: 'guessing has not opened yet for this round' });
+      return;
+    }
+    if (new Date(round.guessingDeadline) <= new Date()) {
+      res.status(403).json({ error: 'guessing has closed for this round' });
+      return;
+    }
+    const updated = await deps.pool.query('UPDATE submissions SET guessing_note = $1 WHERE round_id = $2 AND account_id = $3', [
+      parsed.comment,
+      req.params.roundId,
+      accountId,
+    ]);
+    if (!updated.rowCount) {
+      res.status(404).json({ error: 'you have not submitted a track to this round' });
+      return;
+    }
+    res.json({ note: parsed.comment });
   });
 
   return router;

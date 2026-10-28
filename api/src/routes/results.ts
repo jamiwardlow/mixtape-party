@@ -138,8 +138,9 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       title: string;
       artist: string;
       comment: string | null;
+      guessing_note: string | null;
       account_id: string;
-    }>('SELECT id, service, external_id, art_id, title, artist, comment, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
+    }>('SELECT id, service, external_id, art_id, title, artist, comment, guessing_note, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
       req.params.roundId,
     ]);
 
@@ -226,6 +227,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       artist: row.artist,
       thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
       comment: row.comment,
+      note: row.guessing_note,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
       excludedFromExport: row.service === 'bandcamp',

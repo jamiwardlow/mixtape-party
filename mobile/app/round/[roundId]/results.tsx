@@ -55,6 +55,7 @@ interface Track {
   artist: string;
   thumbnailUrl: string | null;
   comment: string | null;
+  note: string | null;
   submitter: Player;
   correctGuessers: Player[];
   reactions: Reaction[];
@@ -418,6 +419,7 @@ export default function RoundResults() {
                 </BodyText>
               </View>
               {item.comment && <BodyText>“{item.comment}”</BodyText>}
+              {item.note && <BodyText>“{item.note}”</BodyText>}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Label>Submitted by</Label>
                 <Avatar size={20} label="" url={item.submitter.avatarUrl} token={token} initial={(item.submitter.displayName ?? '?')[0]} />

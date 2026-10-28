@@ -43,7 +43,7 @@ describe('GET /rounds/:roundId/guessing', () => {
       .set('Authorization', `Bearer ${members[0].token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.tracks).toHaveLength(3);
+    expect(res.body.tracks).toHaveLength(4);
     for (const track of res.body.tracks) {
       expect(track.service).toBe('youtube_music');
       expect(typeof track.title).toBe('string');
@@ -65,7 +65,7 @@ describe('GET /rounds/:roundId/guessing', () => {
     expect(res.body.players.map((p: { accountId: string }) => p.accountId)).not.toContain(members[0].accountId);
   });
 
-  it('never includes the requester own submission', async () => {
+  it('includes the requester own submission, flagged as theirs and nobody else\'s', async () => {
     const { app } = buildApp();
     const { roundId, members, submissions } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
@@ -75,7 +75,11 @@ describe('GET /rounds/:roundId/guessing', () => {
       .get(`/rounds/${roundId}/guessing`)
       .set('Authorization', `Bearer ${members[0].token}`);
 
-    expect(res.body.tracks.map((t: { submissionId: string }) => t.submissionId)).not.toContain(ownSubmissionId);
+    expect(res.body.tracks).toHaveLength(4);
+    const mine = res.body.tracks.filter((t: { mine?: boolean }) => t.mine);
+    expect(mine.map((t: { submissionId: string }) => t.submissionId)).toEqual([ownSubmissionId]);
+    expect(mine[0].guessedAccountId).toBeNull();
+    expect(res.body.tracks.filter((t: { mine?: boolean }) => !t.mine)).toHaveLength(3);
   });
 
   it('rejects requests without a session', async () => {
@@ -287,6 +291,64 @@ describe('POST /rounds/:roundId/submissions/:submissionId/guesses', () => {
       .set('Authorization', `Bearer ${members[0].token}`)
       .send({ guessedAccountId: outsider.accountId });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('PUT /rounds/:roundId/submissions/mine/note', () => {
+  it('saves a note on your own track, shown back only to you on the guessing screen', async () => {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 3);
+    await closeSubmissionWindow(roundId);
+
+    const res = await request(app)
+      .put(`/rounds/${roundId}/submissions/mine/note`)
+      .set('Authorization', `Bearer ${members[0].token}`)
+      .send({ note: ' my pick ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ note: 'my pick' });
+
+    const get = (token: string) =>
+      request(app).get(`/rounds/${roundId}/guessing`).set('Authorization', `Bearer ${token}`);
+    const own = (await get(members[0].token)).body.tracks.find((t: { mine?: boolean }) => t.mine);
+    expect(own.comment).toBe('my pick');
+    expect(JSON.stringify((await get(members[1].token)).body)).not.toContain('my pick');
+  });
+
+  it('is closed until guessing opens', async () => {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 3);
+
+    const res = await request(app)
+      .put(`/rounds/${roundId}/submissions/mine/note`)
+      .set('Authorization', `Bearer ${members[0].token}`)
+      .send({ note: 'early' });
+    expect(res.status).toBe(403);
+  });
+
+  it('is closed once the guessing deadline passes', async () => {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 3);
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(testDb.pool, roundId);
+
+    const res = await request(app)
+      .put(`/rounds/${roundId}/submissions/mine/note`)
+      .set('Authorization', `Bearer ${members[0].token}`)
+      .send({ note: 'late' });
+    expect(res.status).toBe(403);
+  });
+
+  it('404s when you have no submission in the round', async () => {
+    const { app } = buildApp();
+    const { roundId } = await createLeagueWithPlayers(app, 3);
+    await closeSubmissionWindow(roundId);
+    const outsider = await signUp(app, 'outsider@example.com');
+
+    const res = await request(app)
+      .put(`/rounds/${roundId}/submissions/mine/note`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ note: 'hi' });
+    expect(res.status).toBe(404);
   });
 });
 
