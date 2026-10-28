@@ -471,6 +471,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       members: membersResult.rows.map((row) => ({
         accountId: row.account_id,
         displayName: row.display_name,
+        avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at),
         joinedAt: row.joined_at,
       })),
       standings: scores,

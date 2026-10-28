@@ -159,6 +159,8 @@ function ReplyNode({
   actions: ThreadActions;
   depth: number;
 }) {
+  const { token } = useSession();
+
   const [mode, setMode] = useState<'view' | 'reply' | 'edit'>('view');
   const [draft, setDraft] = useState('');
   const children = replies.filter((r) => r.parentReplyId === reply.replyId);
@@ -181,6 +183,7 @@ function ReplyNode({
       }}
     >
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+        {reply.mine ? null : <Avatar size={20} label="" url={reply.author.avatarUrl} token={token} initial={(reply.author.displayName ?? '?')[0]} />}
         <HandText>{reply.mine ? 'You' : (reply.author.displayName ?? 'A player')}</HandText>
         <BodyText>{reply.body}</BodyText>
       </View>
@@ -208,12 +211,14 @@ function ReplyNode({
 }
 
 function CommentThread({ comment, actions }: { comment: Comment; actions: ThreadActions }) {
+  const { token } = useSession();
   const [reply, setReply] = useState('');
   return (
     <View style={{ gap: 6, ...(actions.focus === comment.guessId && { borderLeftWidth: 3, paddingLeft: 6 }) }}>
       {/* Your own comment is already on screen in its editor. */}
       {comment.mine ? null : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          <Avatar size={20} label="" url={comment.guesser.avatarUrl} token={token} initial={(comment.guesser.displayName ?? '?')[0]} />
           <HandText>{comment.guesser.displayName ?? 'A player'}</HandText>
           <BodyText>“{comment.comment}”</BodyText>
         </View>

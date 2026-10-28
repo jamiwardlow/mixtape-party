@@ -176,6 +176,7 @@ export default function LeagueOverview() {
             return (
               <View key={member.accountId} testID={`roster-${member.accountId}`} style={styles.row}>
                 <View style={styles.inline}>
+                  <Avatar size={28} label="" url={member.avatarUrl} token={token} initial={nameOf(member)[0]} />
                   <BodyText>{nameOf(member)}</BodyText>
                   {member.accountId === overview.host.accountId && <Label>host</Label>}
                 </View>
