@@ -107,6 +107,12 @@ export default function LeagueOverview() {
           <Label testID="season-progress">
             {league.concluded ? 'Season complete' : `Round ${current?.number ?? 1} of ${league.seasonLength}`}
           </Label>
+          {league.concluded && (
+            <TapeButton
+              title="Season wrap-up"
+              onPress={() => router.push({ pathname: '/league/[leagueId]/final', params: { leagueId: league.id } })}
+            />
+          )}
           {league.concluded && winners.length > 0 && (
             <View style={styles.inline}>
               <BodyText>Winners:</BodyText>

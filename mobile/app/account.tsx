@@ -5,6 +5,7 @@ import { createElement, useEffect, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, ScrollView, Switch, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { Avatar } from '../lib/Avatar';
+import { BestieGroup, type Bestie } from '../lib/BestieGroup';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
 import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
@@ -121,28 +122,6 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
           <BodyText>{l.name}</BodyText>
           <Label>{`${l.seasonLength} rounds · joined ${new Date(l.joinedAt).toLocaleDateString()}`}</Label>
         </PressScale>
-      ))}
-    </>
-  );
-}
-
-interface Bestie {
-  accountId: string;
-  displayName: string | null;
-  count: number;
-}
-
-function BestieGroup({ title, caption, besties }: { title: string; caption: string; besties: Bestie[] }) {
-  return (
-    <>
-      <Label>{title}</Label>
-      <Label>{caption}</Label>
-      {besties.length === 0 && <BodyText>No correct guesses yet</BodyText>}
-      {besties.map((b) => (
-        <View key={b.accountId} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <BodyText>{b.displayName || 'A player'}</BodyText>
-          <BodyText>{b.count}</BodyText>
-        </View>
       ))}
     </>
   );

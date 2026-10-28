@@ -54,3 +54,14 @@ it('no longer offers a second route into the same league', async () => {
 
   expect(screen.queryByText('Season schedule')).toBeNull();
 });
+
+it('opens the season wrap-up for a concluded league', async () => {
+  globalThis.fetch = jest.fn(
+    async () => new Response(JSON.stringify({ leagues: [{ ...leagues[0], concluded: true }] }), { status: 200 }),
+  ) as unknown as typeof fetch;
+  await render(<Home />);
+
+  fireEvent.press(await screen.findByText(/Office League/));
+
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/league/[leagueId]/final', params: { leagueId: 'league-1' } });
+});

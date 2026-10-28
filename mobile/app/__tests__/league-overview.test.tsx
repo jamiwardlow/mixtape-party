@@ -265,3 +265,14 @@ it('explains itself when the league cannot be loaded', async () => {
 
   await waitFor(() => expect(screen.getByText('join the league before viewing it')).toBeTruthy());
 });
+
+it('links to the season wrap-up only once the season is concluded', async () => {
+  await show(concludedSeason());
+  fireEvent.press(screen.getByText('Season wrap-up'));
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/league/[leagueId]/final', params: { leagueId: 'league-1' } });
+});
+
+it('has no wrap-up link mid-season', async () => {
+  await show(body());
+  expect(screen.queryByText('Season wrap-up')).toBeNull();
+});

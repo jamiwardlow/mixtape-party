@@ -20,6 +20,7 @@ interface RoundSummary {
 interface LeagueSummary {
   id: string;
   name: string;
+  concluded: boolean;
   round: RoundSummary | null;
 }
 
@@ -65,7 +66,9 @@ export default function Home() {
           <PressScale
             key={league.id}
             accessibilityRole="button"
-            onPress={() => router.push({ pathname: '/league/[leagueId]', params: { leagueId: league.id } })}
+            onPress={() =>
+              router.push({ pathname: league.concluded ? '/league/[leagueId]/final' : '/league/[leagueId]', params: { leagueId: league.id } })
+            }
           >
             <JCard>
               <ReelHoles color={t.reel} />
