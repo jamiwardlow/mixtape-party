@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
+import { Avatar } from '../../../lib/Avatar';
 import {
   PHASE_META,
   phaseLabel,
@@ -152,7 +153,10 @@ export default function LeagueOverview() {
               </Label>
               {standings.map((player) => (
                 <View key={player.accountId} style={styles.row}>
-                  <BodyText>{nameOf(player)}</BodyText>
+                  <View style={styles.inline}>
+                    <Avatar size={28} label="" url={player.avatarUrl} token={token} initial={nameOf(player)[0]} />
+                    <BodyText>{nameOf(player)}</BodyText>
+                  </View>
                   <BodyText testID={`standings-${player.accountId}`}>{player.score}</BodyText>
                 </View>
               ))}

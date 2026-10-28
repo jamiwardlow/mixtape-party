@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
+import { Avatar } from '../../../lib/Avatar';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { SERVICE_META } from '../../../lib/theme';
@@ -358,8 +359,11 @@ export default function RoundResults() {
             </View>
           ) : null}
           {results?.scores.map((score) => (
-            <View key={score.accountId} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <HandText>{score.displayName ?? 'A player'}</HandText>
+            <View key={score.accountId} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Avatar size={28} label="" url={score.avatarUrl} token={token} initial={(score.displayName ?? '?')[0]} />
+                <HandText>{score.displayName ?? 'A player'}</HandText>
+              </View>
               <BodyText>{score.score}</BodyText>
             </View>
           ))}
@@ -406,6 +410,7 @@ export default function RoundResults() {
               {item.comment && <BodyText>“{item.comment}”</BodyText>}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Label>Submitted by</Label>
+                <Avatar size={20} label="" url={item.submitter.avatarUrl} token={token} initial={(item.submitter.displayName ?? '?')[0]} />
                 <HandText>{item.submitter.displayName ?? 'a player'}</HandText>
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>

@@ -181,6 +181,9 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
   return router;
 }
 
+export const avatarUrlOf = (id: string, updatedAt: Date | null) =>
+  updatedAt ? `/accounts/${id}/avatar?v=${updatedAt.getTime()}` : null;
+
 async function sendProfile(pool: Pool, accountId: string, res: Response): Promise<void> {
   const accountResult = await pool.query<{
     id: string;
@@ -200,9 +203,7 @@ async function sendProfile(pool: Pool, accountId: string, res: Response): Promis
     id: account.id,
     email: account.email,
     displayName: account.display_name,
-    avatarUrl: account.avatar_updated_at
-      ? `/accounts/${account.id}/avatar?v=${account.avatar_updated_at.getTime()}`
-      : null,
+    avatarUrl: avatarUrlOf(account.id, account.avatar_updated_at),
   });
 }
 

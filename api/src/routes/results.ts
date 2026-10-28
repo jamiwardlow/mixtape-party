@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   isLeagueMember,
   isSeasonConcluded,
@@ -101,14 +101,14 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       return;
     }
 
-    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null }>(
-      `SELECT a.id AS account_id, a.display_name FROM league_members lm
+    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null }>(
+      `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at FROM league_members lm
        JOIN accounts a ON a.id = lm.account_id
        WHERE lm.league_id = $1`,
       [round.leagueId],
     );
     const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name }]),
+      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }]),
     );
 
     const submissionsResult = await deps.pool.query<{
@@ -234,8 +234,8 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       return;
     }
 
-    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null }>(
-      `SELECT a.id AS account_id, a.display_name FROM league_members lm
+    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null }>(
+      `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at FROM league_members lm
        JOIN accounts a ON a.id = lm.account_id
        WHERE lm.league_id = $1`,
       [req.params.leagueId],
@@ -244,6 +244,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const members = membersResult.rows.map((row) => ({
       accountId: row.account_id,
       displayName: row.display_name,
+      avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at),
     }));
 
     res.json(scoreboard(members, await correctGuessCounts(deps.pool, req.params.leagueId)));

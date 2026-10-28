@@ -14,6 +14,7 @@ export const CURRENT_ROUND_CLAUSE = `ORDER BY
 export interface Player {
   accountId: string;
   displayName: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface RoundInfo {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
-import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   CURRENT_ROUND_CLAUSE,
   describeRound,
@@ -404,8 +404,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       // Driven off league_members rather than off guesses, so a player who has done nothing is
       // still on the roster and still in the standings on zero. Ordered by joined_at so the list
       // is stable between loads.
-      deps.pool.query<{ account_id: string; display_name: string | null; joined_at: string }>(
-        `SELECT a.id AS account_id, a.display_name, lm.joined_at FROM league_members lm
+      deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null; joined_at: string }>(
+        `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at, lm.joined_at FROM league_members lm
          JOIN accounts a ON a.id = lm.account_id
          WHERE lm.league_id = $1
          ORDER BY lm.joined_at ASC`,
@@ -441,7 +441,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
 
     const now = new Date();
     const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name }]),
+      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }]),
     );
 
     const activity = new Map<string, RoundActivity>(roundsResult.rows.map((row) => [row.id, emptyRoundActivity()]));
@@ -511,8 +511,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     }
 
     const [membersResult, submissionsResult, guessesResult] = await Promise.all([
-      deps.pool.query<{ account_id: string; display_name: string | null }>(
-        `SELECT a.id AS account_id, a.display_name FROM league_members lm
+      deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null }>(
+        `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at FROM league_members lm
          JOIN accounts a ON a.id = lm.account_id
          WHERE lm.league_id = $1
          ORDER BY lm.joined_at ASC`,
@@ -534,7 +534,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     ]);
 
     const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name }]),
+      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }]),
     );
     const mine = submissionsResult.rows.find((row) => row.account_id === accountId);
     const activity: RoundActivity = {

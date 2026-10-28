@@ -4,56 +4,10 @@ import { router } from 'expo-router';
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, ScrollView, Switch, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
+import { Avatar } from '../lib/Avatar';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
 import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
-
-const AVATAR_SIZE = 96;
-
-// The avatar endpoint is authenticated and an <img> can't send a bearer header, so on web fetch it
-// into an object URL; native Image takes headers directly.
-function Avatar({ url, token, initial }: { url?: string | null; token: string | null; initial: string }) {
-  const t = useTheme();
-  const [src, setSrc] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-    setSrc(null);
-    if (!url || !token || Platform.OS !== 'web') return;
-    let objectUrl: string | undefined;
-    let cancelled = false;
-    fetch(`${API_URL}${url}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => (res.ok ? res.blob() : Promise.reject()))
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      })
-      .catch(() => setFailed(true));
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [url, token]);
-
-  const box = { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 };
-  const source =
-    Platform.OS === 'web'
-      ? src && { uri: src }
-      : url && token && { uri: `${API_URL}${url}`, headers: { Authorization: `Bearer ${token}` } };
-  if (source && !failed) {
-    return <Image accessibilityLabel="Your photo" source={source} style={box} onError={() => setFailed(true)} />;
-  }
-  return (
-    <View
-      accessibilityLabel="Your photo"
-      style={[box, { backgroundColor: t.shell, borderColor: t.hairline, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }]}
-    >
-      <HandText>{initial}</HandText>
-    </View>
-  );
-}
 
 const CROP_VIEW = 240;
 

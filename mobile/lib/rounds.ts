@@ -3,6 +3,7 @@ export type ServiceName = 'youtube_music' | 'bandcamp';
 export interface Player {
   accountId: string;
   displayName: string | null;
+  avatarUrl?: string | null;
 }
 
 /** Nobody has to pick a name (#81), and a blank where a player should be reads as a bug. */
