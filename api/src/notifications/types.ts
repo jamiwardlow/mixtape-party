@@ -7,7 +7,7 @@ export interface NotificationPayload {
   link?: string;
   /** Optional deep-link data; push delivers it to the app's tap handler. Email ignores it. */
   /** `focus` is the comment or reply (or track) the results screen should scroll to. */
-  data?: { roundId: string; screen?: 'results'; focus?: string };
+  data?: { roundId: string; screen?: 'results'; focus?: string } | { leagueId: string; screen: 'final' };
 }
 
 export interface PushToken {

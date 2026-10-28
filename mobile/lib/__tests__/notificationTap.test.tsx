@@ -30,6 +30,12 @@ it('opens the guess screen for a tapped notification with a round id', async () 
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/round/[roundId]/guess', params: { roundId: 'round-1' } });
 });
 
+it('opens the season wrap-up for a season-concluded push', async () => {
+  mockResponse = tapped({ leagueId: 'league-1', screen: 'final' });
+  await renderHook(() => useOpenTappedNotification(true));
+  expect(mockPush).toHaveBeenCalledWith({ pathname: '/league/[leagueId]/final', params: { leagueId: 'league-1' } });
+});
+
 it('waits out the index redirect on cold start before pushing', async () => {
   mockResponse = tapped({ roundId: 'round-1' });
   mockPathname = '/';

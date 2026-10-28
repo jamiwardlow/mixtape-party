@@ -197,6 +197,9 @@ describe('runNotificationSweep', () => {
 
     const notifs = await testDb.pool.query("SELECT account_id, type FROM notifications WHERE type = 'season_concluded'");
     expect(notifs.rows).toEqual([{ account_id: host, type: 'season_concluded' }]);
+    expect(deps.emailChannel.sent[0].payload.data).toEqual({ leagueId, screen: 'final' });
+    // The final round's results_ready is suppressed: the wrap-up covers it.
+    expect((await testDb.pool.query("SELECT 1 FROM notifications WHERE type = 'results_ready'")).rowCount).toBe(0);
 
     await runNotificationSweep(deps); // idempotent
     const again = await testDb.pool.query("SELECT * FROM notifications WHERE type = 'season_concluded'");

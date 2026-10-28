@@ -172,6 +172,8 @@ async function sweepResultsReady(deps: NotificationSweepDeps, now: Date): Promis
     // round the season scheduled but never reached.
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE results_notified_at IS NULL AND guessing_deadline <= $1
+       -- The season's final round is announced by season_concluded, whose wrap-up covers it.
+       AND round_number < (SELECT season_length FROM leagues WHERE id = rounds.league_id)
        AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = rounds.id)`,
     [now.toISOString()],
   );
@@ -211,6 +213,7 @@ async function sweepSeasonConcluded(deps: NotificationSweepDeps, now: Date): Pro
       {
         title: `${league.name}'s season has concluded`,
         body: 'Check the final standings.',
+        data: { leagueId: league.id, screen: 'final' },
       },
       { leagueId: league.id },
     );
