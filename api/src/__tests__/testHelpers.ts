@@ -56,6 +56,8 @@ export function buildApp(
 
 export async function signUp(app: Express, email: string) {
   const res = await request(app).post('/accounts').send({ email, password: 'password123' });
+  // A failed sign-up would otherwise surface as an unrelated 401 when the test uses its undefined token.
+  if (res.status !== 201) throw new Error(`signUp(${email}) got ${res.status}: ${JSON.stringify(res.body)}`);
   return { accountId: res.body.accountId as string, token: res.body.token as string };
 }
 

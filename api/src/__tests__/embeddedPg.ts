@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createServer, type AddressInfo } from 'node:net';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import EmbeddedPostgres from 'embedded-postgres';
@@ -36,16 +36,25 @@ function within<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
   ]).finally(() => clearTimeout(timer));
 }
 
-/** A port nothing holds as of right now, per the OS. */
+/**
+ * A port nothing holds on 127.0.0.1 as of right now, drawn from below the OS ephemeral range
+ * (49152+ on macOS, 32768+ on Linux). supertest serves each request from an OS-assigned ephemeral
+ * port bound to `::`, and macOS lets that bind succeed even while a cluster holds the same number
+ * on 127.0.0.1 — the request then reaches Postgres and fails with "socket hang up". Staying out of
+ * that range keeps the two from ever sharing a port.
+ */
 async function freePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
-  });
-  const { port } = server.address() as AddressInfo;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return port;
+  for (;;) {
+    const port = 15_000 + Math.floor(Math.random() * 15_000);
+    const server = createServer();
+    const free = await new Promise<boolean>((resolve) => {
+      server.once('error', () => resolve(false));
+      server.listen(port, '127.0.0.1', () => resolve(true));
+    });
+    if (!free) continue;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    return port;
+  }
 }
 
 export async function startEmbeddedPg(databaseName: string): Promise<EmbeddedPg> {
@@ -79,6 +88,9 @@ export async function startEmbeddedPg(databaseName: string): Promise<EmbeddedPg>
     return {
       pool,
       async teardown() {
+        // A client still closing when the server goes down emits 57P01 on the pool; nothing is
+        // left to care about it, and unhandled it fails the whole run.
+        pool.on('error', () => {});
         await pool.end();
         await pg.stop();
         rmSync(dataDir, { recursive: true, force: true });
