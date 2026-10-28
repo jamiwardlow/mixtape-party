@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
+import { ThemeIdeas } from '../../../lib/ThemeIdeas';
 import {
   DeadlineRows,
   ErrorNote,
@@ -127,6 +128,10 @@ export default function LeagueSchedule() {
                       placeholder="Theme"
                       value={draft.theme}
                       onChangeText={(theme) => setDraft({ ...draft, theme })}
+                    />
+                    <ThemeIdeas
+                      taken={season.filter((r) => r.id !== round.id && r.theme).map((r) => r.theme as string)}
+                      onPick={(theme) => setDraft({ ...draft, theme })}
                     />
                     {/* Bounded below by the round before it, which the API refuses to cross (#75), and
                         by now — a deadline in the past retro-closes a phase people are still in. */}

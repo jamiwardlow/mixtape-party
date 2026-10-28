@@ -4,6 +4,8 @@ import { ScrollView, Share } from 'react-native';
 import { router } from 'expo-router';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
+import { ThemeIdeas } from '../lib/ThemeIdeas';
+import { pickIdeas } from '../lib/themeSuggestions';
 import {
   BodyText,
   DeadlineRows,
@@ -84,6 +86,22 @@ export default function CreateLeague() {
   const guessingDeadline = chosenGuessingDeadline ?? inDays(submissionDeadline, 7);
   // Rounds 2..N, as the API will derive them.
   const laterRounds = derivedSchedule(openedAt, submissionDeadline, guessingDeadline, Number(seasonLength));
+
+  // Every round's theme as the form holds it now, round 1 first.
+  const allThemes = [theme, ...laterRounds.map((r) => laterThemes[r.number] ?? '')];
+  // Themes on every round but `number`, so a round's own text does not shuffle its chips.
+  const othersThemes = (number: number) => allThemes.filter((t, i) => i !== number - 1 && t.trim());
+
+  // Fills only the blank rounds; anything the host typed stays.
+  function surprise() {
+    const blanks = allThemes.flatMap((t, i) => (t.trim() ? [] : [i + 1]));
+    const ideas = pickIdeas(blanks.length, allThemes);
+    blanks.forEach((n, i) => {
+      if (!ideas[i]) return;
+      if (n === 1) setTheme(ideas[i]);
+      else setLaterThemes((prev) => ({ ...prev, [n]: ideas[i] }));
+    });
+  }
 
   async function submit() {
     if (!token) return;
@@ -166,8 +184,10 @@ export default function CreateLeague() {
           onChangeText={setSeasonLength}
         />
         <Sprocket />
+        <TapeButton title="Surprise me with themes" onPress={surprise} />
         <HandText>Round 1</HandText>
         <TapeInput placeholder="Theme" value={theme} onChangeText={setTheme} />
+        <ThemeIdeas taken={othersThemes(1)} onPick={setTheme} />
         <TapeDateField
           label="Submission deadline"
           testID="submission-deadline"
@@ -197,6 +217,10 @@ export default function CreateLeague() {
                   testID={`preview-round-${round.number}-theme`}
                   value={laterThemes[round.number] ?? ''}
                   onChangeText={(text) => setLaterThemes((prev) => ({ ...prev, [round.number]: text }))}
+                />
+                <ThemeIdeas
+                  taken={othersThemes(round.number)}
+                  onPick={(text) => setLaterThemes((prev) => ({ ...prev, [round.number]: text }))}
                 />
                 <DeadlineRows
                   submissionDeadline={round.submissionDeadline}

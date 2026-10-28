@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import CreateLeague from '../create-league';
 import { formatDeadline } from '../../lib/ui';
 
@@ -209,5 +209,32 @@ describe('season themes', () => {
     await create();
 
     expect(lastPost().themes).toEqual([null, null]);
+  });
+});
+
+describe('theme suggestions', () => {
+  it('fills a round theme when a suggestion chip is tapped', async () => {
+    await render(<CreateLeague />);
+
+    const chip = screen.getAllByTestId('theme-idea')[0];
+    const text = within(chip).getByText(/.+/).props.children;
+    await fireEvent.press(chip);
+    await create();
+
+    expect(text).toBeTruthy();
+    expect(lastPost().theme).toBe(text);
+  });
+
+  it('Surprise me fills blank rounds with distinct themes and keeps typed ones', async () => {
+    await render(<CreateLeague />);
+
+    await fireEvent.changeText(screen.getAllByPlaceholderText('Theme')[0], 'My own theme');
+    await fireEvent.press(screen.getByText('Surprise me with themes'));
+    await create();
+
+    const { theme, themes } = lastPost();
+    expect(theme).toBe('My own theme');
+    expect(themes.slice(1).every(Boolean)).toBe(true);
+    expect(new Set(themes.slice(1)).size).toBe(themes.length - 1);
   });
 });
