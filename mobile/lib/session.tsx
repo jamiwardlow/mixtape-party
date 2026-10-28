@@ -12,6 +12,8 @@ export interface Profile {
   /** Optional and nullable for good: sign-up doesn't require one and older accounts have none, so
    *  every screen that shows a player still needs its `?? 'A player'` fallback (#81). */
   displayName?: string | null;
+  /** Path (with a cache-busting ?v=) served by the authenticated GET /accounts/:id/avatar; null when unset. */
+  avatarUrl?: string | null;
 }
 
 interface SessionContextValue {

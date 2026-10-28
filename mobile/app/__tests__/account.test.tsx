@@ -3,7 +3,15 @@ import { router } from 'expo-router';
 import Account from '../account';
 
 const mockRefreshProfile = jest.fn();
-let mockProfile: { id: string; email: string; displayName?: string | null } | null;
+let mockProfile: { id: string; email: string; displayName?: string | null; avatarUrl?: string | null } | null;
+
+jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: jest.fn() }));
+jest.mock('expo-image-manipulator', () => ({
+  manipulateAsync: jest.fn(),
+  SaveFormat: { JPEG: 'jpeg' },
+}));
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }));
 
@@ -134,5 +142,88 @@ describe('notification toggles', () => {
 
     expect(await screen.findByText("Couldn't save that setting. Try again.")).toBeTruthy();
     expect(screen.getByLabelText('Push notifications').props.value).toBe(true);
+  });
+});
+
+describe('avatar', () => {
+  const fetchMock = () => globalThis.fetch as unknown as jest.Mock;
+
+  beforeEach(() => {
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///big.png' }] });
+    (ImageManipulator.manipulateAsync as jest.Mock).mockResolvedValue({ uri: 'file:///small.jpg' });
+  });
+
+  const putCall = () => fetchMock().mock.calls.find(([, o]) => o?.method === 'PUT' && o.headers?.['Content-Type'] === 'image/jpeg');
+
+  it('resizes the picked photo and uploads the resized bytes', async () => {
+    const bytes = new Blob(['tiny-jpeg']);
+    const base = fetchMock().getMockImplementation()!;
+    fetchMock().mockImplementation(async (url: string, o?: unknown) =>
+      url === 'file:///small.jpg' ? { blob: async () => bytes } : base(url, o),
+    );
+    await render(<Account />);
+
+    await fireEvent.press(screen.getByText('Add photo'));
+
+    await waitFor(() => expect(putCall()).toBeTruthy());
+    expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
+      'file:///big.png',
+      [{ resize: { width: 256 } }],
+      expect.objectContaining({ format: 'jpeg' }),
+    );
+    expect(putCall()![0]).toContain('/accounts/me/avatar');
+    expect(putCall()![1].body).toBe(bytes);
+    expect(putCall()![1].headers.Authorization).toBe('Bearer session-tok');
+    await waitFor(() => expect(mockRefreshProfile).toHaveBeenCalled());
+  });
+
+  it('uploads nothing when the picker is cancelled', async () => {
+    (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({ canceled: true, assets: null });
+    await render(<Account />);
+
+    await fireEvent.press(screen.getByText('Add photo'));
+
+    await waitFor(() => expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalled());
+    expect(putCall()).toBeUndefined();
+  });
+
+  it('shows the server error when the upload is rejected', async () => {
+    const base = fetchMock().getMockImplementation()!;
+    fetchMock().mockImplementation(async (url: string, o?: { method?: string }) =>
+      url === 'file:///small.jpg'
+        ? { blob: async () => new Blob(['x']) }
+        : o?.method === 'PUT' && url.includes('/accounts/me/avatar')
+          ? new Response(JSON.stringify({ error: 'avatar must be at most 200kb' }), { status: 413 })
+          : base(url, o),
+    );
+    await render(<Account />);
+
+    await fireEvent.press(screen.getByText('Add photo'));
+
+    expect(await screen.findByText('avatar must be at most 200kb')).toBeTruthy();
+    expect(mockRefreshProfile).not.toHaveBeenCalled();
+  });
+
+  it('removes the photo with DELETE and re-reads the profile', async () => {
+    mockProfile = { id: 'a1', email: 'jami@example.com', avatarUrl: '/accounts/a1/avatar?v=1' };
+    await render(<Account />);
+
+    await fireEvent.press(screen.getByText('Remove photo'));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/accounts/me/avatar'),
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
+    await waitFor(() => expect(mockRefreshProfile).toHaveBeenCalled());
+  });
+
+  it('falls back to the initial and offers no remove when there is no photo', async () => {
+    mockProfile = { id: 'a1', email: 'jami@example.com', displayName: 'sam' };
+    await render(<Account />);
+
+    expect(screen.getByText('S')).toBeTruthy();
+    expect(screen.queryByText('Remove photo')).toBeNull();
   });
 });

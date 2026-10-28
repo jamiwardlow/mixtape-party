@@ -33,6 +33,7 @@
       "expo-splash-screen",
       "@react-native-community/datetimepicker",
       "expo-audio",
+      ["expo-image-picker", { "photosPermission": "Mixtape Party uses your photo library so you can pick a profile photo." }],
       "expo-notifications"
     ],
     "extra": {
