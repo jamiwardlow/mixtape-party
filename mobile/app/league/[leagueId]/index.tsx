@@ -184,7 +184,7 @@ export default function LeagueOverview() {
             <HandText>{`Round ${round.number}`}</HandText>
             {/* The current round has its own card above — theme, deadlines and the CTA. Printing
                 all three again here would just be that card twice; the list only keeps its place. */}
-            {round.isCurrent ? (
+            {round.isCurrent && round.phase !== 'results' ? (
               <Label>In progress — see above</Label>
             ) : (
               <>
@@ -201,15 +201,18 @@ export default function LeagueOverview() {
                 {/* Only a round that is over has results to read — and the server's phase, not this
                     device's clock, is what decides that. A skewed phone would otherwise link into a
                     round the standings above still count as unscored. */}
-                {round.phase === 'results' && (
-                  <TapeButton
-                    title={`Round ${round.number} results`}
-                    variant="secondary"
-                    onPress={() =>
-                      router.push({ pathname: '/round/[roundId]/results', params: { roundId: round.id } })
-                    }
-                  />
-                )}
+                {round.phase === 'results' &&
+                  (round.submittedCount === 0 ? (
+                    <Label>No tracks were submitted</Label>
+                  ) : (
+                    <TapeButton
+                      title={`Round ${round.number} results`}
+                      variant="secondary"
+                      onPress={() =>
+                        router.push({ pathname: '/round/[roundId]/results', params: { roundId: round.id } })
+                      }
+                    />
+                  ))}
               </>
             )}
           </JCard>

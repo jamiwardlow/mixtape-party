@@ -242,6 +242,24 @@ it('links a finished round to its results and gives a future round no CTA', asyn
   expect(screen.queryByText('Round 3 results')).toBeNull();
 });
 
+it('links a concluded season’s final round to its results instead of calling it in progress', async () => {
+  await show(concludedSeason());
+
+  expect(screen.queryByText('In progress — see above')).toBeNull();
+  fireEvent.press(screen.getAllByText('Round 3 results')[0]);
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/round/[roundId]/results',
+    params: { roundId: 'r3' },
+  });
+});
+
+it('says so, rather than linking to an empty reveal, when nobody submitted to a past round', async () => {
+  await show(body({ rounds: [{ ...round1, submittedCount: 0, submitters: [] }, round3] }));
+
+  expect(screen.getByText('No tracks were submitted')).toBeTruthy();
+  expect(screen.queryByText('Round 1 results')).toBeNull();
+});
+
 // #74 creates rounds 2..N unnamed. Blank is a bug; "null" is worse.
 it('prompts for an unset theme rather than heading a round with nothing', async () => {
   await show(inRound(submissionRound, { league: { ...body().league, isHost: true } }));
