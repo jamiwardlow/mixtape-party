@@ -21,9 +21,12 @@ jest.mock('../../lib/session', () => ({
 
 let mockLeagues: { id: string; name: string; concluded: boolean; seasonLength: number; joinedAt: string }[];
 
+let mockBesties: { guessedMe: unknown[]; iGuessed: unknown[] };
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockLeagues = [];
+  mockBesties = { guessedMe: [], iGuessed: [] };
   mockProfile = { id: 'a1', email: 'jami@example.com' };
   globalThis.fetch = jest.fn(async (url: string) =>
     new Response(
@@ -32,7 +35,9 @@ beforeEach(() => {
           ? { pushEnabled: true, emailEnabled: true }
           : url.includes('/leagues/mine')
             ? { leagues: mockLeagues }
-            : mockProfile,
+            : url.includes('/accounts/me/besties')
+              ? mockBesties
+              : mockProfile,
       ),
       { status: 200 },
     ),
@@ -284,5 +289,46 @@ describe('league history', () => {
     await render(<Account />);
 
     expect(await screen.findByText("Couldn't load your leagues.")).toBeTruthy();
+  });
+});
+
+describe('besties', () => {
+  it('lists names and counts for both directions', async () => {
+    mockBesties = {
+      guessedMe: [
+        { accountId: 'b1', displayName: 'Dana', count: 5 },
+        { accountId: 'b2', displayName: null, count: 2 },
+      ],
+      iGuessed: [{ accountId: 'b3', displayName: 'Sam', count: 4 }],
+    };
+
+    await render(<Account />);
+
+    expect(await screen.findByText('Gets me')).toBeTruthy();
+    expect(screen.getByText('I get them')).toBeTruthy();
+    expect(screen.getByText('Dana')).toBeTruthy();
+    expect(screen.getByText('5')).toBeTruthy();
+    expect(screen.getByText('A player')).toBeTruthy();
+    expect(screen.getByText('Sam')).toBeTruthy();
+    expect(screen.getByText('4')).toBeTruthy();
+    expect(screen.queryByText('No correct guesses yet')).toBeNull();
+  });
+
+  it('says so when a list is empty', async () => {
+    await render(<Account />);
+
+    expect(await screen.findAllByText('No correct guesses yet')).toHaveLength(2);
+  });
+
+  it('shows an error when the besties fail to load', async () => {
+    (fetch as jest.Mock).mockImplementation(async (url: string) =>
+      url.includes('/accounts/me/besties')
+        ? new Response('{}', { status: 500 })
+        : new Response(JSON.stringify({ pushEnabled: true, emailEnabled: true, leagues: [] }), { status: 200 }),
+    );
+
+    await render(<Account />);
+
+    expect(await screen.findByText("Couldn't load your besties.")).toBeTruthy();
   });
 });

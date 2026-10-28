@@ -82,6 +82,28 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
   );
 }
 
+interface Bestie {
+  accountId: string;
+  displayName: string | null;
+  count: number;
+}
+
+function BestieGroup({ title, caption, besties }: { title: string; caption: string; besties: Bestie[] }) {
+  return (
+    <>
+      <Label>{title}</Label>
+      <Label>{caption}</Label>
+      {besties.length === 0 && <BodyText>No correct guesses yet</BodyText>}
+      {besties.map((b) => (
+        <View key={b.accountId} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <BodyText>{b.displayName || 'A player'}</BodyText>
+          <BodyText>{b.count}</BodyText>
+        </View>
+      ))}
+    </>
+  );
+}
+
 export default function Account() {
   const t = useTheme();
   const { token, profile, refreshProfile } = useSession();
@@ -151,6 +173,17 @@ export default function Account() {
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((body) => setLeagues(body.leagues))
       .catch(() => setLeaguesError("Couldn't load your leagues."));
+  }, [token]);
+
+  const [besties, setBesties] = useState<{ guessedMe: Bestie[]; iGuessed: Bestie[] } | null>(null);
+  const [bestiesError, setBestiesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchApi('/accounts/me/besties', { token })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((b) => setBesties({ guessedMe: b.guessedMe ?? [], iGuessed: b.iGuessed ?? [] }))
+      .catch(() => setBestiesError("Couldn't load your besties."));
   }, [token]);
 
   const [prefs, setPrefs] = useState({ pushEnabled: true, emailEnabled: true });
@@ -276,6 +309,19 @@ export default function Account() {
           <>
             <LeagueGroup title="Active" empty="No active leagues." leagues={leagues.filter((l) => !l.concluded)} />
             <LeagueGroup title="Past" empty="No past leagues yet." leagues={leagues.filter((l) => l.concluded)} />
+          </>
+        )}
+      </JCard>
+      <JCard>
+        <HandText>Besties</HandText>
+        {bestiesError ? (
+          <ErrorNote>{bestiesError}</ErrorNote>
+        ) : !besties ? (
+          <ReelSpinner />
+        ) : (
+          <>
+            <BestieGroup title="Gets me" caption="Correct guesses of your songs" besties={besties.guessedMe} />
+            <BestieGroup title="I get them" caption="Their songs you guessed correctly" besties={besties.iGuessed} />
           </>
         )}
       </JCard>
