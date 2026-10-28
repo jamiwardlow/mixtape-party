@@ -9,6 +9,8 @@ export interface NotificationSweepDeps {
   emailChannel: EmailChannel;
   /** Adapters and cookie for building playlists (#99). Unset skips that step. */
   playlists?: Omit<RoundExportDeps, 'pool'>;
+  /** Origin of the web client; emailed links to the app start here. Unset omits them. */
+  appBaseUrl?: string;
 }
 
 // ponytail: a single fixed fraction for both reminder types, not configurable per league/round.
@@ -263,8 +265,9 @@ async function sweepGuessingOpen(deps: NotificationSweepDeps, now: Date): Promis
       'guessing_open',
       {
         title: `Round ${round.round_number}: guessing is open`,
-        body: `Submissions are in for "${round.theme}". Guess who submitted each track.`,
+        body: `Submissions are in for "${round.theme}". Guess who submitted each track!`,
         link: playlist ? PLAYLIST_URL[playlist.service](playlist.playlist_external_id) : undefined,
+        appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/guess` : undefined,
         data: { roundId: round.id },
       },
       { roundId: round.id, leagueId: round.league_id },

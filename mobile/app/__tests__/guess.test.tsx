@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import GuessRound from '../round/[roundId]/guess';
 
-const mockOpenURL = jest.fn();
+const mockOpenURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
@@ -14,10 +15,6 @@ jest.mock('../../lib/session', () => ({
 
 // The native audio module isn't available under jest; lib/__tests__/preview.test.ts covers the player.
 jest.mock('expo-audio', () => ({ createAudioPlayer: jest.fn() }));
-
-jest.mock('expo-linking', () => ({
-  openURL: (...args: unknown[]) => mockOpenURL(...args),
-}));
 
 const guessing = { tracks: [], players: [] };
 

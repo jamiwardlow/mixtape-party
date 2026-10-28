@@ -12,6 +12,8 @@ export interface SweepDeps extends AdapterRegistry {
   emailChannel: EmailChannel;
   /** Shared secret Cloud Scheduler sends as x-sweep-secret. Unset disables the endpoint (503), never allow-all. */
   sweepSecret?: string;
+  /** Origin of the web client, for links in emailed notifications. */
+  appBaseUrl?: string;
 }
 
 function secretMatches(given: unknown, expected: string): boolean {
@@ -40,6 +42,7 @@ export function createSweepRouter(deps: SweepDeps): Router {
       pushChannel: deps.pushChannel,
       emailChannel: deps.emailChannel,
       playlists: deps,
+      appBaseUrl: deps.appBaseUrl,
     });
     res.json({ ok: true });
   });

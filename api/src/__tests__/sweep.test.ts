@@ -64,7 +64,7 @@ async function submit(roundId: string, accountId: string) {
 }
 
 function buildDeps() {
-  return { pool: testDb.pool, pushChannel: new FakePushChannel(), emailChannel: new FakeEmailChannel() };
+  return { pool: testDb.pool, pushChannel: new FakePushChannel(), emailChannel: new FakeEmailChannel(), appBaseUrl: 'https://app.test' };
 }
 
 describe('runNotificationSweep', () => {
@@ -385,6 +385,7 @@ describe('runNotificationSweep', () => {
         expect(openEmails(deps)).toHaveLength(2);
         expect(openEmails(deps)[0].payload.link).toMatch(/^https:\/\/music\.youtube\.com\/playlist\?list=/);
         expect(openEmails(deps)[0].payload.data).toEqual({ roundId });
+        expect(openEmails(deps)[0].payload.appLink).toBe(`https://app.test/round/${roundId}/guess`);
       });
 
       it('sends no link when there is no playlist', async () => {
