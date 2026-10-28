@@ -221,6 +221,27 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
     }
   }
 
+  // Favorites are private to the player and follow the reactions' rule: members only, once results are open.
+  router.post('/submissions/:id/favorite', requireAuth(deps), async (req, res) => {
+    const accountId = authed(req);
+    const error = await guardError(deps.pool, REACTION_TARGETS.submission_id, req.params.id, accountId);
+    if (error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    const removed = await deps.pool.query('DELETE FROM favorites WHERE submission_id = $1 AND account_id = $2', [
+      req.params.id,
+      accountId,
+    ]);
+    if (!removed.rowCount) {
+      await deps.pool.query('INSERT INTO favorites (account_id, submission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
+        accountId,
+        req.params.id,
+      ]);
+    }
+    res.json({ favorited: !removed.rowCount });
+  });
+
   for (const [path, column] of [
     ['submissions', 'submission_id'],
     ['guesses', 'guess_id'],

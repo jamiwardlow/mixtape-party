@@ -123,6 +123,14 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       'SELECT submission_id, guess_id, reply_id, account_id, emoji FROM comment_reactions WHERE submission_id = ANY($1) OR guess_id = ANY($2) OR reply_id = ANY($3)',
       [submissionsResult.rows.map((s) => s.id), guessIds, repliesResult.rows.map((r) => r.id)],
     );
+    const favoritedIds = new Set(
+      (
+        await deps.pool.query<{ submission_id: string }>(
+          'SELECT submission_id FROM favorites WHERE account_id = $1 AND submission_id = ANY($2)',
+          [accountId, submissionsResult.rows.map((s) => s.id)],
+        )
+      ).rows.map((r) => r.submission_id),
+    );
     const reactionsFor = (targetId: string) => {
       const counts = new Map<string, { emoji: string; count: number; mine: boolean }>();
       for (const r of reactionsResult.rows) {
@@ -166,6 +174,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
       excludedFromExport: row.service === 'bandcamp',
       reactions: reactionsFor(row.id),
+      favorited: favoritedIds.has(row.id),
       comments: commentsBySubmission.get(row.id) ?? [],
       yourGuess: yourGuessBySubmission.get(row.id) ?? null,
     }));

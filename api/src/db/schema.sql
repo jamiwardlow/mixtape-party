@@ -101,6 +101,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_submission_uniq ON comment_r
 CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_guess_uniq ON comment_reactions (guess_id, account_id, emoji) WHERE guess_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS comment_reactions_reply_uniq ON comment_reactions (reply_id, account_id, emoji) WHERE reply_id IS NOT NULL;
 
+-- Private per-player favorites (#105). Never exposed to other players.
+CREATE TABLE IF NOT EXISTS favorites (
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  submission_id UUID NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, submission_id)
+);
+
 -- Global, permanent cross-service match cache (#29): a track is only ever searched for once per
 -- service, keyed by ISRC when known else normalized artist+title. A NULL external_id records a
 -- confirmed no-match so it's never re-searched either.
