@@ -1,16 +1,12 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import { fetchApi } from '../../../lib/api';
-import { Avatar } from '../../../lib/Avatar';
 import { BestieGroup, type Bestie } from '../../../lib/BestieGroup';
-import { nameOf, type Player } from '../../../lib/rounds';
+import { type Score } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
+import { StandingRows, WinnersRow } from '../../../lib/Standings';
 import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, RoundGate, Screen, TapeButton } from '../../../lib/ui';
-
-interface Score extends Player {
-  score: number;
-}
 
 interface Overview {
   league: { id: string; name: string; concluded: boolean };
@@ -28,6 +24,7 @@ export default function SeasonWrapUp() {
 
   useEffect(() => {
     if (!token) return;
+    let live = true;
     (async () => {
       const res = await fetchApi(`/leagues/${leagueId}/overview`, { token });
       if (!res.ok) {
@@ -35,13 +32,17 @@ export default function SeasonWrapUp() {
         return;
       }
       const body: Overview = await res.json();
+      if (!live) return;
       setOverview(body);
       if (!body.league.concluded) return;
       fetchApi(`/leagues/${leagueId}/besties`, { token })
         .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((b) => setBesties({ guessedMe: b.guessedMe ?? [], iGuessed: b.iGuessed ?? [] }))
-        .catch(() => setBestiesError("Couldn't load your besties."));
-    })();
+        .then((b) => live && setBesties({ guessedMe: b.guessedMe ?? [], iGuessed: b.iGuessed ?? [] }))
+        .catch(() => live && setBestiesError("Couldn't load your besties."));
+    })().catch(() => live && setError('Could not load this league'));
+    return () => {
+      live = false;
+    };
   }, [token, leagueId]);
 
   if (!overview) {
@@ -61,24 +62,11 @@ export default function SeasonWrapUp() {
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
         <JCard>
           <Label>Season complete</Label>
-          {winners.length > 0 && (
-            <View style={styles.inline}>
-              <BodyText>Winners:</BodyText>
-              <HandText testID="winners">{winners.map(nameOf).join(', ')}</HandText>
-            </View>
-          )}
+          <WinnersRow winners={winners} />
         </JCard>
         <JCard>
           <HandText>Final standings</HandText>
-          {standings.map((player) => (
-            <View key={player.accountId} style={styles.row}>
-              <View style={styles.inline}>
-                <Avatar size={28} label="" url={player.avatarUrl} token={token} initial={nameOf(player)[0]} />
-                <BodyText>{nameOf(player)}</BodyText>
-              </View>
-              <BodyText testID={`standings-${player.accountId}`}>{player.score}</BodyText>
-            </View>
-          ))}
+          <StandingRows standings={standings} token={token} />
         </JCard>
         <JCard>
           <HandText>Besties</HandText>
@@ -103,8 +91,3 @@ export default function SeasonWrapUp() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  inline: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-});

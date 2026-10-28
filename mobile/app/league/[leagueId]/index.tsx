@@ -9,9 +9,11 @@ import {
   phaseLabel,
   nameOf,
   type Player,
+  type Score,
   type RoundPhase,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
+import { StandingRows, WinnersRow } from '../../../lib/Standings';
 import {
   BodyText,
   DeadlineRows,
@@ -23,10 +25,6 @@ import {
   Sprocket,
   TapeButton,
 } from '../../../lib/ui';
-
-interface Score extends Player {
-  score: number;
-}
 
 /** One round of the season, as `GET /leagues/:leagueId/overview` describes it. */
 interface OverviewRound {
@@ -113,12 +111,7 @@ export default function LeagueOverview() {
               onPress={() => router.push({ pathname: '/league/[leagueId]/final', params: { leagueId: league.id } })}
             />
           )}
-          {league.concluded && winners.length > 0 && (
-            <View style={styles.inline}>
-              <BodyText>Winners:</BodyText>
-              <HandText testID="winners">{winners.map(nameOf).join(', ')}</HandText>
-            </View>
-          )}
+          {league.concluded && <WinnersRow winners={winners} />}
         </JCard>
 
         {current && (
@@ -157,15 +150,7 @@ export default function LeagueOverview() {
               <Label testID="standings-caption">
                 {league.concluded ? 'Final standings' : `After ${scoredRoundCount} of ${league.seasonLength} rounds`}
               </Label>
-              {standings.map((player) => (
-                <View key={player.accountId} style={styles.row}>
-                  <View style={styles.inline}>
-                    <Avatar size={28} label="" url={player.avatarUrl} token={token} initial={nameOf(player)[0]} />
-                    <BodyText>{nameOf(player)}</BodyText>
-                  </View>
-                  <BodyText testID={`standings-${player.accountId}`}>{player.score}</BodyText>
-                </View>
-              ))}
+              <StandingRows standings={standings} token={token} />
             </>
           )}
         </JCard>

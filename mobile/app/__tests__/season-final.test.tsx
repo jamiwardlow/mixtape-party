@@ -61,3 +61,12 @@ it('redirects to the season hub when the league is not concluded', async () => {
   });
   expect(screen.queryByTestId('winners')).toBeNull();
 });
+
+it('shows an error instead of spinning forever when the network is down', async () => {
+  globalThis.fetch = jest.fn(async () => {
+    throw new Error('offline');
+  }) as unknown as typeof fetch;
+  await render(<SeasonWrapUp />);
+
+  expect(await screen.findByText('Could not load this league')).toBeTruthy();
+});
