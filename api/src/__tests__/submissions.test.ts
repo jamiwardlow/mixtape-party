@@ -270,6 +270,52 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect(res.status).toBe(403);
   });
 
+  it('keeps round N+1 closed to submissions until round N guessing ends, then rolls over', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'rollover-host@example.com');
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Rollover League', seasonLength: 3, ...round1 });
+    const leagueId = created.body.leagueId as string;
+    const round1Id = created.body.round.id as string;
+    const { rows } = await testDb.pool.query<{ id: string }>(
+      'SELECT id FROM rounds WHERE league_id = $1 AND round_number = 2',
+      [leagueId],
+    );
+    const round2Id = rows[0].id;
+    const submit = () =>
+      request(app).post(`/rounds/${round2Id}/submissions`).set('Authorization', `Bearer ${host.token}`).send(track);
+
+    const early = await submit();
+    expect(early.status).toBe(403);
+    expect(early.body.error).toContain('not opened');
+    const schedule = await testDb.pool.query<{ opens: Date; guessing: Date }>(
+      `SELECT r2.submission_opens_at AS opens, r1.guessing_deadline AS guessing
+       FROM rounds r1 JOIN rounds r2 ON r2.league_id = r1.league_id AND r2.round_number = 2
+       WHERE r1.id = $1`,
+      [round1Id],
+    );
+    expect(schedule.rows[0].opens).toEqual(schedule.rows[0].guessing);
+
+    // Round 1's guessing ends: pull its deadlines, and round 2's opening with them, into the past.
+    await testDb.pool.query(
+      `UPDATE rounds SET submission_deadline = now() - interval '2 hours', guessing_deadline = now() - interval '1 minute'
+       WHERE id = $1`,
+      [round1Id],
+    );
+    await testDb.pool.query("UPDATE rounds SET submission_opens_at = now() - interval '1 minute' WHERE id = $1", [round2Id]);
+
+    const late = await submit();
+    expect(late.status).toBe(201);
+
+    const overview = await request(app).get(`/leagues/${leagueId}/overview`).set('Authorization', `Bearer ${host.token}`);
+    expect(overview.body.rounds.find((r: { isCurrent: boolean }) => r.isCurrent)).toMatchObject({
+      number: 2,
+      phase: 'submission',
+    });
+  });
+
   it('404s for an unknown round', async () => {
     const { app } = buildApp();
     const { player } = await createLeagueWithPlayer(app);

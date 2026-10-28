@@ -96,6 +96,11 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
+    if (round.submissionOpensAt && new Date(round.submissionOpensAt) > new Date()) {
+      res.status(403).json({ error: 'the submission window for this round has not opened yet' });
+      return;
+    }
+
     if (new Date(round.submissionDeadline) <= new Date()) {
       res.status(403).json({ error: 'the submission window for this round has closed' });
       return;

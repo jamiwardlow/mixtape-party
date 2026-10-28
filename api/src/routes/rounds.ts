@@ -22,6 +22,8 @@ export interface RoundInfo {
   roundNumber: number;
   /** Null until the host names one: rounds 2..N are scheduled before anyone picks a theme. */
   theme: string | null;
+  /** Null on legacy rows that predate the column: treated as already open. */
+  submissionOpensAt: string | null;
   submissionDeadline: string;
   guessingDeadline: string;
 }
@@ -31,17 +33,21 @@ export async function loadRound(pool: Pool, roundId: string): Promise<RoundInfo 
     league_id: string;
     round_number: number;
     theme: string | null;
+    submission_opens_at: string | null;
     submission_deadline: string;
     guessing_deadline: string;
-  }>('SELECT league_id, round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE id = $1', [
-    roundId,
-  ]);
+  }>(
+    `SELECT league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
+     FROM rounds WHERE id = $1`,
+    [roundId],
+  );
   const round = result.rows[0];
   return round
     ? {
         leagueId: round.league_id,
         roundNumber: round.round_number,
         theme: round.theme,
+        submissionOpensAt: round.submission_opens_at,
         submissionDeadline: round.submission_deadline,
         guessingDeadline: round.guessing_deadline,
       }
