@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
+import { PLAYLIST_URL } from './export.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { parseComment } from './submissions.js';
 
@@ -171,7 +172,12 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
        ORDER BY f.created_at DESC`,
       [accountId],
     );
-    res.json({ favorites: found.rows });
+    const exported = await deps.pool.query<{ playlist_external_id: string }>(
+      "SELECT playlist_external_id FROM favorite_exports WHERE account_id = $1 AND service = 'youtube_music'",
+      [accountId],
+    );
+    const externalId = exported.rows[0]?.playlist_external_id;
+    res.json({ favorites: found.rows, playlistUrl: externalId ? PLAYLIST_URL.youtube_music(externalId) : null });
   });
 
   router.post('/rounds/:roundId/submissions/:submissionId/guesses', requireAuth(deps), async (req, res) => {

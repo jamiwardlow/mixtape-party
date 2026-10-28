@@ -109,6 +109,17 @@ CREATE TABLE IF NOT EXISTS favorites (
   PRIMARY KEY (account_id, submission_id)
 );
 
+-- A player's personal favorites playlist per service (#109). exported_submission_ids is what has
+-- been appended so far, so a re-export adds only newer favorites.
+CREATE TABLE IF NOT EXISTS favorite_exports (
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  service TEXT NOT NULL CHECK (service IN ('youtube_music')),
+  playlist_external_id TEXT NOT NULL,
+  exported_submission_ids UUID[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (account_id, service)
+);
+
 -- Global, permanent cross-service match cache (#29): a track is only ever searched for once per
 -- service, keyed by ISRC when known else normalized artist+title. A NULL external_id records a
 -- confirmed no-match so it's never re-searched either.

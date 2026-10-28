@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { adapterFor, playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { resolveMatch } from '../adapters/matchCache.js';
-import type { PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
+import type { MusicServiceAdapter, PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound, type RoundInfo } from './rounds.js';
 
@@ -64,6 +64,59 @@ function noPlaylistExport(service: ExportableService, status: ExportStatus): Ser
   return { service, status, playlistExternalId: null, playlistUrl: null, matchedCount: 0, skipped: [] };
 }
 
+/** Resolves each submission to a track on `service`, keyed by submission id; the unmatched are left out. */
+async function matchSubmissions(
+  deps: RoundExportDeps,
+  adapter: MusicServiceAdapter,
+  service: ExportableService,
+  submissions: SubmissionRow[],
+): Promise<Map<string, TrackResult>> {
+  const matches = new Map<string, TrackResult>();
+  for (const submission of submissions) {
+    // A submission already on this exact service is a confirmed match; no need to re-search.
+    const match =
+      submission.service === service
+        ? {
+            externalId: submission.external_id,
+            title: submission.title,
+            artist: submission.artist,
+            isrc: submission.isrc ?? undefined,
+            service,
+          }
+        : await resolveMatch(deps.pool, adapter, {
+            title: submission.title,
+            artist: submission.artist,
+            isrc: submission.isrc ?? undefined,
+          });
+    if (match) matches.set(submission.id, match);
+  }
+  return matches;
+}
+
+/** The tracks that missed the playlist, each with the handle that plays it where it already lives. */
+function skippedTracks(
+  deps: RoundExportDeps,
+  submissions: SubmissionRow[],
+  matchedIds: Set<string>,
+): Promise<SkippedTrack[]> {
+  return Promise.all(
+    submissions
+      .filter((s) => !matchedIds.has(s.id))
+      .map(async (s) => ({
+        submissionId: s.id,
+        title: s.title,
+        artist: s.artist,
+        playback: await playbackAdapterFor(deps, s.service).getPlaybackLaunchHandle({
+          externalId: s.external_id,
+          title: s.title,
+          artist: s.artist,
+          isrc: s.isrc ?? undefined,
+          service: s.service,
+        }),
+      })),
+  );
+}
+
 async function exportForService(
   deps: RoundExportDeps,
   roundId: string,
@@ -92,25 +145,7 @@ async function exportForService(
     playlistExternalId = existing.rows[0].playlist_external_id;
     matchedIds = new Set(existing.rows[0].matched_submission_ids);
   } else {
-    const matches = new Map<string, TrackResult>();
-    for (const submission of submissions) {
-      // A submission already on this exact service is a confirmed match; no need to re-search.
-      const match =
-        submission.service === service
-          ? {
-              externalId: submission.external_id,
-              title: submission.title,
-              artist: submission.artist,
-              isrc: submission.isrc ?? undefined,
-              service,
-            }
-          : await resolveMatch(deps.pool, adapter, {
-              title: submission.title,
-              artist: submission.artist,
-              isrc: submission.isrc ?? undefined,
-            });
-      if (match) matches.set(submission.id, match);
-    }
+    const matches = await matchSubmissions(deps, adapter, service, submissions);
 
     playlistExternalId = null;
     if (matches.size > 0) {
@@ -132,22 +167,7 @@ async function exportForService(
     );
   }
 
-  const skipped = await Promise.all(
-    submissions
-      .filter((s) => !matchedIds.has(s.id))
-      .map(async (s) => ({
-        submissionId: s.id,
-        title: s.title,
-        artist: s.artist,
-        playback: await playbackAdapterFor(deps, s.service).getPlaybackLaunchHandle({
-          externalId: s.external_id,
-          title: s.title,
-          artist: s.artist,
-          isrc: s.isrc ?? undefined,
-          service: s.service,
-        }),
-      })),
-  );
+  const skipped = await skippedTracks(deps, submissions, matchedIds);
 
   return {
     service,
@@ -220,6 +240,75 @@ export async function buildRoundExports(
   return services;
 }
 
+/**
+ * Appends the caller's favorites not yet exported to their one personal playlist, creating it on
+ * the first call. Favorites drift over time, unlike a round, so this is a delta, not a one-shot.
+ */
+async function exportFavorites(
+  deps: RoundExportDeps,
+  accountId: string,
+  service: ExportableService,
+  accessToken: string,
+): Promise<ServiceExport> {
+  const adapter = adapterFor(deps, service);
+  // Same league-membership join as GET /favorites, so a favorite from a league the caller left stays out.
+  const favorites = (
+    await deps.pool.query<SubmissionRow>(
+      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc
+       FROM favorites f
+       JOIN submissions s ON s.id = f.submission_id
+       JOIN rounds r ON r.id = s.round_id
+       JOIN league_members lm ON lm.league_id = r.league_id AND lm.account_id = f.account_id
+       WHERE f.account_id = $1 AND s.service != 'bandcamp'
+       ORDER BY f.created_at`,
+      [accountId],
+    )
+  ).rows;
+
+  const existing = (
+    await deps.pool.query<{ playlist_external_id: string; exported_submission_ids: string[] }>(
+      'SELECT playlist_external_id, exported_submission_ids FROM favorite_exports WHERE account_id = $1 AND service = $2',
+      [accountId, service],
+    )
+  ).rows[0];
+  const exportedIds = new Set(existing?.exported_submission_ids ?? []);
+  let playlistExternalId = existing?.playlist_external_id ?? null;
+
+  const matches = await matchSubmissions(
+    deps,
+    adapter,
+    service,
+    favorites.filter((f) => !exportedIds.has(f.id)),
+  );
+  if (matches.size > 0) {
+    // ponytail: unfavoriting never removes a track from an exported playlist, since the adapter has
+    // no remove method. Add `removeFromPlaylist` to the adapter and diff against favorites to fix.
+    const playlist = playlistExternalId
+      ? { externalId: playlistExternalId, service }
+      : await adapter.createPlaylist(accessToken, 'Mixtape Party — Favorites');
+    await adapter.appendToPlaylist(accessToken, playlist, [...matches.values()]);
+    playlistExternalId = playlist.externalId;
+    await deps.pool.query(
+      `INSERT INTO favorite_exports (account_id, service, playlist_external_id, exported_submission_ids)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (account_id, service) DO UPDATE
+       SET playlist_external_id = EXCLUDED.playlist_external_id,
+           exported_submission_ids = EXCLUDED.exported_submission_ids`,
+      [accountId, service, playlistExternalId, [...exportedIds, ...matches.keys()]],
+    );
+  }
+
+  const onPlaylist = new Set([...exportedIds, ...matches.keys()]);
+  return {
+    service,
+    status: playlistExternalId ? 'ok' : 'no_matches',
+    playlistExternalId,
+    playlistUrl: playlistExternalId ? PLAYLIST_URL[service](playlistExternalId) : null,
+    matchedCount: favorites.filter((f) => onPlaylist.has(f.id)).length,
+    skipped: await skippedTracks(deps, favorites, onPlaylist),
+  };
+}
+
 export function createExportRouter(deps: ExportDeps): Router {
   const router = Router();
 
@@ -240,6 +329,20 @@ export function createExportRouter(deps: ExportDeps): Router {
     }
 
     const services = await buildRoundExports(deps, req.params.roundId, round, accountId);
+    res.json({ services });
+  });
+
+  router.post('/favorites/export', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    // Absent cookie = service absent from the response, as for a round. A failing service must not 500 (#73).
+    const services = deps.youtubeMusicCookie
+      ? [
+          await exportFavorites(deps, accountId, 'youtube_music', deps.youtubeMusicCookie).catch((err: unknown) => {
+            console.error(err);
+            return noPlaylistExport('youtube_music', 'failed');
+          }),
+        ]
+      : [];
     res.json({ services });
   });
 
