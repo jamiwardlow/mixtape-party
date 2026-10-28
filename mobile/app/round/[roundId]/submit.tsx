@@ -134,7 +134,7 @@ export default function SubmitTrack() {
   return (
     <Screen label={title}>
       {/* Outside the FlatList, so it stays on screen however long the results get. */}
-      {edit && <TapeButton title="Cancel" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />}
+      <TapeButton title="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />
       {current && (
         <JCard>
           <Label>{submitted ? 'Track submitted — your current track' : 'Your current track'}</Label>
