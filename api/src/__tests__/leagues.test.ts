@@ -409,6 +409,34 @@ describe('GET /leagues/mine', () => {
     expect(res.body.leagues[0].round).toMatchObject({ number: 2, theme: null });
   });
 
+  it('reports seasonLength, joinedAt and concluded: false mid-season', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host-meta@example.com');
+    await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Meta League', seasonLength: 8, ...round1 });
+
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.body.leagues[0]).toMatchObject({ name: 'Meta League', seasonLength: 8, concluded: false });
+    expect(Number.isNaN(Date.parse(res.body.leagues[0].joinedAt))).toBe(false);
+  });
+
+  it('reports concluded: true once the last round\'s guessing deadline has passed', async () => {
+    const { app } = buildApp();
+    const host = await signUp(app, 'mine-host-done@example.com');
+    const created = await request(app)
+      .post('/leagues')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ name: 'Done League', seasonLength: 1, ...round1 });
+
+    await closeGuessingWindow(created.body.round.id);
+    const res = await request(app).get('/leagues/mine').set('Authorization', `Bearer ${host.token}`);
+
+    expect(res.body.leagues[0].concluded).toBe(true);
+  });
+
   it('omits leagues the caller is not a member of', async () => {
     const { app } = buildApp();
     const host = await signUp(app, 'mine-host3@example.com');

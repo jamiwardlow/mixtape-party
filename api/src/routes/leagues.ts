@@ -318,6 +318,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     const result = await deps.pool.query<{
       league_id: string;
       league_name: string;
+      season_length: number;
+      joined_at: string;
       round_id: string | null;
       round_number: number | null;
       theme: string | null;
@@ -325,7 +327,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       guessing_deadline: string | null;
       submitted: boolean;
     }>(
-      `SELECT l.id AS league_id, l.name AS league_name,
+      `SELECT l.id AS league_id, l.name AS league_name, l.season_length, lm.joined_at,
               r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline,
               EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.account_id = $1) AS submitted
        FROM leagues l
@@ -343,6 +345,15 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       leagues: result.rows.map((row) => ({
         id: row.league_id,
         name: row.league_name,
+        seasonLength: row.season_length,
+        joinedAt: row.joined_at,
+        concluded: isSeasonConcluded(
+          { seasonLength: row.season_length },
+          row.round_id
+            ? { id: row.round_id, roundNumber: row.round_number!, guessingDeadline: row.guessing_deadline! }
+            : null,
+          now,
+        ),
         round: row.round_id ? summarizeRound(row, now) : null,
       })),
     });

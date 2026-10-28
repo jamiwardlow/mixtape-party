@@ -100,7 +100,7 @@ export async function loadCurrentRound(pool: Pool, leagueId: string): Promise<Cu
  * The season is over once the current round is the season's last and its guessing deadline has
  * passed. One definition, because final standings and the overview's `concluded` must agree.
  */
-export function isSeasonConcluded(league: LeagueInfo, current: CurrentRoundInfo | null, now: Date): boolean {
+export function isSeasonConcluded(league: Pick<LeagueInfo, 'seasonLength'>, current: CurrentRoundInfo | null, now: Date): boolean {
   return !!current && current.roundNumber >= league.seasonLength && new Date(current.guessingDeadline) <= now;
 }
 
