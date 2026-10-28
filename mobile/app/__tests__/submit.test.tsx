@@ -25,13 +25,19 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockParams = { roundId: 'round-1' };
   globalThis.fetch = jest.fn(async (url: string) =>
-    ok(String(url).includes('/search') ? searchResults : { submissionId: 'sub-1' }),
+    ok(
+      String(url).includes('/search')
+        ? searchResults
+        : String(url).includes('/overview')
+          ? { round: { you: { submission: { service: 'youtube_music', title: 'Feeling Good', artist: 'Nina Simone' } } } }
+          : { submissionId: 'sub-1' },
+    ),
   ) as unknown as typeof fetch;
 });
 
 function lastPost() {
-  const calls = (fetch as jest.Mock).mock.calls;
-  return JSON.parse(calls[calls.length - 1][1].body);
+  const posts = (fetch as jest.Mock).mock.calls.filter(([, init]) => init?.method === 'POST');
+  return JSON.parse(posts[posts.length - 1][1].body);
 }
 
 // The chip row used to be built from the player's linked services, which are always none -- so
@@ -87,6 +93,20 @@ describe('search and submit', () => {
       title: 'Feeling Good',
       artist: 'Nina Simone',
     });
+  });
+
+  it('stays on the screen after submitting and shows the new track as current', async () => {
+    await render(<SubmitTrack />);
+
+    await fireEvent.press(screen.getByText('Search YouTube Music'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
+    await fireEvent.press(screen.getByText('Search'));
+    await waitFor(() => expect(screen.getByText('Submit')).toBeTruthy());
+    await fireEvent.press(screen.getByText('Submit'));
+
+    await waitFor(() => expect(screen.getByTestId('current-track')).toBeTruthy());
+    expect(screen.getByText('Track submitted — your current track')).toBeTruthy();
+    expect(screen.getByText('Edit your track')).toBeTruthy();
   });
 
   // A search that dies reports a 503. The player gets told, rather than staring at an empty result list.

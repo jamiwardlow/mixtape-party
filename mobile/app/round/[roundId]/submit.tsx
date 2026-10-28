@@ -45,16 +45,18 @@ export default function SubmitTrack() {
   const [commentSaved, setCommentSaved] = useState(false);
 
   // Editing: show the track already in, and start the comment box from what is saved.
+  async function loadCurrent() {
+    if (!token) return;
+    const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
+    if (!res.ok) return;
+    const mine = (await res.json()).round.you.submission;
+    if (!mine) return;
+    setCurrent(mine);
+    setComment(mine.comment ?? '');
+  }
   useEffect(() => {
-    if (!edit || !token) return;
-    (async () => {
-      const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
-      if (!res.ok) return;
-      const mine = (await res.json()).round.you.submission;
-      if (!mine) return;
-      setCurrent(mine);
-      setComment(mine.comment ?? '');
-    })();
+    if (edit && token) loadCurrent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit, token, roundId]);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
@@ -103,20 +105,12 @@ export default function SubmitTrack() {
         return;
       }
       setSubmitted(true);
+      setResults([]);
+      setCommentSaved(false);
+      await loadCurrent();
     } finally {
       setSubmitting(false);
     }
-  }
-
-  if (submitted) {
-    return (
-      <Screen label={title}>
-        <JCard>
-          <BodyText style={{ fontSize: 18 }}>Track submitted.</BodyText>
-        </JCard>
-        <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
-      </Screen>
-    );
   }
 
   const commentField = (
@@ -143,7 +137,7 @@ export default function SubmitTrack() {
       {edit && <TapeButton title="Cancel" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />}
       {current && (
         <JCard>
-          <Label>Your current track</Label>
+          <Label>{submitted ? 'Track submitted — your current track' : 'Your current track'}</Label>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Thumb url={current.thumbnailUrl} />
             <ServiceBadge service={current.service} />
