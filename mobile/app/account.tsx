@@ -1,8 +1,8 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Image, Platform, ScrollView, Switch, View } from 'react-native';
+import { createElement, useEffect, useRef, useState } from 'react';
+import { Image, PanResponder, Platform, ScrollView, Switch, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
@@ -52,6 +52,96 @@ function Avatar({ url, token, initial }: { url?: string | null; token: string | 
     >
       <HandText>{initial}</HandText>
     </View>
+  );
+}
+
+const CROP_VIEW = 240;
+
+interface CropAsset {
+  uri: string;
+  width: number;
+  height: number;
+}
+
+// Web only: expo-image-picker ignores allowsEditing there, so zoom and reposition happen here.
+// Native gets the OS crop editor instead.
+function AvatarCropper({ asset, onDone, onCancel }: { asset: CropAsset; onDone: (crop: ImageManipulator.Action) => void; onCancel: () => void }) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panRef = useRef(pan);
+  const start = useRef(pan);
+
+  // Display px per source px at zoom 1: the shorter side exactly fills the viewport.
+  const base = CROP_VIEW / Math.min(asset.width, asset.height);
+  const scale = base * zoom;
+  const limit = (side: number) => Math.max(0, (side * scale - CROP_VIEW) / 2);
+  const clamp = (p: { x: number; y: number }) => ({
+    x: Math.max(-limit(asset.width), Math.min(limit(asset.width), p.x)),
+    y: Math.max(-limit(asset.height), Math.min(limit(asset.height), p.y)),
+  });
+  const clampRef = useRef(clamp);
+  clampRef.current = clamp;
+
+  // Zooming out can leave the old pan out of bounds, so re-clamp.
+  useEffect(() => {
+    setPan((p) => (panRef.current = clampRef.current(p)));
+  }, [zoom]);
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => (start.current = panRef.current),
+      onPanResponderMove: (_, g) =>
+        setPan((panRef.current = clampRef.current({ x: start.current.x + g.dx, y: start.current.y + g.dy }))),
+    }),
+  ).current;
+
+  function confirm() {
+    const size = CROP_VIEW / scale;
+    onDone({
+      crop: {
+        originX: (asset.width * scale - CROP_VIEW) / 2 / scale - pan.x / scale,
+        originY: (asset.height * scale - CROP_VIEW) / 2 / scale - pan.y / scale,
+        width: size,
+        height: size,
+      },
+    });
+  }
+
+  return (
+    <>
+      <View
+        {...responder.panHandlers}
+        accessibilityLabel="Drag to reposition your photo"
+        style={{ width: CROP_VIEW, height: CROP_VIEW, borderRadius: CROP_VIEW / 2, overflow: 'hidden', alignSelf: 'center', cursor: 'grab' } as object}
+      >
+        <View pointerEvents="none" style={{ flex: 1 }}>
+        <Image
+          source={{ uri: asset.uri }}
+          style={{
+            position: 'absolute',
+            width: asset.width * scale,
+            height: asset.height * scale,
+            left: (CROP_VIEW - asset.width * scale) / 2 + pan.x,
+            top: (CROP_VIEW - asset.height * scale) / 2 + pan.y,
+          }}
+        />
+        </View>
+      </View>
+      {/* The cropper is web-only, so a native <input> is fine and saves a slider dependency. */}
+      {createElement('input', {
+        type: 'range',
+        min: 1,
+        max: 4,
+        step: 0.05,
+        value: zoom,
+        'aria-label': 'Zoom',
+        onChange: (e: { target: { value: string } }) => setZoom(Number(e.target.value)),
+        style: { width: CROP_VIEW, alignSelf: 'center' },
+      })}
+      <TapeButton title="Use photo" onPress={confirm} />
+      <TapeButton title="Cancel" variant="secondary" onPress={onCancel} />
+    </>
   );
 }
 
@@ -115,16 +205,30 @@ export default function Account() {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
 
+  const [cropping, setCropping] = useState<CropAsset | null>(null);
+
   async function pickAvatar() {
     if (!token || avatarBusy) return;
     setAvatarError(null);
-    setAvatarBusy(true);
     try {
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1] });
       if (picked.canceled) return;
+      const asset = picked.assets[0];
+      if (Platform.OS === 'web') setCropping(asset);
+      else await uploadAvatar(asset.uri, []);
+    } catch {
+      setAvatarError("Couldn't open your photos. Try again.");
+    }
+  }
+
+  async function uploadAvatar(uri: string, actions: ImageManipulator.Action[]) {
+    if (!token) return;
+    setCropping(null);
+    setAvatarBusy(true);
+    try {
       const small = await ImageManipulator.manipulateAsync(
-        picked.assets[0].uri,
-        [{ resize: { width: 256 } }],
+        uri,
+        [...actions, { resize: { width: 256 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
       const bytes = await (await fetch(small.uri)).blob();
@@ -254,7 +358,9 @@ export default function Account() {
           token={token}
           initial={(profile?.displayName?.trim() || profile?.email || '?')[0].toUpperCase()}
         />
-        {avatarBusy ? (
+        {cropping ? (
+          <AvatarCropper asset={cropping} onDone={(crop) => uploadAvatar(cropping.uri, [crop])} onCancel={() => setCropping(null)} />
+        ) : avatarBusy ? (
           <ReelSpinner />
         ) : (
           <>
