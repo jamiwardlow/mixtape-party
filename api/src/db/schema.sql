@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS accounts (
 ALTER TABLE accounts ALTER COLUMN password_hash DROP NOT NULL;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;
 
+-- #114: profile picture, stored inline (see the ponytail note in routes/accounts.ts).
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar BYTEA;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar_content_type TEXT;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar_updated_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS leagues (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,

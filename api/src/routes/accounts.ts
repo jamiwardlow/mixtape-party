@@ -1,4 +1,4 @@
-import { Router, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
+import express, { Router, type ErrorRequestHandler, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import type { Pool } from 'pg';
 import { hashPassword, signSessionToken, verifyPassword, verifySessionToken } from '../auth.js';
 import { isSessionTokenRevoked, revokeSessionToken } from '../authTokens.js';
@@ -40,6 +40,27 @@ export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret' | 'pool'>):
 // nobody is required to fill in -- and a name accepted at sign-up that PATCH then refuses would
 // leave the owner unable to edit their own name.
 const MAX_DISPLAY_NAME = 40;
+
+// ponytail: avatars live in Postgres bytea (client resizes to ~256px, so rows stay small). Move to
+// a bucket if avatars grow or get fetched in bulk, e.g. a roster of hundreds.
+const MAX_AVATAR_BYTES = 200 * 1024;
+const AVATAR_TYPES = ['image/jpeg', 'image/png'];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// 415 before the body is read, 413 when it exceeds the limit (body-parser's error would otherwise
+// fall through to the app's 500 handler).
+const avatarType: RequestHandler = (req, res, next) => {
+  if (AVATAR_TYPES.includes(req.header('content-type')?.split(';')[0].trim().toLowerCase() ?? '')) return next();
+    res.status(415).json({ error: 'avatar must be image/jpeg or image/png' });
+};
+const avatarTooLarge: ErrorRequestHandler = (err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    res.status(413).json({ error: 'avatar must be at most 200kb' });
+    return;
+  }
+  next(err);
+};
+const avatarRaw = express.raw({ type: () => true, limit: MAX_AVATAR_BYTES });
 
 export function createAccountsRouter(deps: AccountsDeps): Router {
   const router = Router();
@@ -117,12 +138,57 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
     await sendProfile(deps.pool, accountId, res);
   });
 
+  router.put('/accounts/me/avatar', requireAuth(deps), avatarType, avatarRaw, async (req: Request, res: Response) => {
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      res.status(400).json({ error: 'avatar body is required' });
+      return;
+    }
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const contentType = req.header('content-type')!.split(';')[0].trim().toLowerCase();
+    await deps.pool.query(
+      'UPDATE accounts SET avatar = $2, avatar_content_type = $3, avatar_updated_at = now() WHERE id = $1',
+      [accountId, req.body, contentType],
+    );
+    await sendProfile(deps.pool, accountId, res);
+  }, avatarTooLarge);
+
+  router.delete('/accounts/me/avatar', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    await deps.pool.query(
+      'UPDATE accounts SET avatar = NULL, avatar_content_type = NULL, avatar_updated_at = NULL WHERE id = $1',
+      [accountId],
+    );
+    res.status(204).end();
+  });
+
+  router.get('/accounts/:id/avatar', requireAuth(deps), async (req, res) => {
+    const result = UUID.test(req.params.id)
+      ? await deps.pool.query<{ avatar: Buffer | null; avatar_content_type: string | null }>(
+          'SELECT avatar, avatar_content_type FROM accounts WHERE id = $1',
+          [req.params.id],
+        )
+      : undefined;
+    const row = result?.rows[0];
+    if (!row?.avatar) {
+      res.status(404).json({ error: 'no avatar' });
+      return;
+    }
+    // private: the response is per-authenticated-viewer, so shared caches must not keep it. The
+    // avatarUrl's ?v= changes on every upload, which is what makes a long max-age safe.
+    res.set('Cache-Control', 'private, max-age=86400').type(row.avatar_content_type!).send(row.avatar);
+  });
+
   return router;
 }
 
 async function sendProfile(pool: Pool, accountId: string, res: Response): Promise<void> {
-  const accountResult = await pool.query<{ id: string; email: string; display_name: string | null }>(
-    'SELECT id, email, display_name FROM accounts WHERE id = $1',
+  const accountResult = await pool.query<{
+    id: string;
+    email: string;
+    display_name: string | null;
+    avatar_updated_at: Date | null;
+  }>(
+    'SELECT id, email, display_name, avatar_updated_at FROM accounts WHERE id = $1',
     [accountId],
   );
   const account = accountResult.rows[0];
@@ -134,6 +200,9 @@ async function sendProfile(pool: Pool, accountId: string, res: Response): Promis
     id: account.id,
     email: account.email,
     displayName: account.display_name,
+    avatarUrl: account.avatar_updated_at
+      ? `/accounts/${account.id}/avatar?v=${account.avatar_updated_at.getTime()}`
+      : null,
   });
 }
 
