@@ -9,7 +9,7 @@ import {
   phaseLabel,
   nameOf,
   type Player,
-  type Score,
+  type SeasonResult,
   type RoundPhase,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
@@ -49,20 +49,15 @@ interface OverviewRound {
   isCurrent: boolean;
 }
 
-interface Overview {
-  league: {
-    id: string;
-    name: string;
+interface Overview extends SeasonResult {
+  league: SeasonResult['league'] & {
     seasonLength: number;
     inviteCode: string;
     isHost: boolean;
-    concluded: boolean;
   };
   host: Player;
   members: Array<Player & { joinedAt: string }>;
-  standings: Score[];
   scoredRoundCount: number;
-  winners: Score[];
   rounds: OverviewRound[];
 }
 
@@ -111,7 +106,7 @@ export default function LeagueOverview() {
               onPress={() => router.push({ pathname: '/league/[leagueId]/final', params: { leagueId: league.id } })}
             />
           )}
-          {league.concluded && <WinnersRow winners={winners} />}
+          {league.concluded && <WinnersRow winners={winners} token={token} />}
         </JCard>
 
         {current && (

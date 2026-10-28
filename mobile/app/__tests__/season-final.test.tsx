@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
 import SeasonWrapUp from '../league/[leagueId]/final';
 
 jest.mock('expo-router', () => ({
@@ -43,7 +43,7 @@ it('shows winners, final standings and both Besties groups for a concluded leagu
   stub(true);
   await render(<SeasonWrapUp />);
 
-  expect((await screen.findByTestId('winners')).props.children).toBe('Ada');
+  expect(within(await screen.findByTestId('winners')).getByText('Ada')).toBeTruthy();
   expect(screen.getByTestId('standings-a').props.children).toBe(5);
   expect(screen.getByTestId('standings-b').props.children).toBe(2);
   expect(await screen.findByText('Gets me')).toBeTruthy();

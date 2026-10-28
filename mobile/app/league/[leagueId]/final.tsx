@@ -3,16 +3,10 @@ import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { BestieGroup, type Bestie } from '../../../lib/BestieGroup';
-import { type Score } from '../../../lib/rounds';
+import { type SeasonResult as Overview } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { StandingRows, WinnersRow } from '../../../lib/Standings';
 import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, RoundGate, Screen, TapeButton } from '../../../lib/ui';
-
-interface Overview {
-  league: { id: string; name: string; concluded: boolean };
-  standings: Score[];
-  winners: Score[];
-}
 
 export default function SeasonWrapUp() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -62,7 +56,7 @@ export default function SeasonWrapUp() {
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
         <JCard>
           <Label>Season complete</Label>
-          <WinnersRow winners={winners} />
+          <WinnersRow winners={winners} token={token} />
         </JCard>
         <JCard>
           <HandText>Final standings</HandText>

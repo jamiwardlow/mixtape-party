@@ -208,7 +208,7 @@ it('names the winners once the season is over', async () => {
   await show(concludedSeason());
 
   expect(screen.getByTestId('season-progress').props.children).toBe('Season complete');
-  expect(screen.getByTestId('winners').props.children).toBe('Ada');
+  expect(within(screen.getByTestId('winners')).getByText('Ada')).toBeTruthy();
   expect(screen.getByTestId('standings-caption').props.children).toBe('Final standings');
 });
 

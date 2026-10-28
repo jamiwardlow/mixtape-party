@@ -1,14 +1,25 @@
 import { StyleSheet, View } from 'react-native';
 import { Avatar } from './Avatar';
 import { nameOf, type Score } from './rounds';
-import { BodyText, HandText } from './ui';
+import { BodyText } from './ui';
 
-export function WinnersRow({ winners }: { winners: Score[] }) {
-  if (winners.length === 0) return null;
+function Who({ player, token }: { player: Score; token: string | null }) {
   return (
     <View style={styles.inline}>
+      <Avatar size={28} label="" url={player.avatarUrl} token={token} initial={nameOf(player)[0]} />
+      <BodyText>{nameOf(player)}</BodyText>
+    </View>
+  );
+}
+
+export function WinnersRow({ winners, token }: { winners: Score[]; token: string | null }) {
+  if (winners.length === 0) return null;
+  return (
+    <View testID="winners" style={styles.inline}>
       <BodyText>Winners:</BodyText>
-      <HandText testID="winners">{winners.map(nameOf).join(', ')}</HandText>
+      {winners.map((w) => (
+        <Who key={w.accountId} player={w} token={token} />
+      ))}
     </View>
   );
 }
@@ -18,10 +29,7 @@ export function StandingRows({ standings, token }: { standings: Score[]; token: 
     <>
       {standings.map((player) => (
         <View key={player.accountId} style={styles.row}>
-          <View style={styles.inline}>
-            <Avatar size={28} label="" url={player.avatarUrl} token={token} initial={nameOf(player)[0]} />
-            <BodyText>{nameOf(player)}</BodyText>
-          </View>
+          <Who player={player} token={token} />
           <BodyText testID={`standings-${player.accountId}`}>{player.score}</BodyText>
         </View>
       ))}
