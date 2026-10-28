@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { parseComment } from './submissions.js';
 
@@ -22,8 +23,24 @@ async function guessingGuardError(
   return null;
 }
 
+interface PreviewRow {
+  service: 'youtube_music' | 'bandcamp';
+  external_id: string;
+  title: string;
+  artist: string;
+  isrc: string | null;
+}
+
 export function createGuessingRouter(deps: GuessingDeps): Router {
   const router = Router();
+  const previewUrl = (row: PreviewRow) =>
+    playbackAdapterFor(deps, row.service).getPreviewUrl({
+      externalId: row.external_id,
+      title: row.title,
+      artist: row.artist,
+      isrc: row.isrc ?? undefined,
+      service: row.service,
+    });
 
   router.get('/rounds/:roundId/guessing', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
@@ -120,14 +137,41 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(guardError.status).json({ error: guardError.error });
       return;
     }
-    const url = await playbackAdapterFor(deps, row.service).getPreviewUrl({
-      externalId: row.external_id,
-      title: row.title,
-      artist: row.artist,
-      isrc: row.isrc ?? undefined,
-      service: row.service,
-    });
+    const url = await previewUrl(row);
     res.json({ url });
+  });
+
+  // Not round-scoped, so the favorites screen can play any favorite. Same gate as favoriting.
+  router.get('/submissions/:id/preview', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const error = await resultsGuardError(deps.pool, REACTION_TARGETS.submission_id, req.params.id, accountId);
+    if (error) {
+      res.status(error.status).json({ error: error.error });
+      return;
+    }
+    const found = await deps.pool.query<PreviewRow>(
+      'SELECT service, external_id, title, artist, isrc FROM submissions WHERE id = $1',
+      [req.params.id],
+    );
+    res.json({ url: await previewUrl(found.rows[0]) });
+  });
+
+  // The submitter is deliberately not selected: favorites never reveal who submitted a track.
+  router.get('/favorites', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const found = await deps.pool.query(
+      `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
+              r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt"
+       FROM favorites f
+       JOIN submissions s ON s.id = f.submission_id
+       JOIN rounds r ON r.id = s.round_id
+       JOIN leagues l ON l.id = r.league_id
+       JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = f.account_id
+       WHERE f.account_id = $1
+       ORDER BY f.created_at DESC`,
+      [accountId],
+    );
+    res.json({ favorites: found.rows });
   });
 
   router.post('/rounds/:roundId/submissions/:submissionId/guesses', requireAuth(deps), async (req, res) => {

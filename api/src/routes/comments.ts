@@ -28,7 +28,7 @@ type ReactionColumn = 'submission_id' | 'guess_id' | 'reply_id';
 
 // What a reaction can land on, each with the round it belongs to. A comment (guess) only exists to
 // react to once it has text; the track itself is reactable whether or not the submitter left a note.
-const REACTION_TARGETS: Record<ReactionColumn, string> = {
+export const REACTION_TARGETS: Record<ReactionColumn, string> = {
   submission_id: `SELECT r.league_id, r.guessing_deadline FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
   guess_id: `SELECT r.league_id, r.guessing_deadline FROM guesses g JOIN submissions s ON s.id = g.submission_id
              JOIN rounds r ON r.id = s.round_id WHERE g.id = $1 AND g.comment IS NOT NULL`,
@@ -50,7 +50,7 @@ const REACTION_OWNERS: Record<ReactionColumn, string> = {
 const REACTION_LABEL: Record<ReactionColumn, string> = { submission_id: 'track', guess_id: 'comment', reply_id: 'reply' };
 
 /** Replies and reactions share the results' rule: league members only, once results are open. */
-async function guardError(pool: Pool, sql: string, id: string, accountId: string) {
+export async function guardError(pool: Pool, sql: string, id: string, accountId: string) {
   const round = (await pool.query<{ league_id: string; guessing_deadline: string }>(sql, [id])).rows[0];
   if (!round) return { status: 404, error: 'not found' };
   if (!(await isLeagueMember(pool, round.league_id, accountId))) {
