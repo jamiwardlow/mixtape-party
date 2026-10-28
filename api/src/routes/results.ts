@@ -53,10 +53,10 @@ type Bestie = Player & { count: number };
 
 /**
  * The top 3 players paired with `accountId` by correct guesses across every league's scored
- * rounds (same deadline rule as `correctGuessCounts`). `guessedMe` = people who guessed my tracks;
+ * rounds, or just `leagueId`'s when given (same deadline rule as `correctGuessCounts`). `guessedMe` = people who guessed my tracks;
  * `iGuessed` = people whose tracks I guessed.
  */
-async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' | 'iGuessed'): Promise<Bestie[]> {
+async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' | 'iGuessed', leagueId?: string): Promise<Bestie[]> {
   const [meCol, themCol] = direction === 'guessedMe' ? ['s.account_id', 'g.guesser_account_id'] : ['g.guesser_account_id', 's.account_id'];
   const result = await pool.query<{ account_id: string; display_name: string | null; count: string }>(
     `SELECT a.id AS account_id, a.display_name, count(*) AS count
@@ -65,11 +65,11 @@ async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' 
      JOIN rounds r ON r.id = s.round_id
      JOIN accounts a ON a.id = ${themCol}
      WHERE ${meCol} = $1 AND ${themCol} <> $1 AND g.guessed_account_id = s.account_id
-       AND r.guessing_deadline <= now()
+       AND r.guessing_deadline <= now()${leagueId ? ' AND r.league_id = $2' : ''}
      GROUP BY a.id, a.display_name
      ORDER BY count(*) DESC, a.display_name, a.id
      LIMIT 3`,
-    [accountId],
+    leagueId ? [accountId, leagueId] : [accountId],
   );
   return result.rows.map((row) => ({ accountId: row.account_id, displayName: row.display_name, count: Number(row.count) }));
 }
@@ -82,6 +82,24 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const [guessedMe, iGuessed] = await Promise.all([
       topBesties(deps.pool, accountId, 'guessedMe'),
       topBesties(deps.pool, accountId, 'iGuessed'),
+    ]);
+    res.json({ guessedMe, iGuessed });
+  });
+
+  router.get('/leagues/:leagueId/besties', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const { leagueId } = req.params;
+    if (!(await loadLeague(deps.pool, leagueId))) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (!(await isLeagueMember(deps.pool, leagueId, accountId))) {
+      res.status(403).json({ error: 'join the league before viewing its besties' });
+      return;
+    }
+    const [guessedMe, iGuessed] = await Promise.all([
+      topBesties(deps.pool, accountId, 'guessedMe', leagueId),
+      topBesties(deps.pool, accountId, 'iGuessed', leagueId),
     ]);
     res.json({ guessedMe, iGuessed });
   });

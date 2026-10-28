@@ -101,3 +101,52 @@ describe('GET /accounts/me/besties', () => {
     expect(res.body.iGuessed).toHaveLength(3);
   });
 });
+
+describe('GET /leagues/:leagueId/besties', () => {
+  const leagueBesties = (app: ReturnType<typeof buildApp>['app'], leagueId: string, token: string) =>
+    request(app).get(`/leagues/${leagueId}/besties`).set('Authorization', `Bearer ${token}`);
+
+  it('requires a session', async () => {
+    const { app } = buildApp(testDb.pool);
+    expect((await request(app).get('/leagues/nope/besties')).status).toBe(401);
+  });
+
+  it('404s for an unknown league and 403s for a non-member', async () => {
+    const { app } = buildApp(testDb.pool);
+    const league = await createLeagueWithPlayers(app, 2);
+    const outsider = await signUp(app, 'outsider@example.com');
+    expect((await leagueBesties(app, '00000000-0000-0000-0000-000000000000', outsider.token)).status).toBe(404);
+    expect((await leagueBesties(app, league.leagueId, outsider.token)).status).toBe(403);
+  });
+
+  it('counts only that league, and only scored rounds', async () => {
+    const { app } = buildApp(testDb.pool);
+    const a = await createLeagueWithPlayers(app, 2);
+    await guessAll(app, a);
+    const me = a.members[0];
+    const b = await request(app).post('/leagues').set('Authorization', `Bearer ${me.token}`)
+      .send({ name: 'Second', seasonLength: 8, theme: 't', submissionDeadline: '2030-01-10T00:00:00.000Z', guessingDeadline: '2030-01-17T00:00:00.000Z' });
+    const third = await signUp(app, 'third@example.com');
+    await request(app).post(`/leagues/invite/${b.body.inviteCode}/join`).set('Authorization', `Bearer ${third.token}`);
+    const subs: string[] = [];
+    for (const m of [me, third]) {
+      const r = await request(app).post(`/rounds/${b.body.round.id}/submissions`).set('Authorization', `Bearer ${m.token}`)
+        .send({ externalId: `x-${m.accountId}`, title: 't', artist: 'a', service: 'youtube_music' });
+      subs.push(r.body.submissionId);
+    }
+    await closeSubmissionWindow(testDb.pool, b.body.round.id);
+    await guess(app, b.body.round.id, subs[0], third.token, me.accountId);
+
+    // league A is still being guessed: nothing counts yet. League B likewise.
+    expect((await leagueBesties(app, a.leagueId, me.token)).body).toEqual({ guessedMe: [], iGuessed: [] });
+
+    await closeGuessingWindow(testDb.pool, a.roundId);
+    await closeGuessingWindow(testDb.pool, b.body.round.id);
+
+    const inA = await leagueBesties(app, a.leagueId, me.token);
+    expect(inA.body.guessedMe).toEqual([{ accountId: a.members[1].accountId, displayName: null, count: 1 }]);
+    const inB = await leagueBesties(app, b.body.leagueId, me.token);
+    expect(inB.body.guessedMe).toEqual([{ accountId: third.accountId, displayName: null, count: 1 }]);
+    expect(inB.body.iGuessed).toEqual([]);
+  });
+});
