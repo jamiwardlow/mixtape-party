@@ -1,13 +1,14 @@
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, Pressable, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { SERVICE_META } from '../../../lib/theme';
 import {
   BodyText,
+  ErrorNote,
   HandText,
   JCard,
   Label,
@@ -55,6 +56,7 @@ interface Track {
   correctGuessers: Player[];
   reactions: Reaction[];
   comments: Comment[];
+  favorited: boolean;
   yourGuess: { comment: string | null } | null;
 }
 
@@ -274,6 +276,28 @@ export default function RoundResults() {
     await fetchApi(path, { method, token, body });
     await loadResults();
   }
+
+  // The heart flips at once and goes back if the call fails. act() can't say whether the call worked, so this posts itself.
+  const [favoriteError, setFavoriteError] = useState(false);
+  const favoriting = useRef(new Set<string>());
+  async function toggleFavorite(submissionId: string) {
+    // The server flips on every POST, so a tap while one is pending would desync a rollback; ignore it.
+    if (favoriting.current.has(submissionId)) return;
+    favoriting.current.add(submissionId);
+    const flip = (on: boolean) =>
+      setResults((r) => r && { ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) });
+    const was = results?.tracks.find((t) => t.submissionId === submissionId)?.favorited ?? false;
+    setFavoriteError(false);
+    flip(!was);
+    const ok = token
+      ? await fetchApi(`/submissions/${submissionId}/favorite`, { method: 'POST', token }).then((res) => res.ok, () => false)
+      : false;
+    if (!ok) {
+      flip(was);
+      setFavoriteError(true);
+    }
+    favoriting.current.delete(submissionId);
+  }
   const saveComment = (submissionId: string, comment: string) =>
     act(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, 'PUT', { comment });
   const actions: ThreadActions = {
@@ -365,6 +389,7 @@ export default function RoundResults() {
             ))}
           </JCard>
         ) : null}
+        {favoriteError ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         <FlatList
           ref={list}
           // ponytail: rows vary in height, so a miss (not yet laid out) just stays at the top.
@@ -392,6 +417,15 @@ export default function RoundResults() {
                 )}
               </View>
               <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={item.favorited ? 'Favorited' : 'Not favorited'}
+                onPress={() => toggleFavorite(item.submissionId)}
+                hitSlop={8}
+                style={{ alignSelf: 'flex-start' }}
+              >
+                <BodyText>{item.favorited ? '♥' : '♡'}</BodyText>
+              </Pressable>
               {item.yourGuess ? (
                 <MyComment
                   key={item.yourGuess.comment ?? ''}

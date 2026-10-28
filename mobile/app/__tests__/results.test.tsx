@@ -156,3 +156,70 @@ describe('comment threads', () => {
     );
   });
 });
+
+describe('favorite heart', () => {
+  const track = {
+    submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', comment: null,
+    submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [], yourGuess: null,
+    comments: [], favorited: false,
+  };
+
+  /** Serves the results (with the favorite state the "server" holds) and answers the toggle with `favoriteStatus`. */
+  function stubFavorite(favoriteStatus: number) {
+    let favorited = track.favorited;
+    globalThis.fetch = jest.fn(async (url: string, init?: { method?: string }) => {
+      if (String(url).includes('/export')) return ok({ services: [] });
+      if (String(url).includes('/favorite')) {
+        if (favoriteStatus === 200) favorited = !favorited;
+        return new Response(JSON.stringify({ favorited }), { status: favoriteStatus });
+      }
+      return ok({ ...results, tracks: [{ ...track, favorited }] });
+    }) as unknown as typeof fetch;
+  }
+
+  it('toggles the favorite and says which state it is in', async () => {
+    stubFavorite(200);
+    await render(<RoundResults />);
+
+    await fireEvent.press(await screen.findByLabelText('Not favorited'));
+
+    expect(await screen.findByLabelText('Favorited')).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/submissions/s1/favorite'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('restores the heart and says so when the call fails', async () => {
+    stubFavorite(500);
+    await render(<RoundResults />);
+
+    await fireEvent.press(await screen.findByLabelText('Not favorited'));
+
+    expect(await screen.findByText(/couldn.t update your favorite/i)).toBeTruthy();
+    expect(screen.getByLabelText('Not favorited')).toBeTruthy();
+  });
+
+  it('ignores a second tap while the first is still in flight', async () => {
+    stubFavorite(200);
+    const answer = (fetch as jest.Mock).getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    (fetch as jest.Mock).mockImplementation(async (url: string, init?: object) => {
+      if (String(url).includes('/favorite')) await gate;
+      return answer(url, init);
+    });
+    await render(<RoundResults />);
+    const heart = await screen.findByLabelText('Not favorited');
+
+    // Not awaited: the handler's promise is the gated request, and press() would wait on it.
+    fireEvent.press(heart);
+    await waitFor(() => expect(screen.getByLabelText('Favorited')).toBeTruthy());
+    fireEvent.press(screen.getByLabelText('Favorited'));
+    release();
+
+    await waitFor(() => expect(screen.getByLabelText('Favorited')).toBeTruthy());
+    const posts = (fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/favorite'));
+    expect(posts).toHaveLength(1);
+  });
+});
