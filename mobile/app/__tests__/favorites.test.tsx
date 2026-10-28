@@ -4,6 +4,8 @@ import Favorites from '../favorites';
 const mockToggle = jest.fn();
 let mockFallback: (id: string) => void;
 
+const mockOpenURL = jest.fn();
+jest.mock('expo-linking', () => ({ openURL: (url: string) => mockOpenURL(url) }));
 jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
 jest.mock('../../lib/session', () => ({ useSession: () => ({ token: 'tok-1' }) }));
 jest.mock('../../lib/preview', () => ({
@@ -22,13 +24,21 @@ const fav = (n: number) => ({
   artist: `Artist ${n}`,
 });
 
-function stubApi(favorites: unknown[], favoriteStatus = 200) {
-  globalThis.fetch = jest.fn(async (url: string) =>
-    String(url).endsWith('/favorite')
+function stubApi(favorites: unknown[], favoriteStatus = 200, playlistUrl: string | null = null, exportBody?: unknown) {
+  globalThis.fetch = jest.fn(async (url: string) => {
+    if (String(url).endsWith('/favorites/export'))
+      return exportBody
+        ? new Response(JSON.stringify(exportBody), { status: 200 })
+        : new Response('{}', { status: 500 });
+    return String(url).endsWith('/favorite')
       ? new Response(JSON.stringify({ favorited: false }), { status: favoriteStatus })
-      : new Response(JSON.stringify({ favorites }), { status: 200 }),
-  ) as unknown as typeof fetch;
+      : new Response(JSON.stringify({ favorites, playlistUrl }), { status: 200 });
+  }) as unknown as typeof fetch;
 }
+
+const exported = (leg: object) => ({
+  services: [{ service: 'youtube_music', status: 'ok', playlistUrl: null, matchedCount: 0, skipped: [], ...leg }],
+});
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -79,4 +89,69 @@ it('keeps the row when unfavoriting fails', async () => {
   await fireEvent.press(screen.getByText('Unfavorite'));
   await waitFor(() => expect(screen.getByText(/Couldn't update your favorite/)).toBeTruthy());
   expect(screen.getByText('Song 3 — Artist 3')).toBeTruthy();
+});
+
+it('exports, then shows a link to the playlist and the removal caveat', async () => {
+  stubApi([fav(1)], 200, null, exported({ playlistUrl: 'https://music.youtube.com/playlist?list=PL1' }));
+  await render(<Favorites />);
+  await waitFor(() => screen.getByText('Export to YouTube Music'));
+  expect(screen.queryByText('Open playlist')).toBeNull();
+
+  await fireEvent.press(screen.getByText('Export to YouTube Music'));
+  await waitFor(() => screen.getByText('Open playlist'));
+  await fireEvent.press(screen.getByText('Open playlist'));
+  expect(mockOpenURL).toHaveBeenCalledWith('https://music.youtube.com/playlist?list=PL1');
+  expect(screen.getByText(/does not remove it from/)).toBeTruthy();
+  expect(screen.getByText('Export again')).toBeTruthy();
+});
+
+it('offers the existing playlist before any export', async () => {
+  stubApi([fav(1)], 200, 'https://music.youtube.com/playlist?list=PL0');
+  await render(<Favorites />);
+  await waitFor(() => screen.getByText('Open playlist'));
+  expect(screen.getByText('Export again')).toBeTruthy();
+});
+
+it('says so when the export fails', async () => {
+  stubApi([fav(1)], 200, null, exported({ status: 'failed' }));
+  await render(<Favorites />);
+  await waitFor(() => screen.getByText('Export to YouTube Music'));
+  await fireEvent.press(screen.getByText('Export to YouTube Music'));
+  await waitFor(() => expect(screen.getByText(/Couldn’t build the YouTube Music playlist/)).toBeTruthy());
+});
+
+it('says so when nothing matched', async () => {
+  stubApi([fav(1)], 200, null, exported({ status: 'no_matches' }));
+  await render(<Favorites />);
+  await waitFor(() => screen.getByText('Export to YouTube Music'));
+  await fireEvent.press(screen.getByText('Export to YouTube Music'));
+  await waitFor(() => expect(screen.getByText(/None of your favorites were on YouTube Music/)).toBeTruthy());
+});
+
+it('lists skipped tracks with their playback links', async () => {
+  stubApi(
+    [fav(1)],
+    200,
+    null,
+    exported({
+      playlistUrl: 'https://music.youtube.com/playlist?list=PL1',
+      skipped: [
+        { submissionId: 's9', title: 'Lost', artist: 'Band', playback: { service: 'bandcamp', deepLink: 'https://b.example/lost' } },
+      ],
+    }),
+  );
+  await render(<Favorites />);
+  await waitFor(() => screen.getByText('Export to YouTube Music'));
+  await fireEvent.press(screen.getByText('Export to YouTube Music'));
+  await waitFor(() => screen.getByText('Lost — Band'));
+  await fireEvent.press(screen.getByText('Open track'));
+  expect(mockOpenURL).toHaveBeenCalledWith('https://b.example/lost');
+});
+
+it('shows an error when the export request dies', async () => {
+  stubApi([fav(1)]);
+  await render(<Favorites />);
+  await waitFor(() => screen.getByText('Export to YouTube Music'));
+  await fireEvent.press(screen.getByText('Export to YouTube Music'));
+  await waitFor(() => expect(screen.getByText(/Couldn't export your favorites/)).toBeTruthy());
 });
