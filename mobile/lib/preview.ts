@@ -6,11 +6,11 @@ import { fetchApi } from './api';
 export const PREVIEW_SECONDS = 30;
 
 /**
- * One in-app preview at a time for the guess screen. `toggle` plays a track's preview (or stops it
+ * One in-app preview at a time. `previewPath` builds the preview endpoint for a submission. `toggle` plays a track's preview (or stops it
  * if it's the one playing); when the API has no preview it calls `fallback` -- the existing "open in
  * the service" link. The URL is fetched per play because Bandcamp's expire.
  */
-export function usePreview(roundId: string, token: string | null, fallback: (submissionId: string) => void) {
+export function usePreview(previewPath: (submissionId: string) => string, token: string | null, fallback: (submissionId: string) => void) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const player = useRef<AudioPlayer | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -35,7 +35,7 @@ export function usePreview(roundId: string, token: string | null, fallback: (sub
       const mine = request.current;
       let url: string | null = null;
       try {
-        const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/preview`, { token });
+        const res = await fetchApi(previewPath(submissionId), { token });
         if (res.ok) url = (await res.json()).url;
       } catch {
         // Treated as "no preview": the link still works.
@@ -49,7 +49,7 @@ export function usePreview(roundId: string, token: string | null, fallback: (sub
       timer.current = setTimeout(stop, PREVIEW_SECONDS * 1000);
       setPlayingId(submissionId);
     },
-    [playingId, roundId, token, stop, fallback],
+    [playingId, previewPath, token, stop, fallback],
   );
 
   return { playingId, toggle };

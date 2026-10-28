@@ -50,3 +50,28 @@ describe('guess screen playlist link', () => {
     expect(screen.queryByText('Open playlist')).toBeNull();
   });
 });
+
+describe('guess screen preview', () => {
+  it('looks the preview up under the round, and opens the service when there is none', async () => {
+    const track = {
+      submissionId: 's1', service: 'youtube_music', title: 'Song', artist: 'Artist',
+      playback: { deepLink: 'ytm://s1', webUrl: 'https://music.youtube.com/s1' }, guessedAccountId: null, comment: null,
+    };
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export')
+        ? new Response(JSON.stringify({ services: [] }), { status: 200 })
+        : String(url).includes('/preview')
+          ? new Response(JSON.stringify({ url: null }), { status: 200 })
+          : new Response(JSON.stringify({ tracks: [track], players: [] }), { status: 200 }),
+    ) as unknown as typeof fetch;
+    await render(<GuessRound />);
+
+    await fireEvent.press(await screen.findByText('Play'));
+
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledWith('https://music.youtube.com/s1'));
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/rounds/round-1/submissions/s1/preview'),
+      expect.anything(),
+    );
+  });
+});

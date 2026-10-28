@@ -69,6 +69,7 @@ export default function Account() {
         {nameSaved && <BodyText>Saved.</BodyText>}
         {nameError && <ErrorNote>{nameError}</ErrorNote>}
       </JCard>
+      <TapeButton title="Favorites" onPress={() => router.push('/favorites')} />
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />
     </Screen>
   );

@@ -87,7 +87,8 @@ export default function GuessRound() {
     },
     [tracks],
   );
-  const { playingId, toggle } = usePreview(roundId, token, openInService);
+  const previewPath = useCallback((id: string) => `/rounds/${roundId}/submissions/${id}/preview`, [roundId]);
+  const { playingId, toggle } = usePreview(previewPath, token, openInService);
 
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>

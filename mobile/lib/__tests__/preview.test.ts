@@ -7,6 +7,7 @@ const mockCreate = jest.fn((_url: string) => mockPlayer);
 jest.mock('expo-audio', () => ({ createAudioPlayer: (url: string) => mockCreate(url) }));
 jest.mock('../api', () => ({ fetchApi: jest.fn() }));
 
+const path = (id: string) => `/rounds/r1/submissions/${id}/preview`;
 const previewIs = (url: string | null) =>
   (fetchApi as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ url }) });
 
@@ -19,7 +20,7 @@ afterEach(() => jest.useRealTimers());
 it('plays the preview in the app, not the link', async () => {
   previewIs('https://cdn/p.mp3');
   const fallback = jest.fn();
-  const { result } = await renderHook(() => usePreview('r1', 'tok', fallback));
+  const { result } = await renderHook(() => usePreview(path, 'tok', fallback));
 
   await act(() => result.current.toggle('s1'));
 
@@ -33,7 +34,7 @@ it('plays the preview in the app, not the link', async () => {
 it('falls back to the link when there is no preview', async () => {
   previewIs(null);
   const fallback = jest.fn();
-  const { result } = await renderHook(() => usePreview('r1', 'tok', fallback));
+  const { result } = await renderHook(() => usePreview(path, 'tok', fallback));
 
   await act(() => result.current.toggle('s1'));
 
@@ -43,7 +44,7 @@ it('falls back to the link when there is no preview', async () => {
 
 it('stops when toggled again, and cuts a full-length track at the preview length', async () => {
   previewIs('https://cdn/p.mp3');
-  const { result } = await renderHook(() => usePreview('r1', 'tok', jest.fn()));
+  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
 
   await act(() => result.current.toggle('s1'));
   await act(() => result.current.toggle('s1'));
@@ -60,7 +61,7 @@ it('ignores a slow lookup that a later tap has superseded', async () => {
   (fetchApi as jest.Mock)
     .mockReturnValueOnce(new Promise((r) => (resolveFirst = r)))
     .mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://cdn/second.mp3' }) });
-  const { result } = await renderHook(() => usePreview('r1', 'tok', jest.fn()));
+  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
 
   let first!: Promise<void>;
   act(() => void (first = result.current.toggle('s1')));

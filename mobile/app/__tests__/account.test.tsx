@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { router } from 'expo-router';
 import Account from '../account';
 
 const mockRefreshProfile = jest.fn();
 let mockProfile: { id: string; email: string; displayName?: string | null } | null;
 
-jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }));
 
 jest.mock('../../lib/session', () => ({
   useSession: () => ({ token: 'session-tok', profile: mockProfile, refreshProfile: mockRefreshProfile }),
@@ -69,4 +70,12 @@ describe('display name', () => {
     expect(await screen.findByText('displayName must be 1-40 characters')).toBeTruthy();
     expect(mockRefreshProfile).not.toHaveBeenCalled();
   });
+});
+
+it('opens the favorites screen', async () => {
+  await render(<Account />);
+
+  await fireEvent.press(screen.getByText('Favorites'));
+
+  expect(router.push).toHaveBeenCalledWith('/favorites');
 });
