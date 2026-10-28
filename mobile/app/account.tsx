@@ -2,7 +2,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Platform, Switch, View } from 'react-native';
+import { Image, Platform, ScrollView, Switch, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
@@ -246,6 +246,7 @@ export default function Account() {
 
   return (
     <Screen label="My Account">
+      <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
       <BodyText style={{ color: t.inkMuted }}>Signed in as {profile?.email}</BodyText>
       <JCard>
         <Avatar
@@ -327,6 +328,7 @@ export default function Account() {
       </JCard>
       <TapeButton title="Favorites" onPress={() => router.push('/favorites')} />
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />
+      </ScrollView>
     </Screen>
   );
 }
