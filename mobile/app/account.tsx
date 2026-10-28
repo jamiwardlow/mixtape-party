@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { Switch, View } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
@@ -12,6 +13,31 @@ export default function Account() {
   const [savingName, setSavingName] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [nameSaved, setNameSaved] = useState(false);
+
+  const [prefs, setPrefs] = useState({ pushEnabled: true, emailEnabled: true });
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchApi('/notifications/settings', { token })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((s) => setPrefs({ pushEnabled: s.pushEnabled !== false, emailEnabled: s.emailEnabled !== false }))
+      .catch(() => setPrefsError("Couldn't load your notification settings."));
+  }, [token]);
+
+  // Optimistic: flip now, put back the old value if the server says no.
+  async function togglePref(key: 'pushEnabled' | 'emailEnabled', value: boolean) {
+    if (!token) return;
+    const previous = prefs[key];
+    setPrefsError(null);
+    setPrefs((p) => ({ ...p, [key]: value }));
+    try {
+      const res = await fetchApi('/notifications/settings', { method: 'PUT', token, body: { [key]: value } });
+      if (res.ok) return;
+    } catch {}
+    setPrefs((p) => ({ ...p, [key]: previous }));
+    setPrefsError("Couldn't save that setting. Try again.");
+  }
 
   // The profile arrives asynchronously and is re-read after a save, so seed from the effect rather
   // than useState's initial value alone -- which runs once, often before there is a profile to read.
@@ -68,6 +94,22 @@ export default function Account() {
         {savingName ? <ReelSpinner /> : <TapeButton title="Save name" onPress={saveName} />}
         {nameSaved && <BodyText>Saved.</BodyText>}
         {nameError && <ErrorNote>{nameError}</ErrorNote>}
+      </JCard>
+      <JCard>
+        <HandText>Notifications</HandText>
+        <Label>Reminders and updates about your leagues. Sign-in and password emails always send.</Label>
+        {(
+          [
+            ['pushEnabled', 'Push notifications'],
+            ['emailEnabled', 'Email notifications'],
+          ] as const
+        ).map(([key, title]) => (
+          <View key={key} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <BodyText>{title}</BodyText>
+            <Switch accessibilityLabel={title} value={prefs[key]} onValueChange={(v) => togglePref(key, v)} />
+          </View>
+        ))}
+        {prefsError && <ErrorNote>{prefsError}</ErrorNote>}
       </JCard>
       <TapeButton title="Favorites" onPress={() => router.push('/favorites')} />
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />
