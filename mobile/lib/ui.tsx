@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Button,
+  Image,
   Platform,
   Pressable,
   PressableProps,
@@ -75,6 +76,12 @@ export function BodyText({ style, children, ...props }: TextProps) {
       {children}
     </Text>
   );
+}
+
+/** Cover art for a submitted track; renders nothing when the service has none (Bandcamp). */
+export function Thumb({ url, size = 48 }: { url?: string | null; size?: number }) {
+  if (!url) return null;
+  return <Image source={{ uri: url }} accessibilityIgnoresInvertColors style={{ width: size, height: size, borderRadius: 4 }} />;
 }
 
 export function ServiceBadge({ service }: { service: ServiceName }) {

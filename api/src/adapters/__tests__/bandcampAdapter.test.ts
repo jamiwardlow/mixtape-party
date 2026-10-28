@@ -37,6 +37,7 @@ describe('BandcampAdapter.submit', () => {
       title: 'Awake',
       artist: 'Tycho',
       service: 'bandcamp',
+      artId: 3370493783,
     });
   });
 
@@ -50,6 +51,7 @@ describe('BandcampAdapter.submit', () => {
       title: 'Awake',
       artist: 'Tycho',
       service: 'bandcamp',
+      artId: 3370493783,
     });
   });
 

@@ -9,6 +9,8 @@ export interface TrackRef {
 export interface TrackResult extends TrackRef {
   externalId: string;
   service: ServiceName;
+  /** Bandcamp cover art id, for building the thumbnail URL. */
+  artId?: number;
 }
 
 export interface PlaylistRef {

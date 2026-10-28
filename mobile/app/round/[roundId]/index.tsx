@@ -11,7 +11,7 @@ import {
   type ServiceName,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton } from '../../../lib/ui';
+import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton, Thumb } from '../../../lib/ui';
 
 /** The one round, as `GET /rounds/:roundId/overview` describes it — the season page's entry. */
 interface RoundDetail {
@@ -37,7 +37,7 @@ interface RoundDetail {
     submitted: boolean;
     guessesRemaining: number;
     /** Your own track, in every phase. Yours only: the server never sends anyone else's. */
-    submission: { service: ServiceName; title: string; artist: string } | null;
+    submission: { service: ServiceName; title: string; artist: string; thumbnailUrl: string | null } | null;
   };
 }
 
@@ -129,6 +129,7 @@ export default function RoundOverview() {
           <HandText>You</HandText>
           {round.you.submission ? (
             <View style={styles.row}>
+              <Thumb url={round.you.submission.thumbnailUrl} />
               <ServiceBadge service={round.you.submission.service} />
               <BodyText testID="your-submission">{`${round.you.submission.title} — ${round.you.submission.artist}`}</BodyText>
             </View>

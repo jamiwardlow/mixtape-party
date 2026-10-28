@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
+import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { isUniqueViolation, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
@@ -71,10 +72,11 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       title: string;
       artist: string;
       isrc: string | null;
+      art_id: string | null;
       guessed_account_id: string | null;
       comment: string | null;
     }>(
-      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, g.guessed_account_id, g.comment
+      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, s.art_id, g.guessed_account_id, g.comment
        FROM submissions s
        LEFT JOIN guesses g ON g.submission_id = s.id AND g.guesser_account_id = $1
        WHERE s.round_id = $2 AND s.account_id != $1
@@ -96,6 +98,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
           service: row.service,
           title: row.title,
           artist: row.artist,
+          thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
           playback,
           guessedAccountId: row.guessed_account_id,
           comment: row.comment,

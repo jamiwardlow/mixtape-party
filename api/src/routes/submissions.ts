@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ServiceUnavailableError, type ServiceName } from '../adapters/types.js';
+import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
@@ -43,7 +44,7 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
 
     try {
       const results = await adapterFor(deps, service).search(query);
-      res.json({ results });
+      res.json({ results: results.map((r) => ({ ...r, thumbnailUrl: thumbnailUrlOf(r.service, r.externalId, r.artId) })) });
     } catch (err) {
       if (err instanceof ServiceUnavailableError) {
         res.status(503).json({ error: 'search unavailable' });
@@ -100,7 +101,7 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    let resolved: { externalId: string; title: string; artist: string; isrc: string | null };
+    let resolved: { externalId: string; title: string; artist: string; isrc: string | null; artId: number | null };
     if (service === 'bandcamp') {
       let submitted;
       try {
@@ -116,7 +117,7 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
         res.status(400).json({ error: 'could not resolve that bandcamp url' });
         return;
       }
-      resolved = { externalId: submitted.externalId, title: submitted.title, artist: submitted.artist, isrc: null };
+      resolved = { externalId: submitted.externalId, title: submitted.title, artist: submitted.artist, isrc: null, artId: submitted.artId ?? null };
     } else {
       try {
         const matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
@@ -131,7 +132,7 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
         }
         throw err;
       }
-      resolved = { externalId, title, artist, isrc: isrc ?? null };
+      resolved = { externalId, title, artist, isrc: isrc ?? null, artId: null };
     }
 
     // Submitting again replaces your track, up to the deadline checked above and no further --
@@ -141,14 +142,14 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     // created_at is left alone -- the submitter roster is ordered by it and a replacement should
     // not reshuffle it. Both paths answer 201: "your track for this round is now X".
     const submission = await deps.pool.query<{ id: string }>(
-      `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc, comment)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, isrc, comment, art_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (round_id, account_id) DO UPDATE
          SET service = EXCLUDED.service, external_id = EXCLUDED.external_id,
              title = EXCLUDED.title, artist = EXCLUDED.artist, isrc = EXCLUDED.isrc,
-             comment = EXCLUDED.comment
+             comment = EXCLUDED.comment, art_id = EXCLUDED.art_id
        RETURNING id`,
-      [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc, comment],
+      [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc, comment, resolved.artId],
     );
     res.status(201).json({ submissionId: submission.rows[0].id });
   });

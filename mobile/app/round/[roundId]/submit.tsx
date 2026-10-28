@@ -5,7 +5,7 @@ import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import type { ServiceName } from '../../../lib/rounds';
 import { useTheme } from '../../../lib/theme';
-import { BodyText, ErrorNote, JCard, Label, PressScale, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
+import { BodyText, ErrorNote, JCard, Label, PressScale, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -19,6 +19,7 @@ interface TrackResult {
   title: string;
   artist: string;
   isrc?: string;
+  thumbnailUrl?: string | null;
 }
 
 export default function SubmitTrack() {
@@ -40,7 +41,7 @@ export default function SubmitTrack() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [current, setCurrent] = useState<{ service: ServiceName; title: string; artist: string } | null>(null);
+  const [current, setCurrent] = useState<{ service: ServiceName; title: string; artist: string; thumbnailUrl?: string | null } | null>(null);
   const [commentSaved, setCommentSaved] = useState(false);
 
   // Editing: show the track already in, and start the comment box from what is saved.
@@ -144,6 +145,7 @@ export default function SubmitTrack() {
         <JCard>
           <Label>Your current track</Label>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Thumb url={current.thumbnailUrl} />
             <ServiceBadge service={current.service} />
             <BodyText testID="current-track" style={{ flex: 1 }}>{`${current.title} — ${current.artist}`}</BodyText>
           </View>
@@ -197,6 +199,7 @@ export default function SubmitTrack() {
             ItemSeparatorComponent={Sprocket}
             renderItem={({ item }) => (
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                <Thumb url={item.thumbnailUrl} />
                 {service && <ServiceBadge service={service} />}
                 <BodyText style={{ flex: 1 }}>
                   {item.title} — {item.artist}

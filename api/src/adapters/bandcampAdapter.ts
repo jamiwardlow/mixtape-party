@@ -37,6 +37,7 @@ function decodeHtmlEntities(value: string): string {
 interface TralbumData {
   id?: number;
   item_type?: string;
+  art_id?: number;
   artist?: string;
   current?: { title?: string };
 }
@@ -90,6 +91,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
       title,
       artist,
       service: this.service,
+      artId: typeof data?.art_id === 'number' ? data.art_id : undefined,
     };
   }
 

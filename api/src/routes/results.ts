@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
+import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   isLeagueMember,
@@ -114,11 +115,13 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const submissionsResult = await deps.pool.query<{
       id: string;
       service: 'youtube_music' | 'bandcamp';
+      external_id: string;
+      art_id: string | null;
       title: string;
       artist: string;
       comment: string | null;
       account_id: string;
-    }>('SELECT id, service, title, artist, comment, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
+    }>('SELECT id, service, external_id, art_id, title, artist, comment, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
       req.params.roundId,
     ]);
 
@@ -203,6 +206,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       service: row.service,
       title: row.title,
       artist: row.artist,
+      thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
       comment: row.comment,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],

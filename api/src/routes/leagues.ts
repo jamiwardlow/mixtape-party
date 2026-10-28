@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
+import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   CURRENT_ROUND_CLAUSE,
@@ -72,6 +73,8 @@ interface RoundRow {
 interface SubmissionRow {
   account_id: string;
   service: ServiceName;
+  external_id: string;
+  art_id: string | null;
   title: string;
   artist: string;
   comment?: string | null;
@@ -83,7 +86,7 @@ interface SubmissionRow {
  * A map of everyone's tracks that gets filtered at serialization time is one careless spread away
  * from shipping the whole playlist with names attached (PRODUCT.md Principle 1).
  */
-const trackOf = (row: SubmissionRow) => ({ service: row.service, title: row.title, artist: row.artist, comment: row.comment ?? null });
+const trackOf = (row: SubmissionRow) => ({ service: row.service, title: row.title, artist: row.artist, thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id), comment: row.comment ?? null });
 
 async function findLeagueByInviteCode(pool: Pool, inviteCode: string): Promise<LeagueRow | null> {
   const result = await pool.query<LeagueRow>(
@@ -420,7 +423,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         [leagueId],
       ),
       deps.pool.query<SubmissionRow & { round_id: string }>(
-        `SELECT s.round_id, s.account_id, s.service, s.title, s.artist, s.comment FROM submissions s
+        `SELECT s.round_id, s.account_id, s.service, s.external_id, s.art_id, s.title, s.artist, s.comment FROM submissions s
          JOIN rounds r ON r.id = s.round_id
          WHERE r.league_id = $1
          ORDER BY s.created_at, s.id`,
@@ -521,7 +524,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       ),
       // Same order as the league overview's, so the submitter list is the same list.
       deps.pool.query<SubmissionRow>(
-        'SELECT account_id, service, title, artist, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
+        'SELECT account_id, service, external_id, art_id, title, artist, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
         [roundId],
       ),
       deps.pool.query<{ guesser_account_id: string; guess_count: string }>(

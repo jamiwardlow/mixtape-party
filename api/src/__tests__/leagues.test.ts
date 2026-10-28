@@ -1065,7 +1065,7 @@ describe('GET /leagues/:leagueId/overview', () => {
         service: 'youtube_music',
       });
 
-    const mine = { service: 'youtube_music', title: `Song by ${members[0].accountId}`, artist: 'Artist', comment: null };
+    const mine = { service: 'youtube_music', title: `Song by ${members[0].accountId}`, artist: 'Artist', thumbnailUrl: expect.stringContaining('i.ytimg.com'), comment: null };
     const check = async (phase: string) => {
       const res = await overview(app, leagueId, members[0].token);
       const round = roundNumbered(res.body, 1);
@@ -1309,7 +1309,7 @@ describe('GET /rounds/:roundId/overview', () => {
     expect(guessing.body.round.you).toEqual({
       submitted: true,
       guessesRemaining: 2,
-      submission: { service: 'youtube_music', title: `Song by ${members[0].accountId}`, artist: 'Artist', comment: null },
+      submission: { service: 'youtube_music', title: `Song by ${members[0].accountId}`, artist: 'Artist', thumbnailUrl: expect.stringMatching(/^https:\/\/i\.ytimg\.com\/vi\/track-.+\/mqdefault\.jpg$/), comment: null },
     });
     expect(guessing.body.round).toEqual(await seasonEntry(app, leagueId, roundId, token));
 

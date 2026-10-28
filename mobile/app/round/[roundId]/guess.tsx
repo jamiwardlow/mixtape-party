@@ -6,13 +6,14 @@ import { fetchApi } from '../../../lib/api';
 import { usePreview } from '../../../lib/preview';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput } from '../../../lib/ui';
+import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
   service: ServiceName;
   title: string;
   artist: string;
+  thumbnailUrl: string | null;
   playback: { deepLink: string; webUrl?: string };
   guessedAccountId: string | null;
   comment: string | null;
@@ -108,9 +109,12 @@ export default function GuessRound() {
                   variant="secondary"
                 />
               </View>
-              <BodyText>
-                {item.title} — {item.artist}
-              </BodyText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Thumb url={item.thumbnailUrl} />
+                <BodyText style={{ flex: 1 }}>
+                  {item.title} — {item.artist}
+                </BodyText>
+              </View>
               <TapeInput
                 placeholder="Add a comment (optional) — shown with the results"
                 value={drafts[item.submissionId] ?? ''}

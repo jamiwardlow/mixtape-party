@@ -16,6 +16,7 @@ import {
   RoundGate,
   Screen,
   ServiceBadge,
+  Thumb,
   Sprocket,
   TapeButton,
   TapeInput,
@@ -52,6 +53,7 @@ interface Track {
   service: ServiceName;
   title: string;
   artist: string;
+  thumbnailUrl: string | null;
   comment: string | null;
   submitter: Player;
   correctGuessers: Player[];
@@ -409,9 +411,12 @@ export default function RoundResults() {
           renderItem={({ item }) => (
             <JCard>
               <ServiceBadge service={item.service} />
-              <BodyText>
-                {item.title} — {item.artist}
-              </BodyText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Thumb url={item.thumbnailUrl} />
+                <BodyText style={{ flex: 1 }}>
+                  {item.title} — {item.artist}
+                </BodyText>
+              </View>
               {item.comment && <BodyText>“{item.comment}”</BodyText>}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Label>Submitted by</Label>
