@@ -80,7 +80,7 @@ export default function Home() {
         ))}
       </ScrollView>
       <TapeButton title="Create a league" onPress={() => router.push('/create-league')} variant="secondary" />
-      <TapeButton title="Settings" onPress={() => router.push('/settings')} variant="secondary" />
+      <TapeButton title="My Account" onPress={() => router.push('/account')} variant="secondary" />
       <Pressable onPress={signOut} hitSlop={8} style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center' }}>
         <Label style={{ textDecorationLine: 'underline' }}>Sign out</Label>
       </Pressable>

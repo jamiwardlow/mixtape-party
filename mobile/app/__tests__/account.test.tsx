@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import Settings from '../settings';
+import Account from '../account';
 
 const mockRefreshProfile = jest.fn();
 let mockProfile: { id: string; email: string; displayName?: string | null } | null;
@@ -16,7 +16,7 @@ beforeEach(() => {
   globalThis.fetch = jest.fn(async () => new Response(JSON.stringify(mockProfile), { status: 200 })) as unknown as typeof fetch;
 });
 
-// Settings is the only route back for the accounts that already exist with a null name, which is
+// My Account is the only route back for the accounts that already exist with a null name, which is
 // nearly all of them -- a broken save here means shipping display names fixes nothing for anyone
 // who already signed up.
 describe('display name', () => {
@@ -25,13 +25,13 @@ describe('display name', () => {
   it('seeds the field from the profile', async () => {
     mockProfile = { id: 'a1', email: 'jami@example.com', displayName: 'Sam' };
 
-    await render(<Settings />);
+    await render(<Account />);
 
     expect(screen.getByDisplayValue('Sam')).toBeTruthy();
   });
 
   it('patches the trimmed name and re-reads the profile so the change shows without a sign-out', async () => {
-    await render(<Settings />);
+    await render(<Account />);
     await fireEvent.changeText(screen.getByPlaceholderText('Display name'), '  Sam  ');
 
     await save();
@@ -48,7 +48,7 @@ describe('display name', () => {
   // The API rejects a whitespace-only name with a 400; catching it here says so without a round
   // trip, and without the user reading a raw validation string.
   it('refuses to send an empty name', async () => {
-    await render(<Settings />);
+    await render(<Account />);
     await fireEvent.changeText(screen.getByPlaceholderText('Display name'), '   ');
 
     await save();
@@ -61,7 +61,7 @@ describe('display name', () => {
     (fetch as jest.Mock).mockResolvedValue(
       new Response(JSON.stringify({ error: 'displayName must be 1-40 characters' }), { status: 400 }),
     );
-    await render(<Settings />);
+    await render(<Account />);
     await fireEvent.changeText(screen.getByPlaceholderText('Display name'), 'x'.repeat(41));
 
     await save();

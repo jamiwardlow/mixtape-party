@@ -40,7 +40,7 @@ function RootNavigator() {
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="home" />
         <Stack.Screen name="create-league" />
-        <Stack.Screen name="settings" />
+        <Stack.Screen name="account" />
         <Stack.Screen name="league/[leagueId]/index" />
         <Stack.Screen name="league/[leagueId]/schedule" />
         <Stack.Screen name="round/[roundId]/index" />

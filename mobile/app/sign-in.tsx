@@ -108,7 +108,7 @@ export default function SignIn() {
           style={styles.input}
           placeholder="Display name (optional)"
           // The API caps a name at 40 and PATCH rejects anything longer, so stop at 40 here rather
-          // than accept a name at sign-up that settings would later refuse to save.
+          // than accept a name at sign-up that My Account would later refuse to save.
           maxLength={40}
           value={displayName}
           onChangeText={setDisplayName}

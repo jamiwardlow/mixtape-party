@@ -5,7 +5,7 @@ import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
 import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
 
-export default function Settings() {
+export default function Account() {
   const t = useTheme();
   const { token, profile, refreshProfile } = useSession();
   const [name, setName] = useState(profile?.displayName ?? '');
@@ -47,7 +47,7 @@ export default function Settings() {
   }
 
   return (
-    <Screen label="Settings">
+    <Screen label="My Account">
       <BodyText style={{ color: t.inkMuted }}>Signed in as {profile?.email}</BodyText>
       <JCard>
         <HandText>Your name</HandText>
