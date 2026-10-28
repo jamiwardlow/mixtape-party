@@ -48,8 +48,42 @@ export async function correctGuessCounts(pool: Pool, leagueId: string): Promise<
   return new Map(result.rows.map((row) => [row.guesser_account_id, Number(row.correct_count)]));
 }
 
+type Bestie = Player & { count: number };
+
+/**
+ * The top 3 players paired with `accountId` by correct guesses across every league's scored
+ * rounds (same deadline rule as `correctGuessCounts`). `guessedMe` = people who guessed my tracks;
+ * `iGuessed` = people whose tracks I guessed.
+ */
+async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' | 'iGuessed'): Promise<Bestie[]> {
+  const [meCol, themCol] = direction === 'guessedMe' ? ['s.account_id', 'g.guesser_account_id'] : ['g.guesser_account_id', 's.account_id'];
+  const result = await pool.query<{ account_id: string; display_name: string | null; count: string }>(
+    `SELECT a.id AS account_id, a.display_name, count(*) AS count
+     FROM guesses g
+     JOIN submissions s ON s.id = g.submission_id
+     JOIN rounds r ON r.id = s.round_id
+     JOIN accounts a ON a.id = ${themCol}
+     WHERE ${meCol} = $1 AND ${themCol} <> $1 AND g.guessed_account_id = s.account_id
+       AND r.guessing_deadline <= now()
+     GROUP BY a.id, a.display_name
+     ORDER BY count(*) DESC, a.display_name, a.id
+     LIMIT 3`,
+    [accountId],
+  );
+  return result.rows.map((row) => ({ accountId: row.account_id, displayName: row.display_name, count: Number(row.count) }));
+}
+
 export function createResultsRouter(deps: ResultsDeps): Router {
   const router = Router();
+
+  router.get('/accounts/me/besties', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const [guessedMe, iGuessed] = await Promise.all([
+      topBesties(deps.pool, accountId, 'guessedMe'),
+      topBesties(deps.pool, accountId, 'iGuessed'),
+    ]);
+    res.json({ guessedMe, iGuessed });
+  });
 
   router.get('/rounds/:roundId/results', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
