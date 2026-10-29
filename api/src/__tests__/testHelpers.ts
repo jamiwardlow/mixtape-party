@@ -49,6 +49,7 @@ export function buildApp(
     bandcampAdapter,
     pushChannel,
     emailChannel,
+    reportEmail: 'owner@app.test',
     sweepSecret: sweepSecret ?? undefined,
   });
   return { app, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange };

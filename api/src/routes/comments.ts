@@ -5,6 +5,11 @@ import type { EmailChannel, PushChannel } from '../notifications/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember } from './rounds.js';
 
+/** True when `recipient` has blocked `sender`, so nothing from `sender` should ping them. */
+async function hasBlocked(pool: Pool, recipient: string, sender: string) {
+  return !!(await pool.query('SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [recipient, sender])).rowCount;
+}
+
 export interface CommentsDeps extends AccountsDeps {
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
@@ -125,7 +130,7 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
     ).rows[0];
     const recipient = notifyId ?? target.guesser;
     const focus = reply.rows[0].id;
-    if (recipient === accountId) return;
+    if (recipient === accountId || (await hasBlocked(deps.pool, recipient, accountId))) return;
     try {
       await notifyAccounts(
         deps,
@@ -208,7 +213,7 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
           [id, accountId],
         )
       ).rows[0];
-      if (!owner || owner.recipient === accountId) return;
+      if (!owner || owner.recipient === accountId || (await hasBlocked(deps.pool, owner.recipient, accountId))) return;
       // A track reaction during guessing can't link to results yet: say it anonymously (nobody is
       // revealed mid-round) and send them to the guess screen, nudging if they haven't finished.
       if (owner.guessing_open) {

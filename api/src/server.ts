@@ -48,6 +48,7 @@ const app = createApp({
   bandcampAdapter,
   pushChannel,
   emailChannel,
+  reportEmail: process.env.REPORT_EMAIL,
   sweepSecret: process.env.SWEEP_SECRET,
 });
 const port = Number(process.env.PORT ?? 3000);

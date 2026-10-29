@@ -12,6 +12,7 @@ import { createExportRouter } from './routes/export.js';
 import { createGoogleAuthRouter, type GoogleProfile } from './routes/googleAuth.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createLeaguesRouter } from './routes/leagues.js';
+import { createModerationRouter } from './routes/moderation.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createResultsRouter } from './routes/results.js';
 import { createSubmissionsRouter } from './routes/submissions.js';
@@ -35,6 +36,8 @@ export interface AppDeps {
   bandcampAdapter: EmbedOnlyMusicServiceAdapter;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
+  /** Where user reports are emailed; see routes/moderation.ts. */
+  reportEmail?: string;
   /** Guards POST /internal/sweep; see routes/sweep.ts. */
   sweepSecret?: string;
 }
@@ -62,6 +65,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(createGuessingRouter(deps));
   app.use(createResultsRouter(deps));
   app.use(createCommentsRouter(deps));
+  app.use(createModerationRouter(deps));
   app.use(createExportRouter(deps));
   app.use(createNotificationsRouter(deps));
   app.use(createSweepRouter(deps));

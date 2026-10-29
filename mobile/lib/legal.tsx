@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { BodyText, HandText, Label, Screen, TapeButton } from './ui';
 
 // Placeholder address; swap for the real one at review.
@@ -19,6 +19,9 @@ export function LegalLinks() {
       </Label>
       <Label accessibilityRole="link" style={styles.link} onPress={() => router.push('/terms')}>
         Terms of Use
+      </Label>
+      <Label accessibilityRole="link" style={styles.link} onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}`)}>
+        Contact
       </Label>
     </View>
   );

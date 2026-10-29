@@ -214,3 +214,25 @@ CREATE TABLE IF NOT EXISTS revoked_sessions (
   token_hash TEXT PRIMARY KEY,
   revoked_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- #144: App Store 1.2. A report on a comment (guess), reply, or an account's avatar or display
+-- name. target_id is the guess/reply/account id, deliberately not a foreign key: the report must
+-- outlive a deleted comment. Reviewed by hand; the owner is emailed on each one.
+CREATE TABLE IF NOT EXISTS reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  reporter_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  reported_account_id UUID NOT NULL,
+  target_type TEXT NOT NULL CHECK (target_type IN ('comment', 'reply', 'avatar', 'display_name')),
+  target_id UUID NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('spam', 'harassment', 'inappropriate', 'other')),
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One player hiding another's comments, replies and reactions from their own results.
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  blocked_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FlatList, Linking, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { ReportBlock } from '../../../lib/Moderation';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
@@ -105,6 +106,8 @@ interface ThreadActions {
   editReply: (replyId: string, body: string) => Promise<void>;
   deleteReply: (replyId: string) => Promise<void>;
   react: (path: string, emoji: string) => Promise<void>;
+  /** Re-reads the results, e.g. after blocking someone. */
+  reload: () => Promise<unknown>;
   /** Comment or reply a link or push pointed at; drawn with a marker. */
   focus?: string;
 }
@@ -159,7 +162,9 @@ function ReplyNode({
             <TapeButton title="Edit" variant="secondary" onPress={() => { setDraft(reply.body); setMode(mode === 'edit' ? 'view' : 'edit'); }} />
             <TapeButton title="Delete" variant="secondary" onPress={() => actions.deleteReply(reply.replyId)} />
           </>
-        ) : null}
+        ) : (
+          <ReportBlock author={reply.author} targetType="reply" targetId={reply.replyId} onBlocked={actions.reload} />
+        )}
       </View>
       {mode !== 'view' ? (
         <>
@@ -187,6 +192,7 @@ function CommentThread({ comment, actions }: { comment: Comment; actions: Thread
           <BodyText>“{comment.comment}”</BodyText>
         </View>
       )}
+      {comment.mine ? null : <ReportBlock author={comment.guesser} targetType="comment" targetId={comment.guessId} onBlocked={actions.reload} />}
       <Reactions reactions={comment.reactions} onToggle={(e) => actions.react(`/guesses/${comment.guessId}/reactions`, e)} />
       {comment.replies
         .filter((r) => r.parentReplyId === null)
@@ -257,6 +263,7 @@ export default function RoundResults() {
     editReply: (replyId, body) => act(`/replies/${replyId}`, 'PUT', { body }),
     deleteReply: (replyId) => act(`/replies/${replyId}`, 'DELETE'),
     react: (path, emoji) => act(path, 'POST', { emoji }),
+    reload: loadResults,
     focus,
   };
 

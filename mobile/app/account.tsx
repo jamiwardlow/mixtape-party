@@ -7,6 +7,7 @@ import { API_URL, fetchApi } from '../lib/api';
 import { Avatar } from '../lib/Avatar';
 import { BestieGroup, type Bestie } from '../lib/BestieGroup';
 import { LegalLinks } from '../lib/legal';
+import { BlockedPlayers } from '../lib/Moderation';
 import { useSession } from '../lib/session';
 import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
 
@@ -388,6 +389,10 @@ export default function Account() {
             <BestieGroup title="I get them" caption="Their songs you guessed correctly" besties={besties.iGuessed} />
           </>
         )}
+      </JCard>
+      <JCard>
+        <BlockedPlayers />
+        <Label>Report or block someone from a comment or reply on the results screen.</Label>
       </JCard>
       <JCard>
         <HandText>Delete account</HandText>

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
+import { blockedIds } from './moderation.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   isLeagueMember,
@@ -170,11 +171,13 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       correctGuessersBySubmission.set(guess.submission_id, existing);
     }
 
+    // Blocked players' comments, replies and reactions are left out; their guesses still score.
+    const blocked = await blockedIds(deps.pool, accountId);
     const guessIds = guessesResult.rows.map((g) => g.id);
     const repliesResult = await deps.pool.query<{ id: string; guess_id: string; parent_reply_id: string | null; account_id: string; body: string; created_at: string }>(
       'SELECT id, guess_id, parent_reply_id, account_id, body, created_at FROM guess_replies WHERE guess_id = ANY($1) ORDER BY created_at, id',
       [guessIds],
-    );
+    ).then((r) => ({ ...r, rows: r.rows.filter((row) => !blocked.has(row.account_id)) }));
     const reactionsResult = await deps.pool.query<{ submission_id: string | null; guess_id: string | null; reply_id: string | null; account_id: string; emoji: string }>(
       'SELECT submission_id, guess_id, reply_id, account_id, emoji FROM comment_reactions WHERE submission_id = ANY($1) OR guess_id = ANY($2) OR reply_id = ANY($3)',
       [submissionsResult.rows.map((s) => s.id), guessIds, repliesResult.rows.map((r) => r.id)],
@@ -190,7 +193,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const reactionsFor = (targetId: string) => {
       const counts = new Map<string, { emoji: string; count: number; mine: boolean }>();
       for (const r of reactionsResult.rows) {
-        if ((r.submission_id ?? r.guess_id ?? r.reply_id) !== targetId) continue;
+        if ((r.submission_id ?? r.guess_id ?? r.reply_id) !== targetId || blocked.has(r.account_id)) continue;
         const entry = counts.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
         entry.count += 1;
         entry.mine ||= r.account_id === accountId;
@@ -201,7 +204,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const playerOf = (id: string): Player => players.get(id) ?? { accountId: id, displayName: null };
     const commentsBySubmission = new Map<string, unknown[]>();
     for (const g of guessesResult.rows) {
-      if (!g.comment) continue;
+      if (!g.comment || blocked.has(g.guesser_account_id)) continue;
       const list = commentsBySubmission.get(g.submission_id) ?? [];
       list.push({
         guessId: g.id,
