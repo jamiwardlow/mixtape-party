@@ -7,7 +7,6 @@ import { API_URL, fetchApi } from '../lib/api';
 import { Avatar } from '../lib/Avatar';
 import { BestieGroup, type Bestie } from '../lib/BestieGroup';
 import { useSession } from '../lib/session';
-import { useTheme } from '../lib/theme';
 import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
 
 const CROP_VIEW = 240;
@@ -128,7 +127,6 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
 }
 
 export default function Account() {
-  const t = useTheme();
   const { token, profile, refreshProfile } = useSession();
   const [name, setName] = useState(profile?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
@@ -284,7 +282,7 @@ export default function Account() {
   return (
     <Screen label="My Account">
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
-      <BodyText style={{ color: t.inkMuted }}>Signed in as {profile?.email}</BodyText>
+      <Label>Signed in as {profile?.email}</Label>
       <JCard>
         <Avatar
           url={profile?.avatarUrl}

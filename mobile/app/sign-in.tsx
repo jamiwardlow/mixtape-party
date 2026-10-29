@@ -4,7 +4,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
-import { ErrorNote, HandText, Label, TapeButton, TapeInput } from '../lib/ui';
+import { ErrorNote, Label, Page, StickerBadge, TapeButton, TapeInput } from '../lib/ui';
 
 // What /auth/google/callback bounces back here as ?error= when the flow doesn't finish.
 const GOOGLE_ERRORS: Record<string, string> = {
@@ -89,8 +89,8 @@ export default function SignIn() {
   const message = error ?? (googleError ? GOOGLE_ERRORS[googleError] ?? 'Google sign-in failed.' : null);
 
   return (
-    <View style={[styles.container, { backgroundColor: t.bg }]}>
-      <HandText style={styles.title}>Mixtape Party</HandText>
+    <Page>
+      <StickerBadge />
       <TapeInput
         placeholder="Email"
         autoCapitalize="none"
@@ -123,9 +123,9 @@ export default function SignIn() {
       )}
 
       <View style={styles.divider}>
-        <View style={styles.rule} />
+        <View style={[styles.rule, { backgroundColor: t.ink }]} />
         <Label>or</Label>
-        <View style={styles.rule} />
+        <View style={[styles.rule, { backgroundColor: t.ink }]} />
       </View>
 
       {linkSent ? (
@@ -144,13 +144,11 @@ export default function SignIn() {
       <Label style={styles.switch} onPress={toggleMode}>
         {mode === 'sign-up' ? 'Already have an account? Sign in' : 'New here? Create an account'}
       </Label>
-    </View>
+    </Page>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 36, marginBottom: 12, transform: [{ rotate: '-2deg' }] },
   note: { textAlign: 'center' },
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
@@ -159,5 +157,5 @@ const styles = StyleSheet.create({
   // decision from picking a way to sign in.
   switch: { marginTop: 12, paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rule: { flex: 1, height: 3, backgroundColor: '#1A1033' },
+  rule: { flex: 1, height: 3 },
 });

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Image, Platform, View } from 'react-native';
 import { API_URL } from './api';
 import { useTheme } from './theme';
-import { HandText } from './ui';
+import { avatarColor, HandText } from './ui';
 
 // The avatar endpoint is authenticated and an <img> can't send a bearer header, so on web fetch it
 // into an object URL; native Image takes headers directly.
@@ -42,9 +42,9 @@ export function Avatar({ url, token, initial, size = 96, label = 'Your photo' }:
   return (
     <View
       accessibilityLabel={label}
-      style={[box, { backgroundColor: t.shell, borderColor: t.hairline, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }]}
+      style={[box, { backgroundColor: avatarColor(initial), borderColor: t.ink, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }]}
     >
-      <HandText>{initial}</HandText>
+      <HandText style={{ fontSize: size * 0.5 }}>{initial}</HandText>
     </View>
   );
 }

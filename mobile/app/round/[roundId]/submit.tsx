@@ -4,8 +4,7 @@ import { FlatList, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import type { ServiceName } from '../../../lib/rounds';
-import { useTheme } from '../../../lib/theme';
-import { BodyText, ErrorNote, JCard, Label, PressScale, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, Label, PhaseSteps, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -23,7 +22,6 @@ interface TrackResult {
 }
 
 export default function SubmitTrack() {
-  const t = useTheme();
   const { roundId, edit } = useLocalSearchParams<{ roundId: string; edit?: string }>();
   const { token } = useSession();
   const [service, setServiceRaw] = useState<ServiceName | null>(null);
@@ -145,29 +143,11 @@ export default function SubmitTrack() {
           </View>
         </JCard>
       )}
+      <PhaseSteps phase="submission" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {SERVICES.map((s) => {
-          const active = s === service;
-          return (
-            <PressScale
-              key={s}
-              onPress={() => setService(s)}
-              disabled={active}
-              style={{
-                borderWidth: 1,
-                borderRadius: 6,
-                paddingVertical: 6,
-                paddingHorizontal: 10,
-                minHeight: 44,
-                justifyContent: 'center',
-                backgroundColor: active ? t.accent : t.shell,
-                borderColor: active ? t.accent : t.hairline,
-              }}
-            >
-              <Label style={{ color: active ? t.accentInk : t.inkMuted }}>{BUTTON_LABEL[s] ?? s}</Label>
-            </PressScale>
-          );
-        })}
+        {SERVICES.map((s) => (
+          <Chip key={s} label={BUTTON_LABEL[s] ?? s} selected={s === service} onPress={() => setService(s)} />
+        ))}
       </View>
       <Sprocket />
       {!service ? (

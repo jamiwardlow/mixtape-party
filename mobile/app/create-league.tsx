@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
-import { ScrollView, Share } from 'react-native';
+import { ScrollView, Share, View } from 'react-native';
 import { router } from 'expo-router';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -12,6 +12,7 @@ import {
   ErrorNote,
   HandText,
   JCard,
+  Chip,
   Label,
   Screen,
   Sprocket,
@@ -183,6 +184,11 @@ export default function CreateLeague() {
           value={seasonLength}
           onChangeText={setSeasonLength}
         />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {['4', '8', '12'].map((n) => (
+            <Chip key={n} label={`${n} rounds`} selected={seasonLength === n} onPress={() => setSeasonLength(n)} />
+          ))}
+        </View>
         <Sprocket />
         <TapeButton title="Surprise me with themes" onPress={surprise} />
         <HandText>Round 1</HandText>

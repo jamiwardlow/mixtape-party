@@ -7,7 +7,7 @@ import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../l
 import { usePreview } from '../../../lib/preview';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, ErrorNote, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
@@ -127,6 +127,7 @@ export default function GuessRound() {
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
       <Screen label="Guess the submitters">
+        <PhaseSteps phase="guessing" />
         {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         {playlistUrl ? <TapeButton title="Open playlist" onPress={() => Linking.openURL(playlistUrl)} /> : null}
         <FlatList
@@ -175,11 +176,11 @@ export default function GuessRound() {
                 {(item.mine ? [] : players)
                   .filter((player) => player.accountId !== item.guessedAccountId)
                   .map((player) => (
-                    <TapeButton
+                    <Chip
                       key={player.accountId}
-                      title={player.displayName ?? 'A player'}
+                      avatar={player.displayName ?? 'A player'}
+                      label={player.displayName ?? 'A player'}
                       onPress={() => guess(item.submissionId, player.accountId)}
-                      variant="secondary"
                     />
                   ))}
               </View>

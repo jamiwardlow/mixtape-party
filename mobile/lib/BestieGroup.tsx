@@ -1,6 +1,5 @@
-import { View } from 'react-native';
 import { nameOf } from './rounds';
-import { BodyText, Label } from './ui';
+import { BodyText, Label, LeaderboardRow } from './ui';
 
 export interface Bestie {
   accountId: string;
@@ -15,10 +14,7 @@ export function BestieGroup({ title, caption, besties }: { title: string; captio
       <Label>{caption}</Label>
       {besties.length === 0 && <BodyText>No correct guesses yet</BodyText>}
       {besties.map((b) => (
-        <View key={b.accountId} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <BodyText>{nameOf(b)}</BodyText>
-          <BodyText>{b.count}</BodyText>
-        </View>
+        <LeaderboardRow key={b.accountId} name={nameOf(b)} points={b.count} />
       ))}
     </>
   );

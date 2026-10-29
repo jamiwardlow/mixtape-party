@@ -4,8 +4,7 @@ import { Pressable, ScrollView } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { phaseLabel, type RoundPhase } from '../lib/rounds';
-import { BodyText, HandText, JCard, Label, PressScale, ReelHoles, Screen, TapeButton } from '../lib/ui';
-import { useTheme } from '../lib/theme';
+import { Cassette, HandText, JCard, Label, PressScale, Screen, TapeButton, Toast } from '../lib/ui';
 
 interface RoundSummary {
   id: string;
@@ -25,7 +24,6 @@ interface LeagueSummary {
 }
 
 export default function Home() {
-  const t = useTheme();
   const { profile, token, signOut, pendingInviteCode, setPendingInviteCode } = useSession();
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
@@ -56,10 +54,15 @@ export default function Home() {
 
   return (
     <Screen label="Mixtape Party">
-      <BodyText style={{ color: t.inkMuted }}>Signed in as {profile?.email}</BodyText>
-      {joinMessage && <BodyText>{joinMessage}</BodyText>}
+      <Label>Signed in as {profile?.email}</Label>
+      {joinMessage && <Toast>{joinMessage}</Toast>}
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
-        {leagues.length === 0 && <Label>No leagues yet.</Label>}
+        {leagues.length === 0 && (
+          <>
+            <Cassette title="Your first mixtape" still />
+            <Label>No leagues yet.</Label>
+          </>
+        )}
         {/* One tap, into the season page — it owns the phase CTA and links on to the schedule
             editor. The phase stays here as text so the shelf still reads at a glance. */}
         {leagues.map((league) => (
@@ -71,7 +74,6 @@ export default function Home() {
             }
           >
             <JCard>
-              <ReelHoles color={t.reel} />
               <HandText>{league.name}</HandText>
               {league.round && (
                 <Label>

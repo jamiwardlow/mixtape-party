@@ -14,6 +14,8 @@ import {
   HandText,
   JCard,
   Label,
+  LeaderboardRow,
+  PhaseSteps,
   RoundGate,
   Screen,
   ServiceBadge,
@@ -300,6 +302,7 @@ export default function RoundResults() {
   return (
     <RoundGate label="Results" error={error} ready={results !== null}>
       <Screen label="Results">
+        <PhaseSteps phase="results" />
         <JCard>
           {winnerNames ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
@@ -307,14 +310,14 @@ export default function RoundResults() {
               <HandText>{winnerNames}</HandText>
             </View>
           ) : null}
-          {results?.scores.map((score) => (
-            <View key={score.accountId} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Avatar size={28} label="" url={score.avatarUrl} token={token} initial={(score.displayName ?? '?')[0]} />
-                <HandText>{score.displayName ?? 'A player'}</HandText>
-              </View>
-              <BodyText>{score.score}</BodyText>
-            </View>
+          {results?.scores.map((score, i) => (
+            <LeaderboardRow
+              key={score.accountId}
+              rank={i + 1}
+              name={score.displayName ?? 'A player'}
+              points={score.score}
+              avatar={<Avatar size={28} label="" url={score.avatarUrl} token={token} initial={(score.displayName ?? '?')[0]} />}
+            />
           ))}
         </JCard>
         {playlists.length > 0 ? (

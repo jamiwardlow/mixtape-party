@@ -83,8 +83,8 @@ describe('search and submit', () => {
     await fireEvent.changeText(screen.getByPlaceholderText(/Add a comment/), 'my fave');
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
-    await waitFor(() => expect(screen.getByText('Submit')).toBeTruthy());
-    await fireEvent.press(screen.getByText('Submit'));
+    await waitFor(() => expect(screen.getAllByText('Submit').at(-1)!).toBeTruthy());
+    await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
 
     expect(lastPost()).toEqual({
       service: 'youtube_music',
@@ -101,8 +101,8 @@ describe('search and submit', () => {
     await fireEvent.press(screen.getByText('Search YouTube Music'));
     await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina simone');
     await fireEvent.press(screen.getByText('Search'));
-    await waitFor(() => expect(screen.getByText('Submit')).toBeTruthy());
-    await fireEvent.press(screen.getByText('Submit'));
+    await waitFor(() => expect(screen.getAllByText('Submit').at(-1)!).toBeTruthy());
+    await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
 
     await waitFor(() => expect(screen.getByTestId('current-track')).toBeTruthy());
     expect(screen.getByText('Track submitted — your current track')).toBeTruthy();
@@ -129,7 +129,7 @@ describe('search and submit', () => {
       screen.getByPlaceholderText('Bandcamp track/album URL'),
       'https://band.bandcamp.com/track/song',
     );
-    await fireEvent.press(screen.getByText('Submit'));
+    await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
 
     expect(lastPost()).toEqual({ service: 'bandcamp', comment: '', url: 'https://band.bandcamp.com/track/song' });
   });

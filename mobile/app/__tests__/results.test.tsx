@@ -68,7 +68,7 @@ describe('exported playlist links', () => {
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('Playlists')).toBeNull();
-    expect(screen.getByText('Results')).toBeTruthy();
+    expect(screen.getAllByText('Results')[0]).toBeTruthy();
   });
 });
 
@@ -81,7 +81,7 @@ describe('failed export', () => {
     await render(<RoundResults />);
 
     expect(await screen.findByText(/couldn.t build the YouTube Music playlist/i)).toBeTruthy();
-    expect(screen.getByText('Results')).toBeTruthy();
+    expect(screen.getAllByText('Results')[0]).toBeTruthy();
   });
 });
 

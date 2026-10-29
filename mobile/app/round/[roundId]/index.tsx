@@ -11,7 +11,7 @@ import {
   type ServiceName,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton, Thumb } from '../../../lib/ui';
+import { BodyText, DeadlineRows, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, TapeButton, Thumb } from '../../../lib/ui';
 
 /** The one round, as `GET /rounds/:roundId/overview` describes it — the season page's entry. */
 interface RoundDetail {
@@ -91,6 +91,7 @@ export default function RoundOverview() {
   return (
     <Screen label={leagueName}>
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+        <PhaseSteps phase={round.phase} />
         <JCard>
           <HandText testID="round-heading">{`Round ${round.number}`}</HandText>
           {round.theme ? <BodyText>{round.theme}</BodyText> : <Label>Theme not set yet</Label>}

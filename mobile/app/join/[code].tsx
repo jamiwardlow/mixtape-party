@@ -1,10 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { fetchApi } from '../../lib/api';
 import { useSession } from '../../lib/session';
-import { useTheme } from '../../lib/theme';
-import { BodyText, ErrorNote, HandText, ReelSpinner, TapeButton } from '../../lib/ui';
+import { BodyText, ErrorNote, HandText, Page, ReelSpinner, TapeButton } from '../../lib/ui';
 
 interface InvitePreview {
   league: { name: string; seasonLength: number };
@@ -15,7 +14,6 @@ interface InvitePreview {
 }
 
 export default function JoinLeague() {
-  const t = useTheme();
   const { code } = useLocalSearchParams<{ code: string }>();
   const { token, setPendingInviteCode } = useSession();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
@@ -70,23 +68,23 @@ export default function JoinLeague() {
 
   if (joined) {
     return (
-      <View style={[styles.container, { backgroundColor: t.bg }]}>
+      <Page>
         <HandText style={styles.title}>You're in!</HandText>
         <TapeButton title="Go to home" onPress={() => router.replace('/home')} />
-      </View>
+      </Page>
     );
   }
 
   if (!preview) {
     return (
-      <View style={[styles.container, { backgroundColor: t.bg }]}>
+      <Page>
         {error ? <ErrorNote>{error}</ErrorNote> : <ReelSpinner />}
-      </View>
+      </Page>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: t.bg }]}>
+    <Page>
       <HandText style={styles.title}>{preview.league.name}</HandText>
       <BodyText>Hosted by {preview.host.displayName ?? 'a friend'}</BodyText>
       {preview.currentRound?.theme && <BodyText>Current theme: {preview.currentRound.theme}</BodyText>}
@@ -102,11 +100,10 @@ export default function JoinLeague() {
       ) : (
         <TapeButton title="Sign up to join" onPress={continueToJoin} />
       )}
-    </View>
+    </Page>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
   title: { fontSize: 32 },
 });

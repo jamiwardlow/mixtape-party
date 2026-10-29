@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { fetchApi } from './api';
-import { BodyText, TapeButton, TapeInput } from './ui';
+import { useTheme } from './theme';
+import { Chip, TapeInput } from './ui';
 
 export interface Reaction {
   emoji: string;
@@ -23,11 +25,11 @@ export function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onTo
       {emojis.map((emoji) => {
         const reaction = reactions.find((r) => r.emoji === emoji);
         return (
-          <TapeButton
+          <Chip
             key={emoji}
-            title={reaction ? `${emoji} ${reaction.count}${reaction.mine ? ' ✓' : ''}` : emoji}
+            label={reaction ? `${emoji} ${reaction.count}${reaction.mine ? ' ✓' : ''}` : emoji}
+            selected={reaction?.mine}
             onPress={() => onToggle(emoji)}
-            variant="secondary"
           />
         );
       })}
@@ -46,6 +48,7 @@ export function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onTo
 }
 
 export function FavoriteHeart({ favorited, onPress }: { favorited: boolean; onPress: () => void }) {
+  const t = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -54,7 +57,15 @@ export function FavoriteHeart({ favorited, onPress }: { favorited: boolean; onPr
       hitSlop={8}
       style={{ alignSelf: 'flex-start' }}
     >
-      <BodyText>{favorited ? '♥' : '♡'}</BodyText>
+      <Svg width={28} height={28} viewBox="0 0 24 24">
+        <Path
+          d="M12 21s-8-5.3-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.7-8 11-8 11z"
+          fill={favorited ? t.accent : t.shell}
+          stroke={t.ink}
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+      </Svg>
     </Pressable>
   );
 }
