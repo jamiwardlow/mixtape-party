@@ -11,6 +11,9 @@ const { createRequestHandler } = require('expo-server/adapter/express');
 
 const app = express();
 app.disable('x-powered-by');
+// The marketing page lives at exactly `/` (ahead of expo-server, whose `/` just redirects).
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'landing.html')));
+app.get('/landing-favicon.svg', (_req, res) => res.sendFile(path.join(__dirname, 'landing-favicon.svg')));
 app.use(express.static(path.join(__dirname, 'dist/client'), { maxAge: '1h' }));
 app.use(createRequestHandler({ build: path.join(__dirname, 'dist/server') }));
 
