@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { BodyText, HandText, Label, Screen, TapeButton } from './ui';
 
-// DRAFT, not legal advice: pending the human review issue before store submission.
 // Placeholder address; swap for the real one at review. In-app deletion is #143.
 export const CONTACT_EMAIL = 'hello@mixtape-party.com';
 
@@ -29,7 +28,7 @@ export function LegalPage({ label, sections }: { label: string; sections: LegalS
   return (
     <Screen label={label}>
       <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
-        <Label>Draft, last updated October 2026. Pending legal review.</Label>
+        <Label>Last updated October 2026.</Label>
         {sections.map((s) => (
           <View key={s.title} style={styles.section}>
             <HandText>{s.title}</HandText>
