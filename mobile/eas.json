@@ -20,13 +20,28 @@
       },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.mixtape-party.com"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.mixtape-party.com"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "TODO",
+        "appleTeamId": "TODO"
+      },
+      "android": {
+        "serviceAccountKeyPath": "TODO",
+        "track": "internal"
+      }
+    }
   }
 }

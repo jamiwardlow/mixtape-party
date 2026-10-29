@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Mixtape Party",
     "slug": "mobile",
     "version": "1.0.0",
     "scheme": "mixtapeparty",
@@ -34,7 +34,12 @@
       "expo-splash-screen",
       "@react-native-community/datetimepicker",
       "expo-audio",
-      ["expo-image-picker", { "photosPermission": "Mixtape Party uses your photo library so you can pick a profile photo." }],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Mixtape Party uses your photo library so you can pick a profile photo."
+        }
+      ],
       "expo-notifications"
     ],
     "extra": {
