@@ -1,9 +1,10 @@
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Linking, Pressable, View } from 'react-native';
+import { FlatList, Linking, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { SERVICE_META } from '../../../lib/theme';
@@ -22,12 +23,6 @@ import {
   TapeInput,
 } from '../../../lib/ui';
 
-interface Reaction {
-  emoji: string;
-  count: number;
-  mine: boolean;
-}
-
 interface Reply {
   replyId: string;
   parentReplyId: string | null;
@@ -45,8 +40,6 @@ interface Comment {
   reactions: Reaction[];
   replies: Reply[];
 }
-
-const DEFAULT_REACTIONS = ['❤️', '😂', '🔥', '👏', '😮'];
 
 interface Track {
   submissionId: string;
@@ -103,40 +96,6 @@ function exportProblem({ service, status }: ServiceExport): string | null {
     default:
       return null;
   }
-}
-
-/**
- * Tap a chip to react or take your reaction back; the box adds any emoji, since the API takes any
- * single one. The defaults are only a head start -- anything already in use gets its own chip.
- */
-function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onToggle: (emoji: string) => void }) {
-  const [custom, setCustom] = useState('');
-  const emojis = [...new Set([...DEFAULT_REACTIONS, ...reactions.map((r) => r.emoji)])];
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-      {emojis.map((emoji) => {
-        const reaction = reactions.find((r) => r.emoji === emoji);
-        return (
-          <TapeButton
-            key={emoji}
-            title={reaction ? `${emoji} ${reaction.count}${reaction.mine ? ' ✓' : ''}` : emoji}
-            onPress={() => onToggle(emoji)}
-            variant="secondary"
-          />
-        );
-      })}
-      <TapeInput
-        placeholder="Any emoji"
-        value={custom}
-        onChangeText={setCustom}
-        onSubmitEditing={() => {
-          if (custom.trim()) onToggle(custom.trim());
-          setCustom('');
-        }}
-        style={{ minWidth: 90 }}
-      />
-    </View>
-  );
 }
 
 interface ThreadActions {
@@ -286,27 +245,9 @@ export default function RoundResults() {
     await loadResults();
   }
 
-  // The heart flips at once and goes back if the call fails. act() can't say whether the call worked, so this posts itself.
-  const [favoriteError, setFavoriteError] = useState(false);
-  const favoriting = useRef(new Set<string>());
-  async function toggleFavorite(submissionId: string) {
-    // The server flips on every POST, so a tap while one is pending would desync a rollback; ignore it.
-    if (favoriting.current.has(submissionId)) return;
-    favoriting.current.add(submissionId);
-    const flip = (on: boolean) =>
-      setResults((r) => r && { ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) });
-    const was = results?.tracks.find((t) => t.submissionId === submissionId)?.favorited ?? false;
-    setFavoriteError(false);
-    flip(!was);
-    const ok = token
-      ? await fetchApi(`/submissions/${submissionId}/favorite`, { method: 'POST', token }).then((res) => res.ok, () => false)
-      : false;
-    if (!ok) {
-      flip(was);
-      setFavoriteError(true);
-    }
-    favoriting.current.delete(submissionId);
-  }
+  const favorite = useFavorite(token, (submissionId, on) =>
+    setResults((r) => r && { ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) }),
+  );
   const saveComment = (submissionId: string, comment: string) =>
     act(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, 'PUT', { comment });
   const actions: ThreadActions = {
@@ -401,7 +342,7 @@ export default function RoundResults() {
             ))}
           </JCard>
         ) : null}
-        {favoriteError ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
+        {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         <FlatList
           ref={list}
           // ponytail: rows vary in height, so a miss (not yet laid out) just stays at the top.
@@ -434,15 +375,7 @@ export default function RoundResults() {
                 )}
               </View>
               <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={item.favorited ? 'Favorited' : 'Not favorited'}
-                onPress={() => toggleFavorite(item.submissionId)}
-                hitSlop={8}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                <BodyText>{item.favorited ? '♥' : '♡'}</BodyText>
-              </Pressable>
+              <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
               {item.yourGuess ? (
                 <MyComment
                   key={item.yourGuess.comment ?? ''}

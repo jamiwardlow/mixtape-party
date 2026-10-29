@@ -52,7 +52,7 @@ describe('guess screen preview', () => {
   it('looks the preview up under the round, and opens the service when there is none', async () => {
     const track = {
       submissionId: 's1', service: 'youtube_music', title: 'Song', artist: 'Artist',
-      playback: { deepLink: 'ytm://s1', webUrl: 'https://music.youtube.com/s1' }, guessedAccountId: null, comment: null,
+      playback: { deepLink: 'ytm://s1', webUrl: 'https://music.youtube.com/s1' }, guessedAccountId: null, comment: null, reactions: [], favorited: false,
     };
     globalThis.fetch = jest.fn(async (url: string) =>
       String(url).includes('/export')
@@ -77,7 +77,7 @@ describe('guess screen editing', () => {
   it('lets a player change an existing guess without resending the comment', async () => {
     const track = {
       submissionId: 's1', service: 'youtube_music', title: 'Song', artist: 'Artist',
-      playback: { deepLink: 'ytm://s1' }, guessedAccountId: 'a1', comment: 'groovy',
+      playback: { deepLink: 'ytm://s1' }, guessedAccountId: 'a1', comment: 'groovy', reactions: [], favorited: false,
     };
     const players = [{ accountId: 'a1', displayName: 'Ann' }, { accountId: 'a2', displayName: 'Bo' }];
     globalThis.fetch = jest.fn(async (url: string, init?: { method?: string }) =>
@@ -115,7 +115,7 @@ describe('guess screen own track', () => {
               artist: 'Me',
               thumbnailUrl: null,
               playback: { deepLink: 'x' },
-              guessedAccountId: null,
+              guessedAccountId: null, reactions: [], favorited: false,
               comment: null,
               mine: true,
             },
@@ -136,5 +136,43 @@ describe('guess screen own track', () => {
       expect(put?.init?.method).toBe('PUT');
       expect(JSON.parse(String(put?.init?.body))).toEqual({ note: 'hint' });
     });
+  });
+});
+
+describe('guess screen reactions and favorites', () => {
+  const track = {
+    submissionId: 's1', service: 'youtube_music', title: 'Song', artist: 'Artist',
+    playback: { deepLink: 'ytm://s1' }, guessedAccountId: null, comment: null, reactions: [], favorited: false,
+  };
+  const stub = (own = false) => {
+    globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/export')) return new Response(JSON.stringify({ services: [] }), { status: 200 });
+      if (u.endsWith('/reactions')) return new Response(JSON.stringify({ reacted: !JSON.stringify(init).includes('"off"') }), { status: 200 });
+      if (u.endsWith('/favorite')) return new Response(JSON.stringify({ favorited: true }), { status: 200 });
+      return new Response(JSON.stringify({ tracks: [{ ...track, mine: own }], players: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+  };
+
+  it('reacts to a track and hearts it', async () => {
+    stub();
+    await render(<GuessRound />);
+
+    await fireEvent.press(await screen.findByText('🔥'));
+    expect(await screen.findByText('🔥 1 ✓')).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/submissions/s1/reactions'), expect.objectContaining({ method: 'POST' }));
+
+    await fireEvent.press(screen.getByLabelText('Not favorited'));
+    expect(await screen.findByLabelText('Favorited')).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/submissions/s1/favorite'), expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('offers neither on your own track', async () => {
+    stub(true);
+    await render(<GuessRound />);
+
+    await screen.findByText(/Song/);
+    expect(screen.queryByText('🔥')).toBeNull();
+    expect(screen.queryByLabelText('Not favorited')).toBeNull();
   });
 });

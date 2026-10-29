@@ -76,18 +76,30 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       guessed_account_id: string | null;
       comment: string | null;
       mine: boolean;
+      favorited: boolean;
     }>(
       // Your own track comes back too, flagged `mine`, with your note in `comment`. The flag is
       // computed per requester, so nothing here tells anyone else whose track is whose.
       `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, s.art_id, g.guessed_account_id,
               CASE WHEN s.account_id = $1 THEN s.guessing_note ELSE g.comment END AS comment,
-              (s.account_id = $1) AS mine
+              (s.account_id = $1) AS mine,
+              EXISTS (SELECT 1 FROM favorites f WHERE f.submission_id = s.id AND f.account_id = $1) AS favorited
        FROM submissions s
        LEFT JOIN guesses g ON g.submission_id = s.id AND g.guesser_account_id = $1
        WHERE s.round_id = $2
        ORDER BY s.id`,
       [accountId, req.params.roundId],
     );
+
+    // Only your own reactions come back: counts are for the results.
+    const mineBySubmission = new Map<string, { emoji: string; count: number; mine: boolean }[]>();
+    const reacted = await deps.pool.query<{ submission_id: string; emoji: string }>(
+      'SELECT submission_id, emoji FROM comment_reactions WHERE account_id = $1 AND submission_id = ANY($2)',
+      [accountId, submissions.rows.map((s) => s.id)],
+    );
+    for (const r of reacted.rows) {
+      mineBySubmission.set(r.submission_id, [...(mineBySubmission.get(r.submission_id) ?? []), { emoji: r.emoji, count: 1, mine: true }]);
+    }
 
     const tracks = await Promise.all(
       submissions.rows.map(async (row) => {
@@ -108,6 +120,8 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
           guessedAccountId: row.guessed_account_id,
           comment: row.comment,
           mine: row.mine,
+          favorited: row.favorited,
+          reactions: mineBySubmission.get(row.id) ?? [],
           excludedFromExport: row.service === 'bandcamp',
         };
       }),

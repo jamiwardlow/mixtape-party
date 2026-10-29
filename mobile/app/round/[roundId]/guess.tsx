@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from 'react';
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { FlatList, Linking, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
+import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import { usePreview } from '../../../lib/preview';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { BodyText, ErrorNote, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
@@ -17,6 +18,9 @@ interface Track {
   playback: { deepLink: string; webUrl?: string };
   guessedAccountId: string | null;
   comment: string | null;
+  /** Only your own reactions come back; the counts are for the results. */
+  reactions: Reaction[];
+  favorited: boolean;
   /** Your own track: a note box, no player buttons. */
   mine?: boolean;
 }
@@ -91,6 +95,24 @@ export default function GuessRound() {
     }
   }
 
+  // Same reactions and favorites as the results screen: a track you react to or heart here shows there too.
+  const favorite = useFavorite(token, (submissionId, on) =>
+    setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) ?? null),
+  );
+  async function react(submissionId: string, emoji: string) {
+    if (!token) return;
+    const res = await fetchApi(`/submissions/${submissionId}/reactions`, { method: 'POST', token, body: { emoji } });
+    if (!res.ok) return;
+    const { reacted } = await res.json();
+    setTracks((prev) =>
+      prev?.map((t) =>
+        t.submissionId !== submissionId
+          ? t
+          : { ...t, reactions: reacted ? [...t.reactions, { emoji, count: 1, mine: true }] : t.reactions.filter((r) => r.emoji !== emoji) },
+      ) ?? null,
+    );
+  }
+
   // No in-app preview for a track: open it in its service instead.
   const openInService = useCallback(
     (submissionId: string) => {
@@ -105,6 +127,7 @@ export default function GuessRound() {
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
       <Screen label="Guess the submitters">
+        {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         {playlistUrl ? <TapeButton title="Open playlist" onPress={() => Linking.openURL(playlistUrl)} /> : null}
         <FlatList
           data={tracks ?? []}
@@ -126,6 +149,12 @@ export default function GuessRound() {
                   {item.title} — {item.artist}
                 </BodyText>
               </View>
+              {item.mine ? null : (
+                <>
+                  <Reactions reactions={item.reactions} onToggle={(emoji) => react(item.submissionId, emoji)} />
+                  <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
+                </>
+              )}
               <TapeInput
                 placeholder={item.mine ? 'Your track — add a note (optional), shown with the results' : 'Add a comment (optional) — shown with the results'}
                 value={drafts[item.submissionId] ?? ''}

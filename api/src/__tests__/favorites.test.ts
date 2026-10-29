@@ -43,8 +43,18 @@ describe('favorites (#105)', () => {
     expect(await favoritedFor(a)).toBe(false);
   });
 
-  it('rejects before results open, non-members, and unknown submissions', async () => {
+  it('works while guessing is open and carries into the guessing list and results', async () => {
+    const { app, roundId, a, track, favorite, favoritedFor } = await setup();
+    expect((await favorite(a)).body).toEqual({ favorited: true });
+    const guessing = await request(app).get(`/rounds/${roundId}/guessing`).set(auth(a));
+    expect(guessing.body.tracks.find((t: { submissionId: string }) => t.submissionId === track.submissionId).favorited).toBe(true);
+    await closeGuessingWindow(testDb.pool, roundId);
+    expect(await favoritedFor(a)).toBe(true);
+  });
+
+  it('rejects before guessing opens, non-members, and unknown submissions', async () => {
     const { app, roundId, a, favorite } = await setup();
+    await testDb.pool.query("UPDATE rounds SET submission_deadline = now() + interval '1 day' WHERE id = $1", [roundId]);
     expect((await favorite(a)).status).toBe(403);
     await closeGuessingWindow(testDb.pool, roundId);
     const outsider = await signUp(app, `outsider-${Date.now()}@example.com`);
@@ -88,12 +98,14 @@ describe('listing favorites and previews (#107)', () => {
     expect(res.body.favorites).toEqual([]);
   });
 
-  it('serves a preview to a member once results are open; 403 before and for outsiders; 404 unknown', async () => {
+  it('serves a preview to a member once guessing is open; 403 before and for outsiders; 404 unknown', async () => {
     const { app, roundId, a, track } = await setup();
     const preview = (m: { token: string }, id = track.submissionId) =>
       request(app).get(`/submissions/${id}/preview`).set(auth(m));
+    await testDb.pool.query("UPDATE rounds SET submission_deadline = now() + interval '1 day' WHERE id = $1", [roundId]);
     expect((await preview(a)).status).toBe(403);
     await closeGuessingWindow(testDb.pool, roundId);
+    await testDb.pool.query("UPDATE rounds SET submission_deadline = now() - interval '1 day' WHERE id = $1", [roundId]);
     const ok = await preview(a);
     expect(ok.body).toEqual({ url: expect.stringMatching(/^https:\/\/fake\.test\/preview\//) });
     const outsider = await signUp(app, `outsider-${Date.now()}@example.com`);

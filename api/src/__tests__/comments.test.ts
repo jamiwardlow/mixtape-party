@@ -152,13 +152,31 @@ describe('guess comments, replies and reactions (#101)', () => {
     expect((await results(a)).comments[0].replies.map((r: { body: string }) => r.body)).toEqual(['talking to myself']);
   });
 
-  it('lets members react to the submitted track once results open', async () => {
-    const { app, roundId, c, track, auth, results } = await setup();
+  it('lets members react to the submitted track once guessing opens, and the reaction carries to results', async () => {
+    const { app, roundId, b, c, track, auth, results, pushChannel } = await setup();
     const path = `/submissions/${track.submissionId}/reactions`;
+    await testDb.pool.query("UPDATE rounds SET submission_deadline = now() + interval '1 day' WHERE id = $1", [roundId]);
     expect((await request(app).post(path).set(auth(c)).send({ emoji: '🎸' })).status).toBe(403);
-    await closeGuessingWindow(testDb.pool, roundId);
+    await testDb.pool.query("UPDATE rounds SET submission_deadline = now() - interval '1 day' WHERE id = $1", [roundId]);
+
     expect((await request(app).post(path).set(auth(c)).send({ emoji: '🎸' })).body.reacted).toBe(true);
+    const guessing = async (m: { token: string }) =>
+      (await request(app).get(`/rounds/${roundId}/guessing`).set(auth(m))).body.tracks.find(
+        (t: { submissionId: string }) => t.submissionId === track.submissionId,
+      );
+    expect((await guessing(c)).reactions).toEqual([{ emoji: '🎸', count: 1, mine: true }]);
+    expect((await guessing(b)).reactions).toEqual([]);
+
+    // The submitter isn't pinged with a link to results that aren't open yet.
+    await testDb.pool.query("INSERT INTO push_tokens (account_id, platform, token) VALUES ($1, 'expo', 'tok-b')", [b.accountId]);
+    await request(app).post(path).set(auth(c)).send({ emoji: '🎸' });
+    await request(app).post(path).set(auth(c)).send({ emoji: '🎸' });
+
+    await closeGuessingWindow(testDb.pool, roundId);
     expect((await results(c)).reactions).toEqual([{ emoji: '🎸', count: 1, mine: true }]);
+    // Once results are open the same reaction does ping; only that one did.
+    await request(app).post(path).set(auth(c)).send({ emoji: '🔥' });
+    await vi.waitFor(() => expect(pushChannel.sent).toHaveLength(1));
   });
 
   it('pushes (never emails) whoever was reacted to, skips self-reactions and removals, and links emailed replies to the reply', async () => {

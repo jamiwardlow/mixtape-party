@@ -26,20 +26,23 @@ export function isEmoji(value: unknown): value is string {
 
 type ReactionColumn = 'submission_id' | 'guess_id' | 'reply_id';
 
-// What a reaction can land on, each with the round it belongs to. A comment (guess) only exists to
-// react to once it has text; the track itself is reactable whether or not the submitter left a note.
+// What a reaction can land on, each with the round it belongs to and when it opens (`opens_at`). A
+// comment (guess) only exists to react to once it has text; the track itself is reactable whether or
+// not the submitter left a note, and from the moment guessing opens, so it can be reacted to and
+// favorited while you listen.
 export const REACTION_TARGETS: Record<ReactionColumn, string> = {
-  submission_id: `SELECT r.league_id, r.guessing_deadline FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
-  guess_id: `SELECT r.league_id, r.guessing_deadline FROM guesses g JOIN submissions s ON s.id = g.submission_id
+  submission_id: `SELECT r.league_id, r.submission_deadline AS opens_at FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
+  guess_id: `SELECT r.league_id, r.guessing_deadline AS opens_at FROM guesses g JOIN submissions s ON s.id = g.submission_id
              JOIN rounds r ON r.id = s.round_id WHERE g.id = $1 AND g.comment IS NOT NULL`,
-  reply_id: `SELECT r.league_id, r.guessing_deadline FROM guess_replies p JOIN guesses g ON g.id = p.guess_id
+  reply_id: `SELECT r.league_id, r.guessing_deadline AS opens_at FROM guess_replies p JOIN guesses g ON g.id = p.guess_id
              JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE p.id = $1`,
 };
 
 // Who a reaction is for, and what they wrote: $1 is the target, $2 the reactor (for their name).
 const REACTOR = `(SELECT display_name FROM accounts WHERE id = $2) AS name`;
 const REACTION_OWNERS: Record<ReactionColumn, string> = {
-  submission_id: `SELECT s.account_id AS recipient, r.id AS round_id, r.league_id, s.title AS text, ${REACTOR}
+  submission_id: `SELECT s.account_id AS recipient, r.id AS round_id, r.league_id, s.title AS text, ${REACTOR},
+                  r.guessing_deadline > now() AS guessing_open
                   FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
   guess_id: `SELECT g.guesser_account_id AS recipient, r.id AS round_id, r.league_id, g.comment AS text, ${REACTOR}
              FROM guesses g JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE g.id = $1`,
@@ -49,15 +52,15 @@ const REACTION_OWNERS: Record<ReactionColumn, string> = {
 };
 const REACTION_LABEL: Record<ReactionColumn, string> = { submission_id: 'track', guess_id: 'comment', reply_id: 'reply' };
 
-/** Replies and reactions share the results' rule: league members only, once results are open. */
+/** League members only, once the target is open: results for comments and replies, guessing for tracks. */
 export async function guardError(pool: Pool, sql: string, id: string, accountId: string) {
-  const round = (await pool.query<{ league_id: string; guessing_deadline: string }>(sql, [id])).rows[0];
+  const round = (await pool.query<{ league_id: string; opens_at: string }>(sql, [id])).rows[0];
   if (!round) return { status: 404, error: 'not found' };
   if (!(await isLeagueMember(pool, round.league_id, accountId))) {
     return { status: 403, error: 'join the league before joining the conversation' };
   }
-  if (new Date(round.guessing_deadline) > new Date()) {
-    return { status: 403, error: 'comments open up once results are available' };
+  if (new Date(round.opens_at) > new Date()) {
+    return { status: 403, error: 'not open yet' };
   }
   return null;
 }
@@ -198,12 +201,13 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
     // Push only: a reaction is too light for an email. Sent after the response, like reply notifications.
     try {
       const owner = (
-        await deps.pool.query<{ recipient: string; round_id: string; league_id: string; text: string; name: string | null }>(
+        await deps.pool.query<{ recipient: string; round_id: string; league_id: string; text: string; name: string | null; guessing_open?: boolean }>(
           REACTION_OWNERS[column],
           [id, accountId],
         )
       ).rows[0];
-      if (!owner || owner.recipient === accountId) return;
+      // A track reaction during guessing links to results that aren't open yet: stay quiet until they are.
+      if (!owner || owner.recipient === accountId || owner.guessing_open) return;
       await notifyAccounts(
         deps,
         [owner.recipient],
@@ -221,7 +225,7 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
     }
   }
 
-  // Favorites are private to the player and follow the reactions' rule: members only, once results are open.
+  // Favorites are private to the player and follow the track reactions' rule: members only, once guessing is open.
   router.post('/submissions/:id/favorite', requireAuth(deps), async (req, res) => {
     const accountId = authed(req);
     const error = await guardError(deps.pool, REACTION_TARGETS.submission_id, req.params.id, accountId);
