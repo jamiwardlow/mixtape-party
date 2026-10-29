@@ -189,6 +189,27 @@ describe('stale state', () => {
   });
 });
 
+describe('magic link', () => {
+  it('warns that an unknown address becomes a new account', async () => {
+    await render(<SignIn />);
+    expect(screen.getByText(/We'll create one/)).toBeTruthy();
+  });
+
+  it('can resend, or go back to correct the address', async () => {
+    (fetch as jest.Mock).mockResolvedValue(new Response(null, { status: 204 }));
+    await render(<SignIn />);
+    await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'jami@example.com');
+    await fireEvent.press(screen.getByText('Email me a sign-in link'));
+    await waitFor(() => screen.getByText('Resend link'));
+
+    await fireEvent.press(screen.getByText('Resend link'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+
+    await fireEvent.press(screen.getByText('Use a different email'));
+    expect(screen.getByText('Email me a sign-in link')).toBeTruthy();
+  });
+});
+
 describe('initial mode', () => {
   it('defaults to sign-in', async () => {
     await render(<SignIn />);

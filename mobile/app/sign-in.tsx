@@ -145,11 +145,22 @@ export default function SignIn() {
       </View>
 
       {linkSent ? (
-        <Label style={styles.note}>Check {email} for a sign-in link.</Label>
+        <>
+          <Label style={styles.note}>Check {email} for a sign-in link.</Label>
+          <Label style={styles.link} onPress={emailSignInLink}>
+            Resend link
+          </Label>
+          <Label style={styles.link} onPress={() => setLinkSent(false)}>
+            Use a different email
+          </Label>
+        </>
       ) : (
-        <Label style={styles.link} onPress={emailSignInLink}>
-          Email me a sign-in link
-        </Label>
+        <>
+          <Label style={styles.link} onPress={emailSignInLink}>
+            Email me a sign-in link
+          </Label>
+          {mode === 'sign-in' && <Label style={styles.note}>No account yet? We'll create one for this address.</Label>}
+        </>
       )}
     </Page>
   );
