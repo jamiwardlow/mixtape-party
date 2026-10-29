@@ -188,7 +188,8 @@ async function sweepResultsReady(deps: NotificationSweepDeps, now: Date): Promis
       'results_ready',
       {
         title: `Round ${round.round_number} results are ready`,
-        body: `See who guessed right for "${round.theme}".`,
+        body: `Submitters have been revealed for “${round.theme}”!\n\nSee who guessed correctly`,
+        appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/results` : undefined,
       },
       { roundId: round.id, leagueId: round.league_id },
     );
