@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import Favorites from '../favorites';
 
 const mockToggle = jest.fn();
 let mockFallback: (id: string) => void;
 
 const mockOpenURL = jest.fn();
-jest.mock('expo-linking', () => ({ openURL: (url: string) => mockOpenURL(url) }));
+jest.spyOn(Linking, 'openURL').mockImplementation((url: string) => mockOpenURL(url));
 jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
 jest.mock('../../lib/session', () => ({ useSession: () => ({ token: 'tok-1' }) }));
 jest.mock('../../lib/preview', () => ({
