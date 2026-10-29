@@ -89,6 +89,7 @@ describe('runNotificationSweep', () => {
     const notifs = await testDb.pool.query('SELECT account_id, type FROM notifications');
     expect(notifs.rows).toEqual([{ account_id: laggard, type: 'submission_reminder' }]);
     expect(deps.emailChannel.sent).toHaveLength(1);
+    expect(deps.emailChannel.sent[0].payload.appLink).toBe(`https://app.test/round/${roundId}/submit`);
     expect(deps.pushChannel.sent).toHaveLength(0); // no push token registered for laggard
 
     await runNotificationSweep(deps, new Date('2030-01-05T00:00:00Z'));
@@ -150,6 +151,7 @@ describe('runNotificationSweep', () => {
 
     const notifs = await testDb.pool.query("SELECT account_id, type FROM notifications WHERE type = 'guessing_reminder'");
     expect(notifs.rows).toEqual([{ account_id: laggard, type: 'guessing_reminder' }]);
+    expect(deps.emailChannel.sent[0].payload.appLink).toMatch(/^https:\/\/app\.test\/round\/.+\/guess$/);
   });
 
   it('notifies every league member once results are ready, after the guessing deadline passes', async () => {
@@ -198,6 +200,7 @@ describe('runNotificationSweep', () => {
     const notifs = await testDb.pool.query("SELECT account_id, type FROM notifications WHERE type = 'season_concluded'");
     expect(notifs.rows).toEqual([{ account_id: host, type: 'season_concluded' }]);
     expect(deps.emailChannel.sent[0].payload.data).toEqual({ leagueId, screen: 'final' });
+    expect(deps.emailChannel.sent[0].payload.appLink).toBe(`https://app.test/league/${leagueId}/final`);
     // The final round's results_ready is suppressed: the wrap-up covers it.
     expect((await testDb.pool.query("SELECT 1 FROM notifications WHERE type = 'results_ready'")).rowCount).toBe(0);
 

@@ -114,6 +114,7 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
       {
         title: `Submission deadline approaching: Round ${round.round_number}`,
         body: `Submit your track for "${round.theme}" before the deadline.`,
+        appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/submit` : undefined,
       },
       { roundId: round.id, leagueId: round.league_id },
     );
@@ -158,6 +159,7 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
       {
         title: `Guessing deadline approaching: Round ${round.round_number}`,
         body: `Finish guessing who submitted each track for "${round.theme}" before the deadline.`,
+        appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/guess` : undefined,
       },
       { roundId: round.id, leagueId: round.league_id },
     );
@@ -216,6 +218,7 @@ async function sweepSeasonConcluded(deps: NotificationSweepDeps, now: Date): Pro
       {
         title: `${league.name}'s season has concluded`,
         body: 'Check the final standings.',
+        appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/league/${league.id}/final` : undefined,
         data: { leagueId: league.id, screen: 'final' },
       },
       { leagueId: league.id },
