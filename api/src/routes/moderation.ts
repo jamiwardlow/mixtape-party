@@ -12,6 +12,7 @@ export interface ModerationDeps extends AccountsDeps {
 
 export const REPORT_REASONS = ['spam', 'harassment', 'inappropriate', 'other'];
 const MAX_NOTE = 500;
+const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 /** Ids the blocker has blocked: their comments, replies and reactions are left out of the blocker's views. */
 export async function blockedIds(pool: Pool, blockerId: string): Promise<Set<string>> {
@@ -47,7 +48,7 @@ export function createModerationRouter(deps: ModerationDeps): Router {
       return;
     }
     // Ids that aren't UUIDs would 500 in Postgres; they can't match anything, so say not found.
-    if (!/^[0-9a-f-]{36}$/i.test(targetId)) {
+    if (!isUuid(targetId)) {
       res.status(404).json({ error: 'not found' });
       return;
     }
@@ -119,7 +120,7 @@ export function createModerationRouter(deps: ModerationDeps): Router {
   router.put('/blocks/:accountId', requireAuth(deps), async (req, res) => {
     const blocker = authed(req);
     const target = req.params.accountId;
-    if (!/^[0-9a-f-]{36}$/i.test(target) || target === blocker) {
+    if (!isUuid(target) || target === blocker) {
       res.status(400).json({ error: 'invalid account' });
       return;
     }
@@ -137,7 +138,7 @@ export function createModerationRouter(deps: ModerationDeps): Router {
   });
 
   router.delete('/blocks/:accountId', requireAuth(deps), async (req, res) => {
-    if (/^[0-9a-f-]{36}$/i.test(req.params.accountId)) {
+    if (isUuid(req.params.accountId)) {
       await deps.pool.query('DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [authed(req), req.params.accountId]);
     }
     res.status(204).end();
