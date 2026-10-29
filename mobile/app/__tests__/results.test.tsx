@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import RoundResults from '../round/[roundId]/results';
 
 const mockOpenURL = jest.fn();
@@ -12,9 +13,7 @@ jest.mock('../../lib/session', () => ({
   useSession: () => ({ token: 'tok-1' }),
 }));
 
-jest.mock('expo-linking', () => ({
-  openURL: (...args: unknown[]) => mockOpenURL(...args),
-}));
+jest.spyOn(Linking, 'openURL').mockImplementation((...args: [string]) => mockOpenURL(...args));
 
 const results = { tracks: [], scores: [], winners: [] };
 

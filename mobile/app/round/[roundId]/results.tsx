@@ -1,7 +1,7 @@
-import * as Linking from 'expo-linking';
+// react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, View } from 'react-native';
+import { FlatList, Linking, Pressable, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import type { Player, ServiceName } from '../../../lib/rounds';
