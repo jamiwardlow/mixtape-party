@@ -12,6 +12,10 @@ const GOOGLE_ERRORS: Record<string, string> = {
   google_failed: 'Google sign-in failed. Try again.',
 };
 
+// Same floor as POST /accounts (api/src/routes/accounts.ts); the server stays the authority.
+const MIN_PASSWORD = 8;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function SignIn() {
   const { signIn } = useSession();
   const { error: googleError, mode: modeParam } = useLocalSearchParams<{ error?: string; mode?: string }>();
@@ -47,6 +51,14 @@ export default function SignIn() {
       setError('Enter your email and password');
       return;
     }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError('Enter a valid email address');
+      return;
+    }
+    if (mode === 'sign-up' && password.length < MIN_PASSWORD) {
+      setError(`Password must be at least ${MIN_PASSWORD} characters`);
+      return;
+    }
     setBusy(true);
     try {
       // Optional on purpose: an empty field means no name, exactly as before this existed. Sending
@@ -73,6 +85,10 @@ export default function SignIn() {
     setError(null);
     if (!email) {
       setError('Enter your email first');
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError('Enter a valid email address');
       return;
     }
     setBusy(true);
@@ -112,6 +128,7 @@ export default function SignIn() {
       )}
       <TapeInput
         placeholder="Email"
+        accessibilityLabel="Email"
         autoCapitalize="none"
         keyboardType="email-address"
         autoComplete="email"
@@ -125,6 +142,7 @@ export default function SignIn() {
       <TapeInput
         ref={passwordRef}
         placeholder="Password"
+        accessibilityLabel="Password"
         secureTextEntry={!showPassword}
         autoCapitalize="none"
         autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
@@ -137,6 +155,7 @@ export default function SignIn() {
       <Label style={styles.showLink} accessibilityRole="button" onPress={() => setShowPassword((v) => !v)}>
         {showPassword ? 'Hide password' : 'Show password'}
       </Label>
+      {mode === 'sign-up' && <Label>Password must be at least {MIN_PASSWORD} characters.</Label>}
       {mode === 'sign-up' && (
         <TapeInput
           ref={nameRef}
@@ -145,6 +164,7 @@ export default function SignIn() {
           returnKeyType="go"
           onSubmitEditing={submit}
           placeholder="Display name (optional)"
+          accessibilityLabel="Display name (optional)"
           // The API caps a name at 40 and PATCH rejects anything longer, so stop at 40 here rather
           // than accept a name at sign-up that My Account would later refuse to save.
           maxLength={40}
@@ -153,7 +173,7 @@ export default function SignIn() {
         />
       )}
       {message && <ErrorNote>{message}</ErrorNote>}
-      <TapeButton title="Continue" onPress={submit} disabled={busy} />
+      <TapeButton title={busy ? (mode === 'sign-up' ? 'Creating account…' : 'Signing in…') : 'Continue'} onPress={submit} disabled={busy} />
       {mode === 'sign-in' && (
         <Label style={styles.link} onPress={() => router.push('/forgot-password')}>
           Forgot password?

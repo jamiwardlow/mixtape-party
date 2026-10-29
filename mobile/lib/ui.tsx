@@ -586,7 +586,12 @@ export function Sprocket() {
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {
   const t = useTheme();
-  return <Label style={{ color: t.danger, fontFamily: t.font.bold }}>{children}</Label>;
+  // role=alert + polite live region so screen readers announce it when it appears (web and native).
+  return (
+    <Label accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ color: t.danger, fontFamily: t.font.bold }}>
+      {children}
+    </Label>
+  );
 }
 
 const styles = StyleSheet.create({

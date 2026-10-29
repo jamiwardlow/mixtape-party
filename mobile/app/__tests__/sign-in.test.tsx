@@ -30,7 +30,7 @@ beforeEach(() => {
 
 // render, press and changeText are all async in RNTL v14 — an un-awaited call renders outside
 // act() and the next query fails with "`render` function has not been called".
-async function fillCredentials(email = 'jami@example.com', password = 'hunter2') {
+async function fillCredentials(email = 'jami@example.com', password = 'hunter22') {
   await fireEvent.changeText(screen.getByPlaceholderText('Email'), email);
   await fireEvent.changeText(screen.getByPlaceholderText('Password'), password);
 }
@@ -96,8 +96,8 @@ describe('submit', () => {
     // Deliberately not awaited: the handler is parked on a fetch that has not settled, so the
     // act() scope this opens only closes once release() is called below.
     const pending = fireEvent.press(screen.getByText('Continue'));
-    await waitFor(() => expect(screen.getByText('Continue')).toBeDisabled());
-    await fireEvent.press(screen.getByText('Continue'));
+    await waitFor(() => expect(screen.getByText('Creating account…')).toBeDisabled());
+    await fireEvent.press(screen.getByText('Creating account…'));
 
     await act(async () => { release(ok()); await pending; });
 
@@ -132,7 +132,7 @@ describe('display name', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/accounts'),
-      expect.objectContaining({ body: JSON.stringify({ email: 'jami@example.com', password: 'hunter2', displayName: 'Sam' }) }),
+      expect.objectContaining({ body: JSON.stringify({ email: 'jami@example.com', password: 'hunter22', displayName: 'Sam' }) }),
     );
   });
 
@@ -145,7 +145,7 @@ describe('display name', () => {
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/accounts'),
-      expect.objectContaining({ body: JSON.stringify({ email: 'jami@example.com', password: 'hunter2', displayName: null }) }),
+      expect.objectContaining({ body: JSON.stringify({ email: 'jami@example.com', password: 'hunter22', displayName: null }) }),
     );
     expect(mockSignIn).toHaveBeenCalledWith('tok-1');
   });
@@ -278,5 +278,31 @@ describe('autofill and keyboard', () => {
     await fillCredentials();
     await fireEvent(screen.getByPlaceholderText('Password'), 'submitEditing');
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/sessions'), expect.anything());
+  });
+});
+
+describe('validation and a11y', () => {
+  it('rejects a malformed email without calling the server', async () => {
+    await render(<SignIn />);
+    await fillCredentials('not-an-email');
+    await fireEvent.press(screen.getByText('Continue'));
+    expect(screen.getByText('Enter a valid email address')).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a short password on sign-up only', async () => {
+    await render(<SignIn />);
+    await switchToSignUp();
+    await fillCredentials('jami@example.com', 'short');
+    await fireEvent.press(screen.getByText('Continue'));
+    expect(screen.getByText('Password must be at least 8 characters')).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('labels fields and announces errors', async () => {
+    await render(<SignIn />);
+    expect(screen.getByLabelText('Email')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Continue'));
+    expect(screen.getByRole('alert')).toBeTruthy();
   });
 });
