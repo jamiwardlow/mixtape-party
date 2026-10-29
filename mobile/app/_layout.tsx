@@ -43,6 +43,7 @@ function RootNavigator() {
       {/* Store requirement: public and readable signed out. */}
       <Stack.Screen name="privacy" />
       <Stack.Screen name="terms" />
+      <Stack.Screen name="delete-account" />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>

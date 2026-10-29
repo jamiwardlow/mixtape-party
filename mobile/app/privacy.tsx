@@ -40,7 +40,7 @@ export default function Privacy() {
           title: 'Your choices',
           body: [
             'Change your name or photo, or turn off push and email notifications, any time from My Account.',
-            `To delete your account and the data tied to it, email ${CONTACT_EMAIL} from the address you signed up with. We’ll remove it.`,
+            `You can delete your account from My Account, or see mixtape-party.com/delete-account. Your email, password, name, photo and notification data are removed; your submitted songs and guesses stay in your leagues, no longer linked to you. If you can’t sign in, email ${CONTACT_EMAIL} from the address you signed up with.`,
           ],
         },
         {

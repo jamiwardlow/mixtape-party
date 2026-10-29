@@ -76,7 +76,7 @@ export async function notifyAccounts(
 }
 
 async function leagueMemberIds(pool: Pool, leagueId: string): Promise<string[]> {
-  const result = await pool.query<{ account_id: string }>('SELECT account_id FROM league_members WHERE league_id = $1', [
+  const result = await pool.query<{ account_id: string }>('SELECT account_id FROM league_members lm WHERE league_id = $1 AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = lm.account_id AND a.deleted_at IS NOT NULL)', [
     leagueId,
   ]);
   return result.rows.map((row) => row.account_id);
@@ -104,6 +104,7 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
     const missing = await deps.pool.query<{ account_id: string }>(
       `SELECT lm.account_id FROM league_members lm
        WHERE lm.league_id = $1
+         AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = lm.account_id AND a.deleted_at IS NOT NULL)
          AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = $2 AND s.account_id = lm.account_id)`,
       [round.league_id, round.id],
     );
@@ -143,6 +144,7 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
     const incomplete = await deps.pool.query<{ account_id: string }>(
       `SELECT lm.account_id FROM league_members lm
        WHERE lm.league_id = $1
+         AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = lm.account_id AND a.deleted_at IS NOT NULL)
          AND (
            SELECT count(*) FROM guesses g
            JOIN submissions s ON s.id = g.submission_id

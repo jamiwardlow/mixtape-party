@@ -128,7 +128,7 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
 }
 
 export default function Account() {
-  const { token, profile, refreshProfile } = useSession();
+  const { token, profile, refreshProfile, signOut } = useSession();
   const [name, setName] = useState(profile?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -280,6 +280,31 @@ export default function Account() {
     }
   }
 
+  const [confirming, setConfirming] = useState(false);
+  const [proof, setProof] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function deleteAccount() {
+    if (!token || deleting) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      // One field serves both kinds of account: the server reads the password, or for accounts
+      // without one the email, and ignores the other.
+      const res = await fetchApi('/accounts/me', { method: 'DELETE', token, body: { password: proof, confirmEmail: proof } });
+      if (!res.ok) {
+        setDeleteError((await res.json().catch(() => null))?.error ?? "Couldn't delete your account. Try again.");
+        return;
+      }
+      await signOut();
+    } catch {
+      setDeleteError("Couldn't reach the server. Try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Screen label="My Account">
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
@@ -363,6 +388,23 @@ export default function Account() {
             <BestieGroup title="I get them" caption="Their songs you guessed correctly" besties={besties.iGuessed} />
           </>
         )}
+      </JCard>
+      <JCard>
+        <HandText>Delete account</HandText>
+        {confirming ? (
+          <>
+            <Label>
+              This can’t be undone. Your email, name, photo and settings are erased; your songs and guesses stay
+              in your leagues as “A player”. Enter your password (or your email, if you sign in without one) to confirm.
+            </Label>
+            <TapeInput placeholder="Password or email" secureTextEntry value={proof} onChangeText={setProof} autoCapitalize="none" />
+            {deleting ? <ReelSpinner /> : <TapeButton title="Delete my account" onPress={deleteAccount} />}
+            <TapeButton title="Keep my account" variant="secondary" onPress={() => { setConfirming(false); setProof(''); setDeleteError(null); }} />
+          </>
+        ) : (
+          <TapeButton title="Delete account" variant="secondary" onPress={() => setConfirming(true)} />
+        )}
+        {deleteError && <ErrorNote>{deleteError}</ErrorNote>}
       </JCard>
       <TapeButton title="Favorites" onPress={() => router.push('/favorites')} />
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />

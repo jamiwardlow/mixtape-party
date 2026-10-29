@@ -30,6 +30,10 @@ export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret' | 'pool'>):
     // route already passes through, which is what makes one check here cover all of them (#64).
     const accountId = verifySessionToken(token, deps.sessionSecret);
     if (!accountId || (await isSessionTokenRevoked(deps.pool, token))) return unauthorized();
+    // A deleted account's tokens still verify (they are stateless), so check the account itself.
+    // An unknown id passes through to the route, which already answers 404 for it.
+    const gone = await deps.pool.query('SELECT 1 FROM accounts WHERE id = $1 AND deleted_at IS NOT NULL', [accountId]);
+    if (gone.rows.length > 0) return unauthorized();
     (req as unknown as AuthedRequest).accountId = accountId;
     next();
   };
@@ -136,6 +140,75 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
     const accountId = (req as unknown as AuthedRequest).accountId;
     await deps.pool.query('UPDATE accounts SET display_name = $2 WHERE id = $1', [accountId, name]);
     await sendProfile(deps.pool, accountId, res);
+  });
+
+  // Deletion scrubs the account row in place rather than dropping it: every table references it
+  // ON DELETE CASCADE, so a real DELETE would erase the leaver's submissions and guesses and rewrite
+  // other players' scores. What stays, unlinked from any person: their submitted tracks, guesses,
+  // comments, replies and reactions, and their league membership (shown as "A player"). What goes:
+  // email, password, Google link, name, avatar, push tokens, notification settings and inbox,
+  // favorites and exports, and any pending sign-in/reset tokens. Every session dies via deleted_at.
+  router.delete('/accounts/me', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const { password, confirmEmail } = (req.body ?? {}) as Record<string, unknown>;
+    const { rows } = await deps.pool.query<{ email: string; password_hash: string | null }>(
+      'SELECT email, password_hash FROM accounts WHERE id = $1',
+      [accountId],
+    );
+    const account = rows[0];
+    if (!account) {
+      res.status(404).json({ error: 'account not found' });
+      return;
+    }
+    // Re-prove it's them: the password, or for accounts without one (magic link, Google) their email.
+    const proof = account.password_hash ? password : confirmEmail;
+    if (typeof proof !== 'string' || !proof) {
+      res.status(400).json({ error: account.password_hash ? 'password is required' : 'confirmEmail is required' });
+      return;
+    }
+    const proven = account.password_hash
+      ? verifyPassword(proof, account.password_hash)
+      : proof.trim().toLowerCase() === account.email;
+    if (!proven) {
+      res.status(403).json({ error: account.password_hash ? 'incorrect password' : 'that is not your email address' });
+      return;
+    }
+
+    const client = await deps.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Hosting someone else's season to its end isn't something to abandon mid-game. A season is
+      // over once its last round's guessing deadline has passed (same rule as isSeasonConcluded).
+      const hosting = await client.query(
+        `SELECT 1 FROM leagues l
+          WHERE l.host_account_id = $1
+            AND EXISTS (SELECT 1 FROM league_members m WHERE m.league_id = l.id AND m.account_id <> $1)
+            AND NOT EXISTS (SELECT 1 FROM rounds r WHERE r.league_id = l.id AND r.round_number >= l.season_length AND r.guessing_deadline <= now())
+          LIMIT 1`,
+        [accountId],
+      );
+      if (hosting.rows.length > 0) {
+        await client.query('ROLLBACK');
+        res.status(409).json({ error: "You're hosting a league that's still playing. Wait until its season ends, then delete your account." });
+        return;
+      }
+      for (const table of ['push_tokens', 'notification_settings', 'notifications', 'favorites', 'favorite_exports', 'auth_tokens']) {
+        await client.query(`DELETE FROM ${table} WHERE account_id = $1`, [accountId]);
+      }
+      await client.query(
+        `UPDATE accounts SET email = 'deleted-' || id || '@deleted.invalid', password_hash = NULL, google_sub = NULL,
+                display_name = NULL, avatar = NULL, avatar_content_type = NULL, avatar_updated_at = NULL, deleted_at = now()
+          WHERE id = $1`,
+        [accountId],
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    res.status(204).end();
   });
 
   router.put('/accounts/me/avatar', requireAuth(deps), avatarType, avatarRaw, async (req: Request, res: Response) => {

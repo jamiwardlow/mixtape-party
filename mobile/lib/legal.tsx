@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { BodyText, HandText, Label, Screen, TapeButton } from './ui';
 
-// Placeholder address; swap for the real one at review. In-app deletion is #143.
+// Placeholder address; swap for the real one at review.
 export const CONTACT_EMAIL = 'hello@mixtape-party.com';
 
 export interface LegalSection {

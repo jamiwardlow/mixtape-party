@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { LegalLinks } from '../../lib/legal';
+import DeleteAccount from '../delete-account';
 import Privacy from '../privacy';
 import Terms from '../terms';
 
@@ -24,4 +25,9 @@ test('policy names the real data and third parties', async () => {
 test('terms render', async () => {
   await render(<Terms />);
   expect(screen.getByText('Be good to your league')).toBeTruthy();
+});
+
+test('delete-account page explains the in-app path', async () => {
+  await render(<DeleteAccount />);
+  expect(screen.getByText('In the app')).toBeTruthy();
 });

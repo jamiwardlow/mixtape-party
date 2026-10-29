@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import Account from '../account';
 
 const mockRefreshProfile = jest.fn();
+const mockSignOut = jest.fn();
 let mockProfile: { id: string; email: string; displayName?: string | null; avatarUrl?: string | null } | null;
 
 jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: jest.fn() }));
@@ -16,7 +17,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }));
 
 jest.mock('../../lib/session', () => ({
-  useSession: () => ({ token: 'session-tok', profile: mockProfile, refreshProfile: mockRefreshProfile }),
+  useSession: () => ({ token: 'session-tok', profile: mockProfile, refreshProfile: mockRefreshProfile, signOut: mockSignOut }),
 }));
 
 let mockLeagues: { id: string; name: string; concluded: boolean; seasonLength: number; joinedAt: string }[];
@@ -330,5 +331,18 @@ describe('besties', () => {
     await render(<Account />);
 
     expect(await screen.findByText("Couldn't load your besties.")).toBeTruthy();
+  });
+});
+
+describe('delete account', () => {
+  test('asks to confirm, sends the proof, then signs out', async () => {
+    await render(<Account />);
+    await fireEvent.press(screen.getAllByText('Delete account').at(-1)!);
+    await fireEvent.changeText(screen.getByPlaceholderText('Password or email'), 'password123');
+    await fireEvent.press(screen.getByText('Delete my account'));
+    await waitFor(() => expect(mockSignOut).toHaveBeenCalled());
+    const call = (globalThis.fetch as jest.Mock).mock.calls.find(([, init]) => init?.method === 'DELETE');
+    expect(call[0]).toContain('/accounts/me');
+    expect(JSON.parse(call[1].body)).toMatchObject({ password: 'password123' });
   });
 });
