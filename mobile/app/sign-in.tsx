@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
+import { LegalLinks } from '../lib/legal';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
 import { Chip, ErrorNote, Label, Page, StickerBadge, TapeButton, TapeInput } from '../lib/ui';
@@ -215,6 +216,7 @@ export default function SignIn() {
           {mode === 'sign-in' && <Label style={styles.note}>No account yet? We'll create one for this address.</Label>}
         </>
       )}
+      <LegalLinks />
     </Page>
   );
 }

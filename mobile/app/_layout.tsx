@@ -40,6 +40,9 @@ function RootNavigator() {
       {/* Always reachable: an invite link should show its preview before gating on sign-up. */}
       <Stack.Screen name="join/index" />
       <Stack.Screen name="join/[code]" />
+      {/* Store requirement: public and readable signed out. */}
+      <Stack.Screen name="privacy" />
+      <Stack.Screen name="terms" />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>
