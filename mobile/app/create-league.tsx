@@ -151,7 +151,7 @@ export default function CreateLeague() {
   async function shareInvite() {
     if (!created) return;
     const url = Linking.createURL(`join/${created.inviteCode}`);
-    await Share.share({ message: `Join my mixtape league: ${url}` });
+    await Share.share({ message: `Join my Mixtape Party! ${url}` });
   }
 
   if (created) {

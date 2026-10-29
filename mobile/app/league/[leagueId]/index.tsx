@@ -231,7 +231,7 @@ export default function LeagueOverview() {
             title="Share invite"
             onPress={() =>
               Share.share({
-                message: `Join my mixtape league: ${Linking.createURL(`join/${league.inviteCode}`)}`,
+                message: `Join my Mixtape Party! ${Linking.createURL(`join/${league.inviteCode}`)}`,
               })
             }
           />
