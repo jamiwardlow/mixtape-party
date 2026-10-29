@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { View } from 'react-native';
 import { fetchApi } from './api';
-import { CONTACT_EMAIL } from './legal';
+import { CONTACT_EMAIL, openContactEmail } from './legal';
 import type { Player } from './rounds';
 import { useSession } from './session';
 import { BodyText, ErrorNote, HandText, Label, TapeButton, TapeInput } from './ui';
@@ -31,6 +31,7 @@ export function ReportBlock({
 }) {
   const { token } = useSession();
   const [open, setOpen] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [what, setWhat] = useState<{ type: string; id: string }>({ type: targetType, id: targetId });
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -52,8 +53,14 @@ export function ReportBlock({
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: 'row', gap: 6 }}>
         <TapeButton title="Report" variant="secondary" onPress={() => setOpen(!open)} />
-        <TapeButton title="Block" variant="secondary" onPress={block} />
+        <TapeButton title="Block" variant="secondary" onPress={() => setConfirmingBlock(!confirmingBlock)} />
       </View>
+      {confirmingBlock ? (
+        <View style={{ gap: 6 }}>
+          <BodyText>Hide everything from {author.displayName ?? 'this player'}? You can unblock them from My Account.</BodyText>
+          <TapeButton title="Yes, block" onPress={block} />
+        </View>
+      ) : null}
       {open ? (
         <View style={{ gap: 6 }}>
           <HandText>What are you reporting?</HandText>
@@ -70,7 +77,7 @@ export function ReportBlock({
           ))}
           <TapeInput placeholder="Anything else we should know? (optional)" value={note} onChangeText={setNote} maxLength={500} multiline />
           {reason ? <TapeButton title="Send report" onPress={send} /> : null}
-          <Label accessibilityRole="link" onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}`)}>
+          <Label accessibilityRole="link" onPress={openContactEmail}>
             Or email {CONTACT_EMAIL}
           </Label>
         </View>
@@ -84,6 +91,7 @@ export function ReportBlock({
 export function BlockedPlayers() {
   const { token } = useSession();
   const [blocked, setBlocked] = useState<Player[]>([]);
+  const [failed, setFailed] = useState(false);
 
   async function load() {
     const res = await fetchApi('/blocks', { token: token ?? undefined });
@@ -104,12 +112,14 @@ export function BlockedPlayers() {
             title="Unblock"
             variant="secondary"
             onPress={async () => {
-              await fetchApi(`/blocks/${p.accountId}`, { method: 'DELETE', token: token ?? undefined });
+              const res = await fetchApi(`/blocks/${p.accountId}`, { method: 'DELETE', token: token ?? undefined });
+              setFailed(!res.ok);
               await load();
             }}
           />
         </View>
       ))}
+      {failed ? <ErrorNote>Couldn’t unblock. Try again.</ErrorNote> : null}
     </View>
   );
 }

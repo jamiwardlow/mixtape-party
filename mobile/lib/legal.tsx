@@ -5,6 +5,8 @@ import { BodyText, HandText, Label, Screen, TapeButton } from './ui';
 // Placeholder address; swap for the real one at review.
 export const CONTACT_EMAIL = 'hello@mixtape-party.com';
 
+export const openContactEmail = () => Linking.openURL(`mailto:${CONTACT_EMAIL}`);
+
 export interface LegalSection {
   title: string;
   body: string[];
@@ -20,7 +22,7 @@ export function LegalLinks() {
       <Label accessibilityRole="link" style={styles.link} onPress={() => router.push('/terms')}>
         Terms of Use
       </Label>
-      <Label accessibilityRole="link" style={styles.link} onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}`)}>
+      <Label accessibilityRole="link" style={styles.link} onPress={openContactEmail}>
         Contact
       </Label>
     </View>

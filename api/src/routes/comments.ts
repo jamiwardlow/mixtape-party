@@ -3,12 +3,8 @@ import type { Pool } from 'pg';
 import { notifyAccounts } from '../notifications/sweep.js';
 import type { EmailChannel, PushChannel } from '../notifications/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { hasBlocked } from './blocks.js';
 import { isLeagueMember } from './rounds.js';
-
-/** True when `recipient` has blocked `sender`, so nothing from `sender` should ping them. */
-async function hasBlocked(pool: Pool, recipient: string, sender: string) {
-  return !!(await pool.query('SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2', [recipient, sender])).rowCount;
-}
 
 export interface CommentsDeps extends AccountsDeps {
   pushChannel: PushChannel;

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
-import { blockedIds } from './moderation.js';
+import { blockedIds } from './blocks.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   isLeagueMember,
@@ -127,8 +127,16 @@ export function createResultsRouter(deps: ResultsDeps): Router {
        WHERE lm.league_id = $1`,
       [round.leagueId],
     );
+    // Blocked players' comments, replies and reactions are left out and their name and photo are
+    // masked; their guesses still score.
+    const blocked = await blockedIds(deps.pool, accountId);
     const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }]),
+      membersResult.rows.map((row) => [
+        row.account_id,
+        blocked.has(row.account_id)
+          ? { accountId: row.account_id, displayName: 'Blocked player' }
+          : { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) },
+      ]),
     );
 
     const submissionsResult = await deps.pool.query<{
@@ -171,13 +179,21 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       correctGuessersBySubmission.set(guess.submission_id, existing);
     }
 
-    // Blocked players' comments, replies and reactions are left out; their guesses still score.
-    const blocked = await blockedIds(deps.pool, accountId);
     const guessIds = guessesResult.rows.map((g) => g.id);
     const repliesResult = await deps.pool.query<{ id: string; guess_id: string; parent_reply_id: string | null; account_id: string; body: string; created_at: string }>(
       'SELECT id, guess_id, parent_reply_id, account_id, body, created_at FROM guess_replies WHERE guess_id = ANY($1) ORDER BY created_at, id',
       [guessIds],
-    ).then((r) => ({ ...r, rows: r.rows.filter((row) => !blocked.has(row.account_id)) }));
+    ).then((r) => {
+      // Replies come oldest first, so a parent is always seen before its children; a reply under a
+      // hidden one would be orphaned, so it goes too.
+      const shown = new Set<string>();
+      const rows = r.rows.filter((row) => {
+        const ok = !blocked.has(row.account_id) && (row.parent_reply_id === null || shown.has(row.parent_reply_id));
+        if (ok) shown.add(row.id);
+        return ok;
+      });
+      return { ...r, rows };
+    });
     const reactionsResult = await deps.pool.query<{ submission_id: string | null; guess_id: string | null; reply_id: string | null; account_id: string; emoji: string }>(
       'SELECT submission_id, guess_id, reply_id, account_id, emoji FROM comment_reactions WHERE submission_id = ANY($1) OR guess_id = ANY($2) OR reply_id = ANY($3)',
       [submissionsResult.rows.map((s) => s.id), guessIds, repliesResult.rows.map((r) => r.id)],

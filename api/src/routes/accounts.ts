@@ -2,6 +2,7 @@ import express, { Router, type ErrorRequestHandler, type NextFunction, type Requ
 import type { Pool } from 'pg';
 import { hashPassword, signSessionToken, verifyPassword, verifySessionToken } from '../auth.js';
 import { isSessionTokenRevoked, revokeSessionToken } from '../authTokens.js';
+import { isUuid } from './blocks.js';
 
 export interface AccountsDeps {
   pool: Pool;
@@ -49,7 +50,6 @@ const MAX_DISPLAY_NAME = 40;
 // a bucket if avatars grow or get fetched in bulk, e.g. a roster of hundreds.
 const MAX_AVATAR_BYTES = 200 * 1024;
 const AVATAR_TYPES = ['image/jpeg', 'image/png'];
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // 415 before the body is read, 413 when it exceeds the limit (body-parser's error would otherwise
 // fall through to the app's 500 handler).
@@ -235,7 +235,7 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
   });
 
   router.get('/accounts/:id/avatar', requireAuth(deps), async (req, res) => {
-    const result = UUID.test(req.params.id)
+    const result = isUuid(req.params.id)
       ? await deps.pool.query<{ avatar: Buffer | null; avatar_content_type: string | null }>(
           'SELECT avatar, avatar_content_type FROM accounts WHERE id = $1',
           [req.params.id],

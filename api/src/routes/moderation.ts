@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import type { Pool } from 'pg';
 import type { EmailChannel } from '../notifications/types.js';
 import { requireAuth, avatarUrlOf, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { isUuid, sharesLeague } from './blocks.js';
 import { guardError, REACTION_TARGETS } from './comments.js';
 
 export interface ModerationDeps extends AccountsDeps {
@@ -12,13 +12,9 @@ export interface ModerationDeps extends AccountsDeps {
 
 export const REPORT_REASONS = ['spam', 'harassment', 'inappropriate', 'other'];
 const MAX_NOTE = 500;
-const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-
-/** Ids the blocker has blocked: their comments, replies and reactions are left out of the blocker's views. */
-export async function blockedIds(pool: Pool, blockerId: string): Promise<Set<string>> {
-  const rows = (await pool.query<{ blocked_id: string }>('SELECT blocked_id FROM blocks WHERE blocker_id = $1', [blockerId])).rows;
-  return new Set(rows.map((r) => r.blocked_id));
-}
+// Most reports one account can file per hour; a human reporting in good faith never gets near it.
+const REPORTS_PER_HOUR = 20;
+const TARGET_TYPES = ['comment', 'reply', 'avatar', 'display_name'];
 
 // Who wrote the reported thing, and what it said. Membership and "results are open" are checked
 // separately by comments.guardError against the same target.
@@ -35,7 +31,7 @@ export function createModerationRouter(deps: ModerationDeps): Router {
     const reporter = authed(req);
     const { targetType, targetId, reason } = req.body ?? {};
     const note = typeof req.body?.note === 'string' ? req.body.note.trim() || null : null;
-    if (!['comment', 'reply', 'avatar', 'display_name'].includes(targetType) || typeof targetId !== 'string') {
+    if (!TARGET_TYPES.includes(targetType) || typeof targetId !== 'string') {
       res.status(400).json({ error: 'targetType and targetId are required' });
       return;
     }
@@ -64,15 +60,9 @@ export function createModerationRouter(deps: ModerationDeps): Router {
       offender = (await deps.pool.query<{ account_id: string; text: string | null }>(OFFENDERS[targetType as 'comment' | 'reply'], [targetId])).rows[0];
     } else {
       // An avatar or name can only be reported by someone who shares a league with its owner.
-      offender = (
-        await deps.pool.query<{ account_id: string; text: string | null }>(
-          `SELECT a.id AS account_id, a.display_name AS text FROM accounts a
-           WHERE a.id = $1 AND a.deleted_at IS NULL AND EXISTS (
-             SELECT 1 FROM league_members x JOIN league_members y ON y.league_id = x.league_id
-             WHERE x.account_id = $2 AND y.account_id = a.id)`,
-          [targetId, reporter],
-        )
-      ).rows[0];
+      offender = (await sharesLeague(deps.pool, reporter, targetId))
+        ? (await deps.pool.query<{ account_id: string; text: string | null }>('SELECT id AS account_id, display_name AS text FROM accounts WHERE id = $1 AND deleted_at IS NULL', [targetId])).rows[0]
+        : undefined;
     }
     if (!offender) {
       res.status(404).json({ error: 'not found' });
@@ -82,11 +72,19 @@ export function createModerationRouter(deps: ModerationDeps): Router {
       res.status(400).json({ error: 'you can’t report yourself' });
       return;
     }
-    await deps.pool.query(
-      'INSERT INTO reports (reporter_id, reported_account_id, target_type, target_id, reason, note) VALUES ($1, $2, $3, $4, $5, $6)',
+    const recent = await deps.pool.query("SELECT 1 FROM reports WHERE reporter_id = $1 AND created_at > now() - interval '1 hour'", [reporter]);
+    if ((recent.rowCount ?? 0) >= REPORTS_PER_HOUR) {
+      res.status(429).json({ error: 'too many reports, try again later' });
+      return;
+    }
+    // One report per reporter per target; repeating it answers 201 but stores and emails nothing.
+    const stored = await deps.pool.query(
+      `INSERT INTO reports (reporter_id, reported_account_id, target_type, target_id, reason, note) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING`,
       [reporter, offender.account_id, targetType, targetId, reason, note],
     );
     res.status(201).json({ ok: true });
+    if (!stored.rowCount) return;
 
     // After the response, like other notifications: a mail failure must not make a stored report look lost.
     if (!deps.reportEmail) return;
@@ -124,12 +122,10 @@ export function createModerationRouter(deps: ModerationDeps): Router {
       res.status(400).json({ error: 'invalid account' });
       return;
     }
-    const shared = await deps.pool.query(
-      `SELECT 1 FROM league_members x JOIN league_members y ON y.league_id = x.league_id
-       WHERE x.account_id = $1 AND y.account_id = $2 LIMIT 1`,
-      [blocker, target],
-    );
-    if (!shared.rowCount) {
+    // Anonymity: nobody can see another league's members, and a 404 here only says "not in a league
+    // with you" -- which the target's own league mates could learn anyway. Block works at any time,
+    // including mid-round, because it only hides content you'd see once results open.
+    if (!(await sharesLeague(deps.pool, blocker, target))) {
       res.status(404).json({ error: 'not found' });
       return;
     }

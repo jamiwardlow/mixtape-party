@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS revoked_sessions (
 -- outlive a deleted comment. Reviewed by hand; the owner is emailed on each one.
 CREATE TABLE IF NOT EXISTS reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  reporter_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  reporter_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
   reported_account_id UUID NOT NULL,
   target_type TEXT NOT NULL CHECK (target_type IN ('comment', 'reply', 'avatar', 'display_name')),
   target_id UUID NOT NULL,
@@ -228,6 +228,8 @@ CREATE TABLE IF NOT EXISTS reports (
   note TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- (reports_once_idx, one report per reporter per target, comes from migration 0011, which dedupes first.)
 
 -- One player hiding another's comments, replies and reactions from their own results.
 CREATE TABLE IF NOT EXISTS blocks (

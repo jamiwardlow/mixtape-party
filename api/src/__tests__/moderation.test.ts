@@ -94,6 +94,47 @@ describe('reports and blocks (#144)', () => {
   });
 });
 
+describe('follow-ups (#167)', () => {
+  it('stores a repeated report once and emails once', async () => {
+    const { c, guessId, report, emailChannel } = await setup();
+    const body = { targetType: 'comment', targetId: guessId, reason: 'spam' };
+    expect((await report(c, body)).status).toBe(201);
+    expect((await report(c, body)).status).toBe(201);
+    await vi_waitFor(() => emailChannel.sent.length === 1);
+    await new Promise((r) => setTimeout(r, 100));
+    expect((await testDb.pool.query('SELECT 1 FROM reports')).rowCount).toBe(1);
+    expect(emailChannel.sent).toHaveLength(1);
+  });
+
+  it('caps how many reports one account files per hour', async () => {
+    const { a, c, guessId, report } = await setup();
+    await testDb.pool.query(
+      `INSERT INTO reports (reporter_id, reported_account_id, target_type, target_id, reason)
+       SELECT $1, $2, 'comment', gen_random_uuid(), 'spam' FROM generate_series(1, 20)`,
+      [c.accountId, a.accountId],
+    );
+    expect((await report(c, { targetType: 'comment', targetId: guessId, reason: 'spam' })).status).toBe(429);
+  });
+
+  it('keeps a report after its reporter deletes their account', async () => {
+    const { c, guessId, report } = await setup();
+    await report(c, { targetType: 'comment', targetId: guessId, reason: 'spam' });
+    await testDb.pool.query('DELETE FROM accounts WHERE id = $1', [c.accountId]);
+    expect((await testDb.pool.query('SELECT reporter_id FROM reports')).rows).toEqual([{ reporter_id: null }]);
+  });
+
+  it('hides replies nested under a blocked player’s reply, and masks their name', async () => {
+    const { app, a, b, c, auth, guessId, results } = await setup();
+    const top = await request(app).post(`/guesses/${guessId}/replies`).set(auth(b)).send({ body: 'top' });
+    await request(app).post(`/guesses/${guessId}/replies`).set(auth(a)).send({ body: 'nested', parentReplyId: top.body.replyId });
+    expect((await results(c)).comments[0].replies).toHaveLength(2);
+    await request(app).put(`/blocks/${b.accountId}`).set(auth(c));
+    expect((await results(c)).comments[0].replies).toEqual([]);
+    const { submitter } = await results(c); // b's own track
+    expect(submitter).toEqual({ accountId: b.accountId, displayName: 'Blocked player' });
+  });
+});
+
 async function vi_waitFor(cond: () => boolean) {
   for (let i = 0; i < 50 && !cond(); i++) await new Promise((r) => setTimeout(r, 20));
 }
