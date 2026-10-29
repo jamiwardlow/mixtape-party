@@ -248,6 +248,8 @@ describe('Google button on web', () => {
   const { Platform } = require('react-native');
   const original = Platform.OS;
   afterEach(() => { Platform.OS = original; });
+  // Platform.OS is faked to 'web' but jest-expo's window has no DOM event API.
+  beforeEach(() => { Object.assign(window, { addEventListener: jest.fn(), removeEventListener: jest.fn() }); });
 
   it('comes before the email form', async () => {
     Platform.OS = 'web';
@@ -304,5 +306,16 @@ describe('validation and a11y', () => {
     expect(screen.getByLabelText('Email')).toBeTruthy();
     await fireEvent.press(screen.getByText('Continue'));
     expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  it('shows progress on the sign-in link while it sends', async () => {
+    let release!: (r: Response) => void;
+    (fetch as jest.Mock).mockReturnValue(new Promise<Response>((r) => { release = r; }));
+    await render(<SignIn />);
+    await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'jami@example.com');
+    const pending = fireEvent.press(screen.getByText('Email me a sign-in link'));
+    await waitFor(() => expect(screen.getByText('Sending link…')).toBeTruthy());
+    await act(async () => { release(new Response(null, { status: 204 })); await pending; });
+    expect(screen.getByText('Resend link')).toBeTruthy();
   });
 });

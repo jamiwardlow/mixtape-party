@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -26,6 +26,7 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [googling, setGoogling] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
@@ -104,6 +105,15 @@ export default function SignIn() {
     }
   }
 
+  // Coming back from Google via the browser's back button can restore this page from bfcache with
+  // the redirecting state frozen on; pageshow is the one signal that it happened.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const reset = () => setGoogling(false);
+    window.addEventListener('pageshow', reset);
+    return () => window.removeEventListener('pageshow', reset);
+  }, []);
+
   const t = useTheme();
   const message = error ?? (googleError ? GOOGLE_ERRORS[googleError] ?? 'Google sign-in failed.' : null);
 
@@ -117,7 +127,7 @@ export default function SignIn() {
       {Platform.OS === 'web' && (
         // A full-page navigation, not a fetch: the OAuth redirect has to happen in the browser's
         // address bar, and the state cookie is set on the API's own origin along the way.
-        <TapeButton title="Continue with Google" variant="secondary" disabled={busy} onPress={() => { window.location.href = `${API_URL}/auth/google/start`; }} />
+        <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={busy || googling} onPress={() => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; }} />
       )}
       {Platform.OS === 'web' && (
         <View style={styles.divider}>
@@ -190,7 +200,7 @@ export default function SignIn() {
         <>
           <Label style={styles.note}>Check {email} for a sign-in link.</Label>
           <Label style={styles.link} onPress={emailSignInLink}>
-            Resend link
+            {busy ? 'Sending link…' : 'Resend link'}
           </Label>
           <Label style={styles.link} onPress={() => setLinkSent(false)}>
             Use a different email
@@ -199,7 +209,7 @@ export default function SignIn() {
       ) : (
         <>
           <Label style={styles.link} onPress={emailSignInLink}>
-            Email me a sign-in link
+            {busy ? 'Sending link…' : 'Email me a sign-in link'}
           </Label>
           {mode === 'sign-in' && <Label style={styles.note}>No account yet? We'll create one for this address.</Label>}
         </>
