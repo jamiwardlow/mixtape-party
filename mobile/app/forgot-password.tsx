@@ -2,9 +2,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable } from 'react-native';
 import { fetchApi } from '../lib/api';
-import { BodyText, ErrorNote, Label, Screen, TapeButton, TapeInput } from '../lib/ui';
+import { BodyText, ErrorNote, Label, Screen, TapeButton, TapeInput, focusRing, type WebState } from '../lib/ui';
+import { useTheme } from '../lib/theme';
 
 export default function ForgotPassword() {
+  const t = useTheme();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -47,7 +49,7 @@ export default function ForgotPassword() {
       />
       {error && <ErrorNote>{error}</ErrorNote>}
       <TapeButton title={sending ? 'Sending…' : 'Send reset link'} onPress={submit} disabled={sending || !email} />
-      <Pressable onPress={() => router.replace('/sign-in')} hitSlop={8} style={{ alignSelf: 'center', minHeight: 44, justifyContent: 'center' }}>
+      <Pressable onPress={() => router.replace('/sign-in')} hitSlop={8} accessibilityRole="link" style={({ focused }: WebState) => [{ alignSelf: 'center', minHeight: 44, justifyContent: 'center' }, focusRing(t, focused)]}>
         <Label style={{ textDecorationLine: 'underline' }}>Back to sign in</Label>
       </Pressable>
     </Screen>

@@ -94,8 +94,10 @@ export default function LeagueOverview() {
   const iSubmitted = !!current?.submitters?.some((s) => s.accountId === profile?.id);
 
   return (
-    <Screen label={league.name}>
+    <Screen label={league.name} wide>
       <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+        <View style={styles.cols}>
+        <View style={styles.col}>
         <JCard>
           <Label testID="season-progress">
             {league.concluded ? 'Season complete' : `Round ${current?.number ?? 1} of ${league.seasonLength}`}
@@ -150,6 +152,8 @@ export default function LeagueOverview() {
           )}
         </JCard>
 
+        </View>
+        <View style={styles.col}>
         <JCard>
           <HandText>Players</HandText>
           {current && (
@@ -176,6 +180,8 @@ export default function LeagueOverview() {
             );
           })}
         </JCard>
+        </View>
+        </View>
 
         <Sprocket />
         <HandText>The season</HandText>
@@ -262,6 +268,8 @@ export default function LeagueOverview() {
 }
 
 const styles = StyleSheet.create({
+  cols: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  col: { flexGrow: 1, flexBasis: 320, gap: 12 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   inline: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
 });

@@ -3,7 +3,7 @@ import { Pressable, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { fetchApi } from './api';
 import { useTheme } from './theme';
-import { Chip, TapeInput } from './ui';
+import { Chip, TapeInput, focusRing, type WebState } from './ui';
 
 export interface Reaction {
   emoji: string;
@@ -55,7 +55,7 @@ export function FavoriteHeart({ favorited, onPress }: { favorited: boolean; onPr
       accessibilityLabel={favorited ? 'Favorited' : 'Not favorited'}
       onPress={onPress}
       hitSlop={8}
-      style={{ alignSelf: 'flex-start' }}
+      style={({ focused }: WebState) => [{ alignSelf: 'flex-start' }, focusRing(t, focused)]}
     >
       <Svg width={28} height={28} viewBox="0 0 24 24">
         <Path

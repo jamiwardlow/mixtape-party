@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   PressableProps,
+  PressableStateCallbackType,
   StyleProp,
   StyleSheet,
   Text,
@@ -43,17 +44,24 @@ function Sticker({ style, radius, children }: { style?: StyleProp<ViewStyle>; ra
 /** Full-bleed centered page for screens that sit outside Screen (sign-in, join). */
 export function Page({ children }: { children: React.ReactNode }) {
   const t = useTheme();
-  return <View style={[styles.page, { backgroundColor: t.bg }]}>{children}</View>;
+  return (
+    <View style={[styles.page, { backgroundColor: t.bg }]}>
+      <View style={styles.pageInner}>{children}</View>
+    </View>
+  );
 }
 
-export function Screen({ label, children }: { label: string; children: React.ReactNode }) {
+/** `wide` screens (lists, standings) get the design's 1120px wrap; forms stay a readable column. */
+export function Screen({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   const t = useTheme();
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Text style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
+      <View style={[styles.wrap, { maxWidth: wide ? 1120 : 640 }]}>
+        <View style={styles.header}>
+          <Text accessibilityRole="header" style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
+        </View>
+        <View style={styles.body}>{children}</View>
       </View>
-      <View style={styles.body}>{children}</View>
     </SafeAreaView>
   );
 }
@@ -145,13 +153,21 @@ export function RoundGate({
   return <>{children}</>;
 }
 
+// react-native-web adds hovered/focused to Pressable's state; the RN types don't know them.
+export type WebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
+
+// Keyboard focus ring from the design's :focus-visible. A no-op on native, where nothing focuses.
+export const focusRing = (t: { cobalt: string }, focused?: boolean): ViewStyle =>
+  focused ? { outlineWidth: 3, outlineStyle: 'solid', outlineColor: t.cobalt, outlineOffset: 3 } : {};
+
 export function PressScale({
   children,
   style,
   ...props
 }: PressableProps & { style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const t = useTheme();
   return (
-    <Pressable {...props}>
+    <Pressable {...props} style={({ focused }: WebState) => [{ borderRadius: t.radius }, focusRing(t, focused)]}>
       <View style={style}>{children}</View>
     </Pressable>
   );
@@ -177,14 +193,15 @@ export function TapeButton({
         accessibilityState={{ disabled: !!disabled }}
         disabled={disabled}
         onPress={onPress}
-        style={({ pressed }) => [
+        style={({ pressed, hovered, focused }: WebState) => [
           styles.button,
           {
             borderColor: t.ink,
             borderWidth: t.border,
             backgroundColor: variant === 'secondary' ? t.shell : t.accent,
-            transform: pressed ? [{ translateX: t.shadow }, { translateY: t.shadow }] : [],
+            transform: pressed ? [{ translateX: t.shadow }, { translateY: t.shadow }] : hovered ? [{ translateX: -1 }, { translateY: -1 }] : [],
           },
+          focusRing(t, focused),
         ]}
       >
         <Text style={{ color: t.ink, fontFamily: t.font.display, fontSize: 16 }}>{title}</Text>
@@ -409,9 +426,11 @@ export function Chip({
       accessibilityState={{ selected: !!selected, disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={[
+      style={({ focused, hovered }: WebState) => [
         styles.pill,
         { borderColor: t.ink, borderWidth: t.border, backgroundColor: selected ? t.mint : t.shell, opacity: disabled ? 0.5 : 1 },
+        hovered && !disabled && !selected ? { backgroundColor: t.mint + '55' } : null,
+        focusRing(t, focused),
       ]}
     >
       {avatar !== undefined && <InitialDisc name={avatar} size={22} />}
@@ -572,7 +591,9 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  page: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
+  page: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  pageInner: { width: '100%', maxWidth: 440, gap: 12 },
+  wrap: { flex: 1, width: '100%', alignSelf: 'center' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   headerText: { fontSize: 28, transform: [{ rotate: '-2deg' }] },
   body: { flex: 1, padding: 16, gap: 12 },
