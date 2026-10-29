@@ -14,6 +14,7 @@ const GOOGLE_ERRORS: Record<string, string> = {
 
 // Same floor as POST /accounts (api/src/routes/accounts.ts); the server stays the authority.
 const MIN_PASSWORD = 8;
+const BAD_EMAIL = 'Enter a valid email address';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignIn() {
@@ -25,7 +26,7 @@ export default function SignIn() {
   const [mode, setMode] = useState<'sign-up' | 'sign-in'>(modeParam === 'sign-up' ? 'sign-up' : 'sign-in');
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<false | 'submit' | 'link'>(false);
   const [googling, setGoogling] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<TextInput>(null);
@@ -53,14 +54,14 @@ export default function SignIn() {
       return;
     }
     if (!EMAIL_RE.test(email.trim())) {
-      setError('Enter a valid email address');
+      setError(BAD_EMAIL);
       return;
     }
     if (mode === 'sign-up' && password.length < MIN_PASSWORD) {
       setError(`Password must be at least ${MIN_PASSWORD} characters`);
       return;
     }
-    setBusy(true);
+    setBusy('submit');
     try {
       // Optional on purpose: an empty field means no name, exactly as before this existed. Sending
       // it only on sign-up -- /sessions has no use for it, and signing in doesn't rename you.
@@ -89,10 +90,10 @@ export default function SignIn() {
       return;
     }
     if (!EMAIL_RE.test(email.trim())) {
-      setError('Enter a valid email address');
+      setError(BAD_EMAIL);
       return;
     }
-    setBusy(true);
+    setBusy('link');
     try {
       // 204 either way — an unknown address becomes a new passwordless account rather than an
       // error, so there is nothing here to branch on.
@@ -127,7 +128,7 @@ export default function SignIn() {
       {Platform.OS === 'web' && (
         // A full-page navigation, not a fetch: the OAuth redirect has to happen in the browser's
         // address bar, and the state cookie is set on the API's own origin along the way.
-        <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={busy || googling} onPress={() => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; }} />
+        <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={!!busy || googling} onPress={() => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; }} />
       )}
       {Platform.OS === 'web' && (
         <View style={styles.divider}>
@@ -183,7 +184,7 @@ export default function SignIn() {
         />
       )}
       {message && <ErrorNote>{message}</ErrorNote>}
-      <TapeButton title={busy ? (mode === 'sign-up' ? 'Creating account…' : 'Signing in…') : 'Continue'} onPress={submit} disabled={busy} />
+      <TapeButton title={busy === 'submit' ? (mode === 'sign-up' ? 'Creating account…' : 'Signing in…') : 'Continue'} onPress={submit} disabled={!!busy} />
       {mode === 'sign-in' && (
         <Label style={styles.link} onPress={() => router.push('/forgot-password')}>
           Forgot password?
@@ -200,7 +201,7 @@ export default function SignIn() {
         <>
           <Label style={styles.note}>Check {email} for a sign-in link.</Label>
           <Label style={styles.link} onPress={emailSignInLink}>
-            {busy ? 'Sending link…' : 'Resend link'}
+            {busy === 'link' ? 'Sending link…' : 'Resend link'}
           </Label>
           <Label style={styles.link} onPress={() => setLinkSent(false)}>
             Use a different email
@@ -209,7 +210,7 @@ export default function SignIn() {
       ) : (
         <>
           <Label style={styles.link} onPress={emailSignInLink}>
-            {busy ? 'Sending link…' : 'Email me a sign-in link'}
+            {busy === 'link' ? 'Sending link…' : 'Email me a sign-in link'}
           </Label>
           {mode === 'sign-in' && <Label style={styles.note}>No account yet? We'll create one for this address.</Label>}
         </>

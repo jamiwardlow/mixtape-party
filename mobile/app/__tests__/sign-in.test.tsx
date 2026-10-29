@@ -315,6 +315,7 @@ describe('validation and a11y', () => {
     await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'jami@example.com');
     const pending = fireEvent.press(screen.getByText('Email me a sign-in link'));
     await waitFor(() => expect(screen.getByText('Sending link…')).toBeTruthy());
+    expect(screen.getByText('Continue')).toBeTruthy(); // not mislabelled as signing in
     await act(async () => { release(new Response(null, { status: 204 })); await pending; });
     expect(screen.getByText('Resend link')).toBeTruthy();
   });
