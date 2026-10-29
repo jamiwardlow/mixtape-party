@@ -222,3 +222,17 @@ describe('link layout', () => {
     expect(screen.getByText('Google sign-in was cancelled.')).toBeTruthy();
   });
 });
+
+describe('Google button on web', () => {
+  const { Platform } = require('react-native');
+  const original = Platform.OS;
+  afterEach(() => { Platform.OS = original; });
+
+  it('comes before the email form', async () => {
+    Platform.OS = 'web';
+    await render(<SignIn />);
+    const tree = JSON.stringify(screen.toJSON());
+    expect(tree.indexOf('Continue with Google')).toBeGreaterThan(-1);
+    expect(tree.indexOf('Continue with Google')).toBeLessThan(tree.indexOf('"Email"'));
+  });
+});

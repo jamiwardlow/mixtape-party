@@ -95,6 +95,18 @@ export default function SignIn() {
         <Chip label="Sign in" selected={mode === 'sign-in'} onPress={() => changeMode('sign-in')} />
         <Chip label="Create account" selected={mode === 'sign-up'} onPress={() => changeMode('sign-up')} />
       </View>
+      {Platform.OS === 'web' && (
+        // A full-page navigation, not a fetch: the OAuth redirect has to happen in the browser's
+        // address bar, and the state cookie is set on the API's own origin along the way.
+        <TapeButton title="Continue with Google" variant="secondary" disabled={busy} onPress={() => { window.location.href = `${API_URL}/auth/google/start`; }} />
+      )}
+      {Platform.OS === 'web' && (
+        <View style={styles.divider}>
+          <View style={[styles.rule, { backgroundColor: t.ink }]} />
+          <Label>or</Label>
+          <View style={[styles.rule, { backgroundColor: t.ink }]} />
+        </View>
+      )}
       <TapeInput
         placeholder="Email"
         autoCapitalize="none"
@@ -138,11 +150,6 @@ export default function SignIn() {
         <Label style={styles.link} onPress={emailSignInLink}>
           Email me a sign-in link
         </Label>
-      )}
-      {Platform.OS === 'web' && (
-        // A full-page navigation, not a fetch: the OAuth redirect has to happen in the browser's
-        // address bar, and the state cookie is set on the API's own origin along the way.
-        <TapeButton title="Continue with Google" disabled={busy} onPress={() => { window.location.href = `${API_URL}/auth/google/start`; }} />
       )}
     </Page>
   );
