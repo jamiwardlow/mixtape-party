@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mixtape Party</title>
+<meta name="description" content="Make a playlist with your friends. Each round has a theme, everyone secretly adds one track, then you guess who picked what.">
+<meta property="og:title" content="Mixtape Party">
+<meta property="og:description" content="Everyone picks a song. You guess whose.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mixtape-party.com/">
+<meta name="theme-color" content="#FFD93D">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+/* Sticker Pop tokens, from DESIGN.md. Values match mobile/lib/theme.ts. */
+:root{
+  --bg:#FFD93D;--panel:#FFFFFF;--ink:#1A1033;--muted:#5B4A2B;
+  --c1:#FF4F9A;--c2:#3D5AFE;--c3:#5EEAD4;
+  --bw:3px;--r:20px;--shadow:5px 5px 0 var(--ink);--tilt:-2deg;
+  --f-display:'Bagel Fat One','Arial Rounded MT Bold',sans-serif;
+  --f-body:'Courier Prime','Courier New',monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--f-body);padding-inline:max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-right))}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;line-height:1.05;margin:0;text-wrap:balance}
+p{margin:0}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--c2);outline-offset:3px}
+.wrap{max-width:1120px;margin-inline:auto;padding-block:clamp(16px,3vw,32px) 48px}
+.site{border:var(--bw) solid var(--ink);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);background:var(--bg)}
+.sec{padding:clamp(24px,5vw,56px) clamp(16px,4vw,48px)}
+.muted{color:var(--muted)}
+.tape{display:inline-block;font:700 12px var(--f-body);letter-spacing:.14em;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:4px 10px;transform:rotate(var(--tilt));border-radius:3px}
+.card{background:var(--panel);border:var(--bw) solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;min-width:0}
+.grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
+.btn{font:700 15px var(--f-body);background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:999px;padding:12px 22px;box-shadow:var(--shadow);transition:transform .1s,box-shadow .1s;text-decoration:none;display:inline-block;text-align:center}
+.btn:hover{transform:translate(-1px,-1px)}
+.btn:active{transform:translate(3px,3px);box-shadow:none}
+.btn.alt{background:var(--c2);color:#fff}
+.btn.sm{padding:8px 14px;font-size:13px}
+.svc{display:inline-flex;font:700 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;border:var(--bw) solid var(--ink);border-radius:99px;padding:2px 10px;background:var(--panel);color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+
+/* badge logo */
+.badge{background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:16px;padding:9px 14px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-4deg);display:grid;font:22px/.95 var(--f-display);text-align:center}
+.badge span:last-child{color:var(--bg)}
+
+/* cassette */
+.k svg{display:block;width:100%;height:auto}
+.kb{fill:#FF4F9A;stroke:var(--ink);stroke-width:4}
+.kl{fill:#fff;stroke:var(--ink);stroke-width:2.4}
+.ks{fill:#3D5AFE}
+.kt{fill:var(--ink);font:700 14px var(--f-body);letter-spacing:.06em}
+.kw{fill:var(--ink);stroke:var(--ink);stroke-width:2}
+.kd{fill:var(--ink)}.kf{fill:rgba(0,0,0,.18)}
+.ktp{fill:#2a1b12}.kh{fill:#fff;stroke:var(--ink);stroke-width:1.5}.kr2{stroke:var(--ink);stroke-width:2;stroke-linecap:round;fill:none}
+.kr{stroke:#fff;stroke-width:1.2;stroke-linecap:round;fill:none;opacity:.35}
+.reel{transform-box:fill-box;transform-origin:center}
+@media(prefers-reduced-motion:no-preference){.reel{animation:spin 6s linear infinite}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* nav + hero */
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:24px}
+.nav ul{display:flex;gap:20px;list-style:none;margin:0;padding:0;font-weight:700;font-size:14px}
+.hero{display:grid;gap:32px;align-items:center;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)}
+.hero h1{font-size:clamp(40px,7.5vw,84px);margin-top:16px}
+.hero h1 mark{background:var(--c1);color:var(--ink);padding:0 .15em;border:var(--bw) solid var(--ink);border-radius:12px;display:inline-block;transform:rotate(-2deg)}
+.hero h1 mark.b{background:var(--c2);color:#fff;transform:rotate(1.5deg)}
+.lead{font-size:18px;max-width:46ch;margin-top:20px}
+.cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:24px}
+.pile{position:relative;min-height:320px}
+.pile .k{position:absolute;filter:drop-shadow(6px 6px 0 var(--ink))}
+.pile .k:nth-child(2){width:78%;left:0;top:10px;transform:rotate(-7deg)}
+.pile .k:nth-child(3){width:62%;right:0;bottom:0;transform:rotate(9deg);--b:#3D5AFE}
+.pile .k:nth-child(3) .kb{fill:#3D5AFE}.pile .k:nth-child(3) .ks{fill:#5EEAD4}
+.sticker{position:absolute;right:4%;top:0;z-index:2;background:var(--c3);border:var(--bw) solid var(--ink);border-radius:50%;width:110px;height:110px;display:grid;place-items:center;text-align:center;font:18px/1 var(--f-display);transform:rotate(12deg);box-shadow:var(--shadow);padding:10px}
+@media(max-width:760px){.hero{grid-template-columns:1fr}.pile{min-height:260px}}
+
+/* sections */
+.how h2{font-size:clamp(28px,4.5vw,44px);margin-bottom:24px}
+.step{display:grid;gap:10px;align-content:start}
+.step h3{font-size:24px}
+.step .n{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:20px var(--f-display);background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink)}
+.step:nth-child(2) .n{background:var(--c2);color:#fff}.step:nth-child(3) .n{background:var(--c3)}
+.band{background:var(--c2);color:#fff;border-block:var(--bw) solid var(--ink);display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.band h2{font-size:clamp(24px,4vw,36px);max-width:22ch}
+.final{text-align:center;display:grid;gap:18px;justify-items:center}
+.final h2{font-size:clamp(32px,6vw,60px);max-width:16ch}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted);border-top:var(--bw) solid var(--ink);padding:20px clamp(16px,4vw,48px)}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="site">
+
+<header class="sec" style="padding-bottom:8px">
+  <nav class="nav" aria-label="Main">
+    <a href="/" aria-label="Mixtape Party" style="text-decoration:none"><div class="badge"><span>Mixtape</span><span>Party!</span></div></a>
+    <ul><li><a href="#how">How it works</a></li><li><a href="#services">Services</a></li></ul>
+    <a class="btn sm" href="https://app.mixtape-party.com/">Start a league</a>
+  </nav>
+
+  <div class="hero">
+    <div>
+      <span class="tape">A music curation game for your group chat</span>
+      <h1>Everyone picks a song. <mark>You guess</mark> <mark class="b">whose.</mark></h1>
+      <p class="lead">Make a playlist with your friends. Each round has a theme, everyone secretly adds one track, then you guess who picked what.</p>
+      <div class="cta"><a class="btn" href="https://app.mixtape-party.com/">Start a league</a><a class="btn alt" href="https://app.mixtape-party.com/">Join with a code</a></div>
+    </div>
+    <div class="pile" aria-hidden="true"><div class="sticker">Who<br>picked<br>it?!</div><div class="k" data-k="Side A"></div><div class="k" data-k="Side B"></div></div>
+  </div>
+</header>
+
+<section class="sec how" id="how" style="padding-top:32px">
+  <h2>One round, three steps</h2>
+  <div class="grid">
+    <div class="card step"><span class="n">1</span><h3>Pick a song</h3><p>Every round has a theme. Submit your best pick from YouTube Music or Bandcamp.</p></div>
+    <div class="card step"><span class="n">2</span><h3>Guess the picker</h3><p>Listen with names hidden. Match each pick to the friend you think added it.</p></div>
+    <div class="card step"><span class="n">3</span><h3>See the reveal</h3><p>Find out who picked what, who guessed right, and where everyone ranks.</p></div>
+  </div>
+</section>
+
+<section class="sec band" id="services">
+  <h2>Listen paywall-free</h2>
+  <div class="chips"><span class="svc">YT Music</span><span class="svc">Bandcamp</span></div>
+  <p style="max-width:44ch">When a round ends, listen to an open-access playlist on YouTube or embedded tracks from Bandcamp. That's how we party.</p>
+</section>
+
+<section class="sec final">
+  <h2>Your friends have great taste. They should make you a mixtape.</h2>
+  <a class="btn" href="https://app.mixtape-party.com/">Start a league</a>
+  <p class="muted" style="font-size:14px">Invite friends with a code or a link.</p>
+</section>
+
+<footer class="foot"><span>© Mixtape Party</span><span>Side B: privacy, terms, contact</span></footer>
+
+</div></div>
+<script>
+// Cassette markup from the design artifact; one template, stamped per [data-k].
+const K=t=>`<svg viewBox="0 0 200 130" role="img" aria-label="Cassette tape"><rect class="kb" x="3" y="3" width="194" height="124" rx="10"/><rect class="kl" x="13" y="11" width="174" height="76" rx="4"/><rect class="ks" x="13" y="11" width="174" height="12" rx="4"/><text class="kt" x="100" y="40" text-anchor="middle">${t}</text><path class="kr" d="M30 44H170" style="stroke:#1A1033"/><rect class="kw" x="38" y="49" width="124" height="29" rx="14.5"/><g transform="translate(53 63.5)"><circle r="13" class="ktp"/><g class="reel"><circle r="7.5" class="kh"/><path class="kr2" d="M0-7.5V-4M6.5 3.7L3.5 2M-6.5 3.7L-3.5 2"/></g></g><g transform="translate(147 63.5)"><circle r="10" class="ktp"/><g class="reel"><circle r="7.5" class="kh"/><path class="kr2" d="M0-7.5V-4M6.5 3.7L3.5 2M-6.5 3.7L-3.5 2"/></g></g><path class="kf" d="M40 127L52 94H148L160 127z"/><rect class="kd" x="91" y="104" width="18" height="9" rx="2"/><circle class="kd" cx="68" cy="114" r="4.5"/><circle class="kd" cx="132" cy="114" r="4.5"/><rect class="kd" x="78" y="120" width="5" height="4" rx="1"/><rect class="kd" x="117" y="120" width="5" height="4" rx="1"/><circle class="kd" cx="9" cy="9" r="2.5"/><circle class="kd" cx="191" cy="9" r="2.5"/><circle class="kd" cx="9" cy="121" r="2.5"/><circle class="kd" cx="191" cy="121" r="2.5"/></svg>`;
+document.querySelectorAll('[data-k]').forEach(e=>{e.classList.add('k');e.innerHTML=K(e.dataset.k)});
+</script>
+</body>
+</html>
