@@ -24,7 +24,8 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [mode, setMode] = useState<'sign-up' | 'sign-in'>(modeParam === 'sign-up' ? 'sign-up' : 'sign-in');
-  const [error, setError] = useState<string | null>(null);
+  // Seeded from ?error= so the first edit, mode switch or submit clears it like any other error.
+  const [error, setError] = useState<string | null>(googleError ? GOOGLE_ERRORS[googleError] ?? 'Google sign-in failed.' : null);
   const [linkSent, setLinkSent] = useState(false);
   const [busy, setBusy] = useState<false | 'submit' | 'link'>(false);
   const [googling, setGoogling] = useState(false);
@@ -116,7 +117,6 @@ export default function SignIn() {
   }, []);
 
   const t = useTheme();
-  const message = error ?? (googleError ? GOOGLE_ERRORS[googleError] ?? 'Google sign-in failed.' : null);
 
   return (
     <Page>
@@ -183,7 +183,7 @@ export default function SignIn() {
           onChangeText={setDisplayName}
         />
       )}
-      {message && <ErrorNote>{message}</ErrorNote>}
+      {error && <ErrorNote>{error}</ErrorNote>}
       <TapeButton title={busy === 'submit' ? (mode === 'sign-up' ? 'Creating account…' : 'Signing in…') : 'Continue'} onPress={submit} disabled={!!busy} />
       {mode === 'sign-in' && (
         <Label style={styles.link} onPress={() => router.push('/forgot-password')}>

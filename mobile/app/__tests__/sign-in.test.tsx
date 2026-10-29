@@ -242,6 +242,13 @@ describe('link layout', () => {
     await render(<SignIn />);
     expect(screen.getByText('Google sign-in was cancelled.')).toBeTruthy();
   });
+
+  it('clears the Google error on the first edit', async () => {
+    mockParams = { error: 'google_failed' };
+    await render(<SignIn />);
+    await fireEvent.changeText(screen.getByPlaceholderText('Email'), 'a@b.co');
+    expect(screen.queryByText('Google sign-in failed. Try again.')).toBeNull();
+  });
 });
 
 describe('Google button on web', () => {
