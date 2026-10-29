@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
@@ -22,6 +22,9 @@ export default function SignIn() {
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
+  const nameRef = useRef<TextInput>(null);
 
   // Editing the address or switching mode invalidates whatever the last action said: an error
   // about the old input, or "check your email" naming an address the link never went to.
@@ -111,17 +114,36 @@ export default function SignIn() {
         placeholder="Email"
         autoCapitalize="none"
         keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+        autoCorrect={false}
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
         value={email}
         onChangeText={changeEmail}
       />
       <TapeInput
+        ref={passwordRef}
         placeholder="Password"
-        secureTextEntry
+        secureTextEntry={!showPassword}
+        autoCapitalize="none"
+        autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
+        textContentType={mode === 'sign-up' ? 'newPassword' : 'password'}
+        returnKeyType={mode === 'sign-up' ? 'next' : 'go'}
+        onSubmitEditing={() => (mode === 'sign-up' ? nameRef.current?.focus() : submit())}
         value={password}
         onChangeText={setPassword}
       />
+      <Label style={styles.showLink} accessibilityRole="button" onPress={() => setShowPassword((v) => !v)}>
+        {showPassword ? 'Hide password' : 'Show password'}
+      </Label>
       {mode === 'sign-up' && (
         <TapeInput
+          ref={nameRef}
+          autoComplete="name"
+          textContentType="name"
+          returnKeyType="go"
+          onSubmitEditing={submit}
           placeholder="Display name (optional)"
           // The API caps a name at 40 and PATCH rejects anything longer, so stop at 40 here rather
           // than accept a name at sign-up that My Account would later refuse to save.
@@ -171,6 +193,7 @@ const styles = StyleSheet.create({
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
   link: { paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
+  showLink: { minHeight: 44, textAlign: 'right', textDecorationLine: 'underline', textAlignVertical: 'center' },
   modes: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rule: { flex: 1, height: 3 },

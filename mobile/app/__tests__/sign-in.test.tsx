@@ -257,3 +257,26 @@ describe('Google button on web', () => {
     expect(tree.indexOf('Continue with Google')).toBeLessThan(tree.indexOf('"Email"'));
   });
 });
+
+describe('autofill and keyboard', () => {
+  it('hints the password field by mode and toggles visibility', async () => {
+    await render(<SignIn />);
+    const pw = () => screen.getByPlaceholderText('Password');
+    expect(pw().props.autoComplete).toBe('current-password');
+    expect(pw().props.secureTextEntry).toBe(true);
+
+    await switchToSignUp();
+    expect(pw().props.autoComplete).toBe('new-password');
+
+    await fireEvent.press(screen.getByText('Show password'));
+    expect(pw().props.secureTextEntry).toBe(false);
+    expect(screen.getByText('Hide password')).toBeTruthy();
+  });
+
+  it('submits from the password field on Enter in sign-in mode', async () => {
+    await render(<SignIn />);
+    await fillCredentials();
+    await fireEvent(screen.getByPlaceholderText('Password'), 'submitEditing');
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/sessions'), expect.anything());
+  });
+});

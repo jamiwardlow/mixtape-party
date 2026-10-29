@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type Ref, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -214,7 +214,7 @@ export function TapeButton({
 // web branch is a DOM node and can't reach into the StyleSheet.
 const INPUT_SHAPE = { borderRadius: 14, padding: 12, fontSize: 15, minHeight: 44 };
 
-export function TapeInput(props: TextInputProps) {
+export function TapeInput(props: TextInputProps & { ref?: Ref<TextInput> }) {
   const t = useTheme();
   return (
     <TextInput
