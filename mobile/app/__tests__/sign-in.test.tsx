@@ -3,7 +3,7 @@ import SignIn from '../sign-in';
 
 const mockSignIn = jest.fn();
 const mockPush = jest.fn();
-let mockParams: { error?: string } = {};
+let mockParams: { error?: string; mode?: string } = {};
 
 jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args) },
@@ -35,28 +35,30 @@ async function fillCredentials(email = 'jami@example.com', password = 'hunter2')
   await fireEvent.changeText(screen.getByPlaceholderText('Password'), password);
 }
 
-const switchToSignIn = () => fireEvent.press(screen.getByText('Already have an account? Sign in'));
+const switchToSignUp = () => fireEvent.press(screen.getByText('Create account'));
+const switchToSignIn = () => fireEvent.press(screen.getByText('Sign in'));
 
 // The mode branch decides which endpoint a submit hits -- crossing them wires "create account"
 // to the login route, which fails for exactly the new users it is meant to serve.
 describe('submit', () => {
-  it('posts to /accounts in sign-up mode and /sessions after switching', async () => {
+  it('posts to /sessions by default and /accounts after switching', async () => {
     await render(<SignIn />);
     await fillCredentials();
 
-    await fireEvent.press(screen.getByText('Create account'));
-    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/accounts'), expect.anything());
-
-    await switchToSignIn();
-    await fireEvent.press(screen.getByText('Sign in'));
+    await fireEvent.press(screen.getByText('Continue'));
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/sessions'), expect.anything());
+
+    await switchToSignUp();
+    await fireEvent.press(screen.getByText('Continue'));
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/accounts'), expect.anything());
   });
 
   it('signs in with the returned token', async () => {
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
 
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     expect(mockSignIn).toHaveBeenCalledWith('tok-1');
   });
@@ -64,7 +66,7 @@ describe('submit', () => {
   it('refuses to post empty credentials', async () => {
     await render(<SignIn />);
 
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     expect(fetch).not.toHaveBeenCalled();
     expect(screen.getByText('Enter your email and password')).toBeTruthy();
@@ -72,10 +74,11 @@ describe('submit', () => {
 
   it('surfaces the error the API sends back', async () => {
     (fetch as jest.Mock).mockResolvedValue(apiError('Email already registered'));
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
 
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     expect(screen.getByText('Email already registered')).toBeTruthy();
     expect(mockSignIn).not.toHaveBeenCalled();
@@ -86,14 +89,15 @@ describe('submit', () => {
   it('disables submit and ignores extra presses while a request is in flight', async () => {
     let release!: (r: Response) => void;
     (fetch as jest.Mock).mockReturnValue(new Promise<Response>((r) => { release = r; }));
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
 
     // Deliberately not awaited: the handler is parked on a fetch that has not settled, so the
     // act() scope this opens only closes once release() is called below.
-    const pending = fireEvent.press(screen.getByText('Create account'));
-    await waitFor(() => expect(screen.getByText('Create account')).toBeDisabled());
-    await fireEvent.press(screen.getByText('Create account'));
+    const pending = fireEvent.press(screen.getByText('Continue'));
+    await waitFor(() => expect(screen.getByText('Continue')).toBeDisabled());
+    await fireEvent.press(screen.getByText('Continue'));
 
     await act(async () => { release(ok()); await pending; });
 
@@ -103,10 +107,11 @@ describe('submit', () => {
 
   it('reports a network failure instead of rejecting', async () => {
     (fetch as jest.Mock).mockRejectedValue(new Error('offline'));
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
 
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     expect(screen.getByText("Couldn't reach the server. Try again.")).toBeTruthy();
   });
@@ -118,11 +123,12 @@ describe('display name', () => {
   const NAME_FIELD = 'Display name (optional)';
 
   it('sends a name given at sign-up', async () => {
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
     await fireEvent.changeText(screen.getByPlaceholderText(NAME_FIELD), '  Sam  ');
 
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/accounts'),
@@ -131,10 +137,11 @@ describe('display name', () => {
   });
 
   it('signs up without one', async () => {
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
 
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/accounts'),
@@ -171,9 +178,10 @@ describe('stale state', () => {
 
   it('clears the error when switching mode', async () => {
     (fetch as jest.Mock).mockResolvedValue(apiError('Email already registered'));
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     await fillCredentials();
-    await fireEvent.press(screen.getByText('Create account'));
+    await fireEvent.press(screen.getByText('Continue'));
 
     await switchToSignIn();
 
@@ -181,9 +189,24 @@ describe('stale state', () => {
   });
 });
 
+describe('initial mode', () => {
+  it('defaults to sign-in', async () => {
+    await render(<SignIn />);
+    expect(screen.getByText('Forgot password?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeSelected();
+  });
+
+  it('opens on Create account for ?mode=sign-up', async () => {
+    mockParams = { mode: 'sign-up' };
+    await render(<SignIn />);
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeSelected();
+  });
+});
+
 describe('link layout', () => {
   // Nothing to recover in sign-up mode -- the account does not exist yet.
   it('offers password recovery only to returning users', async () => {
+    mockParams = { mode: 'sign-up' };
     await render(<SignIn />);
     expect(screen.queryByText('Forgot password?')).toBeNull();
 

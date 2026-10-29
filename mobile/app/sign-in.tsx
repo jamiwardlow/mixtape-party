@@ -4,7 +4,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
-import { ErrorNote, Label, Page, StickerBadge, TapeButton, TapeInput } from '../lib/ui';
+import { Chip, ErrorNote, Label, Page, StickerBadge, TapeButton, TapeInput } from '../lib/ui';
 
 // What /auth/google/callback bounces back here as ?error= when the flow doesn't finish.
 const GOOGLE_ERRORS: Record<string, string> = {
@@ -14,11 +14,11 @@ const GOOGLE_ERRORS: Record<string, string> = {
 
 export default function SignIn() {
   const { signIn } = useSession();
-  const { error: googleError } = useLocalSearchParams<{ error?: string }>();
+  const { error: googleError, mode: modeParam } = useLocalSearchParams<{ error?: string; mode?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [mode, setMode] = useState<'sign-up' | 'sign-in'>('sign-up');
+  const [mode, setMode] = useState<'sign-up' | 'sign-in'>(modeParam === 'sign-up' ? 'sign-up' : 'sign-in');
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -31,8 +31,8 @@ export default function SignIn() {
     setLinkSent(false);
   }
 
-  function toggleMode() {
-    setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
+  function changeMode(next: 'sign-up' | 'sign-in') {
+    setMode(next);
     setError(null);
     setLinkSent(false);
   }
@@ -91,6 +91,10 @@ export default function SignIn() {
   return (
     <Page>
       <StickerBadge />
+      <View style={styles.modes}>
+        <Chip label="Sign in" selected={mode === 'sign-in'} onPress={() => changeMode('sign-in')} />
+        <Chip label="Create account" selected={mode === 'sign-up'} onPress={() => changeMode('sign-up')} />
+      </View>
       <TapeInput
         placeholder="Email"
         autoCapitalize="none"
@@ -115,7 +119,7 @@ export default function SignIn() {
         />
       )}
       {message && <ErrorNote>{message}</ErrorNote>}
-      <TapeButton title={mode === 'sign-up' ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
+      <TapeButton title="Continue" onPress={submit} disabled={busy} />
       {mode === 'sign-in' && (
         <Label style={styles.link} onPress={() => router.push('/forgot-password')}>
           Forgot password?
@@ -140,10 +144,6 @@ export default function SignIn() {
         // address bar, and the state cookie is set on the API's own origin along the way.
         <TapeButton title="Continue with Google" disabled={busy} onPress={() => { window.location.href = `${API_URL}/auth/google/start`; }} />
       )}
-
-      <Label style={styles.switch} onPress={toggleMode}>
-        {mode === 'sign-up' ? 'Already have an account? Sign in' : 'New here? Create an account'}
-      </Label>
     </Page>
   );
 }
@@ -153,9 +153,7 @@ const styles = StyleSheet.create({
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
   link: { paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
-  // Pushed away from the alternatives above it — switching account mode is a different
-  // decision from picking a way to sign in.
-  switch: { marginTop: 12, paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
+  modes: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rule: { flex: 1, height: 3 },
 });
