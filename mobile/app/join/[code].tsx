@@ -1,8 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { useTheme } from '../../lib/theme';
+import { BodyText, ErrorNote, HandText, ReelSpinner, TapeButton } from '../../lib/ui';
 
 interface InvitePreview {
   league: { name: string; seasonLength: number };
@@ -13,6 +15,7 @@ interface InvitePreview {
 }
 
 export default function JoinLeague() {
+  const t = useTheme();
   const { code } = useLocalSearchParams<{ code: string }>();
   const { token, setPendingInviteCode } = useSession();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
@@ -67,37 +70,37 @@ export default function JoinLeague() {
 
   if (joined) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>You're in!</Text>
-        <Button title="Go to home" onPress={() => router.replace('/home')} />
+      <View style={[styles.container, { backgroundColor: t.bg }]}>
+        <HandText style={styles.title}>You're in!</HandText>
+        <TapeButton title="Go to home" onPress={() => router.replace('/home')} />
       </View>
     );
   }
 
   if (!preview) {
     return (
-      <View style={styles.container}>
-        {error ? <Text style={styles.error}>{error}</Text> : <ActivityIndicator />}
+      <View style={[styles.container, { backgroundColor: t.bg }]}>
+        {error ? <ErrorNote>{error}</ErrorNote> : <ReelSpinner />}
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{preview.league.name}</Text>
-      <Text style={styles.body}>Hosted by {preview.host.displayName ?? 'a friend'}</Text>
-      {preview.currentRound?.theme && <Text style={styles.body}>Current theme: {preview.currentRound.theme}</Text>}
-      <Text style={styles.body}>{preview.playerCount} player(s) already joined</Text>
+    <View style={[styles.container, { backgroundColor: t.bg }]}>
+      <HandText style={styles.title}>{preview.league.name}</HandText>
+      <BodyText>Hosted by {preview.host.displayName ?? 'a friend'}</BodyText>
+      {preview.currentRound?.theme && <BodyText>Current theme: {preview.currentRound.theme}</BodyText>}
+      <BodyText>{preview.playerCount} player(s) already joined</BodyText>
       {preview.players.map((player, i) => (
-        <Text key={i} style={styles.body}>
+        <BodyText key={i}>
           • {player.displayName ?? 'A player'}
-        </Text>
+        </BodyText>
       ))}
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <ErrorNote>{error}</ErrorNote>}
       {canJoin ? (
-        <Button title={joining ? 'Joining…' : 'Join league'} onPress={join} disabled={joining} />
+        <TapeButton title={joining ? 'Joining…' : 'Join league'} onPress={join} disabled={joining} />
       ) : (
-        <Button title="Sign up to join" onPress={continueToJoin} />
+        <TapeButton title="Sign up to join" onPress={continueToJoin} />
       )}
     </View>
   );
@@ -105,7 +108,5 @@ export default function JoinLeague() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 24, fontWeight: '600' },
-  body: { color: '#555' },
-  error: { color: 'red' },
+  title: { fontSize: 32 },
 });

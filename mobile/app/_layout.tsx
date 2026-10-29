@@ -1,3 +1,6 @@
+import { BagelFatOne_400Regular } from '@expo-google-fonts/bagel-fat-one';
+import { CourierPrime_400Regular, CourierPrime_700Bold } from '@expo-google-fonts/courier-prime';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useOpenTappedNotification } from '../lib/notificationTap';
@@ -16,13 +19,15 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const { token, isLoading } = useSession();
+  const [fontsLoaded, fontError] = useFonts({ BagelFatOne_400Regular, CourierPrime_400Regular, CourierPrime_700Bold });
 
   const signedIn = token !== null;
   // A tap while loading or signed out waits, then routes once the guarded screens exist.
   useOpenTappedNotification(!isLoading && signedIn);
   useRegisterPushToken(token);
 
-  if (isLoading) return null;
+  // A font failure falls back to system fonts rather than blocking the app.
+  if (isLoading || (!fontsLoaded && !fontError)) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

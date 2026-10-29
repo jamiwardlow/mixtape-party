@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Button,
   Image,
   Platform,
   Pressable,
@@ -20,17 +19,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ServiceName } from './rounds';
 import { SERVICE_META, useTheme } from './theme';
 
-// Deliberately undesigned: stock React Native primitives and system fonts while
-// the rest of the app is built out. The cassette/J-card look was removed, but
-// its component names stay so the screens are untouched and a real design can
-// land here without editing them again.
+// Sticker Pop primitives. Component names predate the design; screens import them as-is.
+
+/** A solid ink block offset behind a child: the hard "sticker" shadow, drawn as a view so Android gets it too. */
+function Sticker({ style, radius, children }: { style?: StyleProp<ViewStyle>; radius: number; children: React.ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={[{ marginRight: t.shadow, marginBottom: t.shadow }, style]}>
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', top: t.shadow, left: t.shadow, right: -t.shadow, bottom: -t.shadow, borderRadius: radius, backgroundColor: t.ink }}
+      />
+      {children}
+    </View>
+  );
+}
 
 export function Screen({ label, children }: { label: string; children: React.ReactNode }) {
   const t = useTheme();
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-      <View style={[styles.header, { borderBottomColor: t.hairline }]}>
-        <Text style={[styles.headerText, { color: t.ink }]}>{label}</Text>
+      <View style={styles.header}>
+        <Text style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
       </View>
       <View style={styles.body}>{children}</View>
     </SafeAreaView>
@@ -43,18 +53,23 @@ export function ReelHoles(_props: { color: string }) {
 }
 
 export function ReelSpinner({ color }: { color?: string }) {
-  return <ActivityIndicator color={color} style={styles.spinner} />;
+  const t = useTheme();
+  return <ActivityIndicator color={color ?? t.ink} style={styles.spinner} />;
 }
 
 export function JCard({ style, children }: { style?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const t = useTheme();
-  return <View style={[styles.card, { backgroundColor: t.shell, borderColor: t.hairline }, style]}>{children}</View>;
+  return (
+    <Sticker radius={t.radius}>
+      <View style={[styles.card, { backgroundColor: t.shell, borderColor: t.ink, borderWidth: t.border, borderRadius: t.radius }, style]}>{children}</View>
+    </Sticker>
+  );
 }
 
 export function Label({ style, children, ...props }: TextProps) {
   const t = useTheme();
   return (
-    <Text {...props} style={[styles.label, { color: t.inkMuted }, style]}>
+    <Text {...props} style={[styles.label, { color: t.inkMuted, fontFamily: t.font.body }, style]}>
       {children}
     </Text>
   );
@@ -63,7 +78,7 @@ export function Label({ style, children, ...props }: TextProps) {
 export function HandText({ style, children, ...props }: TextProps) {
   const t = useTheme();
   return (
-    <Text {...props} style={[styles.heading, { color: t.ink }, style]}>
+    <Text {...props} style={[styles.heading, { color: t.ink, fontFamily: t.font.display }, style]}>
       {children}
     </Text>
   );
@@ -72,7 +87,7 @@ export function HandText({ style, children, ...props }: TextProps) {
 export function BodyText({ style, children, ...props }: TextProps) {
   const t = useTheme();
   return (
-    <Text {...props} style={[styles.body_, { color: t.ink }, style]}>
+    <Text {...props} style={[styles.body_, { color: t.ink, fontFamily: t.font.body }, style]}>
       {children}
     </Text>
   );
@@ -81,11 +96,17 @@ export function BodyText({ style, children, ...props }: TextProps) {
 /** Cover art for a submitted track; renders nothing when the service has none (Bandcamp). */
 export function Thumb({ url, size = 48 }: { url?: string | null; size?: number }) {
   if (!url) return null;
-  return <Image source={{ uri: url }} accessibilityIgnoresInvertColors style={{ width: size, height: size, borderRadius: 4 }} />;
+  return <Image source={{ uri: url }} accessibilityIgnoresInvertColors style={{ width: size, height: size, borderRadius: 8, borderWidth: 2, borderColor: '#1A1033' }} />;
 }
 
 export function ServiceBadge({ service }: { service: ServiceName }) {
-  return <Label>{SERVICE_META[service]?.label ?? service}</Label>;
+  const t = useTheme();
+  return (
+    <View style={[styles.chip, { borderColor: t.ink, backgroundColor: t.shell }]}>
+      <View style={[styles.dot, { backgroundColor: SERVICE_META[service]?.color ?? t.ink, borderColor: t.ink }]} />
+      <Text style={{ color: t.ink, fontFamily: t.font.bold, fontSize: 12 }}>{SERVICE_META[service]?.label ?? service}</Text>
+    </View>
+  );
 }
 
 export function RoundGate({
@@ -133,20 +154,41 @@ export function TapeButton({
   title,
   onPress,
   disabled,
+  variant = 'primary',
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
-  // Accepted and ignored: stock Button has no variants. Callers keep passing it
-  // so the distinction survives for whatever design lands next.
   variant?: 'primary' | 'secondary';
 }) {
-  return <Button title={title} onPress={onPress} disabled={disabled} />;
+  const t = useTheme();
+  return (
+    <Sticker radius={999} style={{ alignSelf: 'flex-start', opacity: disabled ? 0.5 : 1 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled: !!disabled }}
+        disabled={disabled}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.button,
+          {
+            borderColor: t.ink,
+            borderWidth: t.border,
+            backgroundColor: variant === 'secondary' ? t.shell : t.accent,
+            transform: pressed ? [{ translateX: t.shadow }, { translateY: t.shadow }] : [],
+          },
+        ]}
+      >
+        <Text style={{ color: t.ink, fontFamily: t.font.display, fontSize: 16 }}>{title}</Text>
+      </Pressable>
+    </Sticker>
+  );
 }
 
 // The box shape TapeInput and TapeDateField's web control share. It lives out here because the
 // web branch is a DOM node and can't reach into the StyleSheet.
-const INPUT_SHAPE = { borderRadius: 6, padding: 12, fontSize: 15, minHeight: 44 };
+const INPUT_SHAPE = { borderRadius: 14, padding: 12, fontSize: 15, minHeight: 44 };
 
 export function TapeInput(props: TextInputProps) {
   const t = useTheme();
@@ -154,7 +196,7 @@ export function TapeInput(props: TextInputProps) {
     <TextInput
       placeholderTextColor={t.inkMuted}
       {...props}
-      style={[styles.input, { borderColor: t.hairline, color: t.ink }, props.style]}
+      style={[styles.input, { borderColor: t.ink, borderWidth: t.border, color: t.ink, backgroundColor: t.shell, fontFamily: t.font.body }, props.style]}
     />
   );
 }
@@ -229,12 +271,12 @@ export function TapeDateField({
           }}
           style={{
             ...INPUT_SHAPE,
-            borderWidth: StyleSheet.hairlineWidth,
+            borderWidth: t.border,
             borderStyle: 'solid',
-            borderColor: t.hairline,
+            borderColor: t.ink,
             color: t.ink,
-            backgroundColor: t.bg,
-            fontFamily: 'inherit',
+            backgroundColor: t.shell,
+            fontFamily: t.font.body,
           }}
         />
       );
@@ -262,7 +304,7 @@ export function TapeDateField({
             })
           }
         >
-          <Text style={[styles.input, styles.dateValue, { borderColor: t.hairline, color: t.ink }]}>
+          <Text style={[styles.input, styles.dateValue, { borderColor: t.ink, borderWidth: t.border, color: t.ink, backgroundColor: t.shell, fontFamily: t.font.body }]}>
             {formatDeadline(value)}
           </Text>
         </Pressable>
@@ -316,27 +358,30 @@ export function DeadlineRows({
 
 export function Sprocket() {
   const t = useTheme();
-  return <View style={[styles.sprocket, { borderTopColor: t.hairline }]} />;
+  return <View style={[styles.sprocket, { borderTopColor: t.ink }]} />;
 }
 
 export function ErrorNote({ children }: { children: React.ReactNode }) {
   const t = useTheme();
-  return <Label style={{ color: t.accent }}>{children}</Label>;
+  return <Label style={{ color: t.danger, fontFamily: t.font.bold }}>{children}</Label>;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  headerText: { fontSize: 20, fontWeight: '600' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  headerText: { fontSize: 28, transform: [{ rotate: '-2deg' }] },
   body: { flex: 1, padding: 16, gap: 12 },
   body_: { fontSize: 15 },
-  heading: { fontSize: 18, fontWeight: '600' },
+  heading: { fontSize: 18 },
   label: { fontSize: 13 },
-  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: 12, gap: 8 },
-  input: { borderWidth: StyleSheet.hairlineWidth, ...INPUT_SHAPE },
+  card: { padding: 14, gap: 8 },
+  input: { ...INPUT_SHAPE },
   dateField: { gap: 4 },
   dateValue: { lineHeight: 20 },
   deadlineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  sprocket: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 4 },
+  sprocket: { borderTopWidth: 3, borderStyle: 'dashed', marginVertical: 4 },
+  button: { paddingVertical: 10, paddingHorizontal: 22, borderRadius: 999, minHeight: 44, justifyContent: 'center' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 2, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
+  dot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
   spinner: { alignSelf: 'center' },
 });

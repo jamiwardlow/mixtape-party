@@ -1,8 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Button, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
+import { useTheme } from '../lib/theme';
+import { ErrorNote, HandText, Label, TapeButton, TapeInput } from '../lib/ui';
 
 // What /auth/google/callback bounces back here as ?error= when the flow doesn't finish.
 const GOOGLE_ERRORS: Record<string, string> = {
@@ -83,29 +85,27 @@ export default function SignIn() {
     }
   }
 
+  const t = useTheme();
   const message = error ?? (googleError ? GOOGLE_ERRORS[googleError] ?? 'Google sign-in failed.' : null);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Mixtape Party</Text>
-      <TextInput
-        style={styles.input}
+    <View style={[styles.container, { backgroundColor: t.bg }]}>
+      <HandText style={styles.title}>Mixtape Party</HandText>
+      <TapeInput
         placeholder="Email"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
         onChangeText={changeEmail}
       />
-      <TextInput
-        style={styles.input}
+      <TapeInput
         placeholder="Password"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
       {mode === 'sign-up' && (
-        <TextInput
-          style={styles.input}
+        <TapeInput
           placeholder="Display name (optional)"
           // The API caps a name at 40 and PATCH rejects anything longer, so stop at 40 here rather
           // than accept a name at sign-up that My Account would later refuse to save.
@@ -114,53 +114,50 @@ export default function SignIn() {
           onChangeText={setDisplayName}
         />
       )}
-      {message && <Text style={styles.error}>{message}</Text>}
-      <Button title={mode === 'sign-up' ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
+      {message && <ErrorNote>{message}</ErrorNote>}
+      <TapeButton title={mode === 'sign-up' ? 'Create account' : 'Sign in'} onPress={submit} disabled={busy} />
       {mode === 'sign-in' && (
-        <Text style={styles.link} onPress={() => router.push('/forgot-password')}>
+        <Label style={styles.link} onPress={() => router.push('/forgot-password')}>
           Forgot password?
-        </Text>
+        </Label>
       )}
 
       <View style={styles.divider}>
         <View style={styles.rule} />
-        <Text style={styles.dividerText}>or</Text>
+        <Label>or</Label>
         <View style={styles.rule} />
       </View>
 
       {linkSent ? (
-        <Text style={styles.note}>Check {email} for a sign-in link.</Text>
+        <Label style={styles.note}>Check {email} for a sign-in link.</Label>
       ) : (
-        <Text style={styles.link} onPress={emailSignInLink}>
+        <Label style={styles.link} onPress={emailSignInLink}>
           Email me a sign-in link
-        </Text>
+        </Label>
       )}
       {Platform.OS === 'web' && (
         // A full-page navigation, not a fetch: the OAuth redirect has to happen in the browser's
         // address bar, and the state cookie is set on the API's own origin along the way.
-        <Button title="Continue with Google" disabled={busy} onPress={() => { window.location.href = `${API_URL}/auth/google/start`; }} />
+        <TapeButton title="Continue with Google" disabled={busy} onPress={() => { window.location.href = `${API_URL}/auth/google/start`; }} />
       )}
 
-      <Text style={styles.switch} onPress={toggleMode}>
+      <Label style={styles.switch} onPress={toggleMode}>
         {mode === 'sign-up' ? 'Already have an account? Sign in' : 'New here? Create an account'}
-      </Text>
+      </Label>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  error: { color: 'red' },
-  note: { textAlign: 'center', color: '#555' },
+  title: { fontSize: 36, marginBottom: 12, transform: [{ rotate: '-2deg' }] },
+  note: { textAlign: 'center' },
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
-  link: { paddingVertical: 11, textAlign: 'center', color: '#1e90ff' },
+  link: { paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
   // Pushed away from the alternatives above it — switching account mode is a different
   // decision from picking a way to sign in.
-  switch: { marginTop: 12, paddingVertical: 11, textAlign: 'center', color: '#1e90ff' },
+  switch: { marginTop: 12, paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dividerText: { color: '#555', fontSize: 13 },
-  rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#ccc' },
+  rule: { flex: 1, height: 3, backgroundColor: '#1A1033' },
 });

@@ -1,38 +1,31 @@
-import { useColorScheme } from 'react-native';
 import type { ServiceName } from './rounds';
 
-// Placeholder chrome, not a design. The cassette/J-card visual world was pulled
-// out while the rest of the app is being built; these are neutral OS-ish greys
-// that follow the system light/dark setting. The key names are the ones the
-// screens already use, so a real theme can drop straight back in here.
-const light = {
-  bg: '#ffffff',
-  shell: '#f2f2f7',
-  shellPressed: '#e5e5ea',
-  ink: '#000000',
-  inkMuted: '#6c6c70',
-  hairline: '#c6c6c8',
-  reel: '#c6c6c8',
-  accent: '#007aff',
-  accentInk: '#ffffff',
+// Sticker Pop: one bold light palette (no dark mode), 3px ink outlines and hard offset shadows.
+// Key names are the ones the screens already use, so restyling stays in here and in ui.tsx.
+const theme = {
+  bg: '#FFD93D', // Sunshine
+  shell: '#FFFFFF',
+  shellPressed: '#FFF3B8',
+  ink: '#1A1033',
+  inkMuted: '#4A3F6B',
+  hairline: '#1A1033',
+  reel: '#1A1033',
+  accent: '#FF4F9A', // Bubblegum
+  accentInk: '#1A1033',
+  danger: '#B3124F', // accent is too light to read as text on Sunshine
+  cobalt: '#3D5AFE',
+  mint: '#5EEAD4',
+  tangerine: '#FF8A3D',
+  border: 3,
+  radius: 20,
+  shadow: 4,
+  font: { display: 'BagelFatOne_400Regular', body: 'CourierPrime_400Regular', bold: 'CourierPrime_700Bold' },
 };
 
-const dark: typeof light = {
-  bg: '#000000',
-  shell: '#1c1c1e',
-  shellPressed: '#2c2c2e',
-  ink: '#ffffff',
-  inkMuted: '#98989f',
-  hairline: '#38383a',
-  reel: '#38383a',
-  accent: '#0a84ff',
-  accentInk: '#ffffff',
-};
-
-export type Theme = typeof light;
+export type Theme = typeof theme;
 
 export function useTheme(): Theme {
-  return useColorScheme() === 'dark' ? dark : light;
+  return theme;
 }
 
 export const SERVICE_META: Record<ServiceName, { label: string; color: string }> = {
