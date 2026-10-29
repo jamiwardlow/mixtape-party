@@ -15,6 +15,25 @@ Default canonical labels: `ready-for-agent`, `ready-for-human`. See `docs/agents
 `api/` — Express + Postgres, deployed to Cloud Run (Postgres on Neon). `mobile/` — Expo / React Native (Expo Router),
 which is also what serves the web client. Product intent lives in `PRODUCT.md`.
 
+### Hosting
+
+**There is no GitHub Pages and no static-site host.** Everything is on Cloud Run (project
+`mixtape-party`, region `us-west1`), deployed by Cloud Build on push to `main`:
+
+| Hostname | Service | Source |
+| --- | --- | --- |
+| `api.mixtape-party.com` | `mixtape-party-api` | `api/` |
+| `mixtape-party.com` | `mixtape-party-web` | `mobile/` |
+
+The web service (`mobile/server.js`, Express) serves the marketing landing page at exactly `/` from
+`mobile/landing.html` (+ `mobile/landing-favicon.svg`), and hands everything else to the Expo web
+export (`/join/ABC`, `/round/<id>`, the app itself). The landing page is a standalone HTML file,
+not an Expo route. It used to be a GitHub Pages site under `landing/` (#154); #157 moved it and
+deleted the Pages workflow and `CNAME`. Don't recreate them. A design or copy change to the landing
+page is an edit to `mobile/landing.html` and ships like any other change (push to `main`).
+
+DNS is at GoDaddy (human-only). Design source of truth is `DESIGN.md`.
+
 ### Shipping
 
 Solo project, one agent working one issue at a time. **No branches, no pull requests** — commit
