@@ -167,15 +167,26 @@ describe('guess comments, replies and reactions (#101)', () => {
     expect((await guessing(c)).reactions).toEqual([{ emoji: '🎸', count: 1, mine: true }]);
     expect((await guessing(b)).reactions).toEqual([]);
 
-    // The submitter isn't pinged with a link to results that aren't open yet.
+    // The submitter hears about it anonymously, with a nudge to finish guessing, and lands on the guess screen.
     await testDb.pool.query("INSERT INTO push_tokens (account_id, platform, token) VALUES ($1, 'expo', 'tok-b')", [b.accountId]);
+    await testDb.pool.query('DELETE FROM notifications'); // the reaction above already counted toward the throttle
+    await request(app).post(path).set(auth(c)).send({ emoji: '🎸' }); // takes it back: silent
     await request(app).post(path).set(auth(c)).send({ emoji: '🎸' });
-    await request(app).post(path).set(auth(c)).send({ emoji: '🎸' });
+    await vi.waitFor(() => expect(pushChannel.sent).toHaveLength(1));
+    expect(pushChannel.sent[0].payload).toMatchObject({
+      title: 'Someone reacted 🎸 to your submission',
+      body: "Don't forget to submit your guesses!",
+      data: { roundId, screen: 'guess' },
+    });
+    await request(app).post(path).set(auth(c)).send({ emoji: '🔥' }); // inside the window: throttled
+    await new Promise((r) => setTimeout(r, 100));
+    expect(pushChannel.sent).toHaveLength(1);
+    await request(app).post(path).set(auth(c)).send({ emoji: '🔥' }); // off again
+    pushChannel.sent.length = 0;
 
     await closeGuessingWindow(testDb.pool, roundId);
     expect((await results(c)).reactions).toEqual([{ emoji: '🎸', count: 1, mine: true }]);
-    // Once results are open the same reaction does ping; only that one did.
-    await request(app).post(path).set(auth(c)).send({ emoji: '🔥' });
+    await request(app).post(path).set(auth(c)).send({ emoji: '🎉' });
     await vi.waitFor(() => expect(pushChannel.sent).toHaveLength(1));
   });
 

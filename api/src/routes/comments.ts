@@ -13,6 +13,8 @@ export interface CommentsDeps extends AccountsDeps {
 }
 
 const MAX_LENGTH = 500;
+// ponytail: fixed window, not per-reactor or configurable; tune if leagues find it too quiet or chatty.
+const REACTION_PUSH_WINDOW_MINUTES = 10;
 
 /** One grapheme (so 👍🏽 and 🏳️‍🌈 count) that is an emoji or a flag; nothing else gets stored as a reaction. */
 export function isEmoji(value: unknown): value is string {
@@ -206,8 +208,39 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
           [id, accountId],
         )
       ).rows[0];
-      // A track reaction during guessing links to results that aren't open yet: stay quiet until they are.
-      if (!owner || owner.recipient === accountId || owner.guessing_open) return;
+      if (!owner || owner.recipient === accountId) return;
+      // A track reaction during guessing can't link to results yet: say it anonymously (nobody is
+      // revealed mid-round) and send them to the guess screen, nudging if they haven't finished.
+      if (owner.guessing_open) {
+        // One ping per submitter per round per window, so toggling or a pile-on of reactions isn't a barrage.
+        const recent = await deps.pool.query(
+          `SELECT 1 FROM notifications WHERE account_id = $1 AND round_id = $2 AND type = 'comment_reaction'
+           AND created_at > now() - make_interval(mins => $3)`,
+          [owner.recipient, owner.round_id, REACTION_PUSH_WINDOW_MINUTES],
+        );
+        if (recent.rowCount) return;
+        const unfinished = (
+          await deps.pool.query(
+            `SELECT (SELECT count(*) FROM guesses g JOIN submissions s ON s.id = g.submission_id
+                     WHERE s.round_id = $1 AND g.guesser_account_id = $2)
+                  < (SELECT count(*) FROM submissions WHERE round_id = $1 AND account_id != $2) AS unfinished`,
+            [owner.round_id, owner.recipient],
+          )
+        ).rows[0].unfinished;
+        await notifyAccounts(
+          deps,
+          [owner.recipient],
+          'comment_reaction',
+          {
+            title: `Someone reacted ${emoji} to your submission`,
+            body: unfinished ? "Don't forget to submit your guesses!" : owner.text,
+            data: { roundId: owner.round_id, screen: 'guess' },
+          },
+          { roundId: owner.round_id, leagueId: owner.league_id },
+          { email: false },
+        );
+        return;
+      }
       await notifyAccounts(
         deps,
         [owner.recipient],
