@@ -38,6 +38,7 @@ function RootNavigator() {
           would hijack the invite preview. */}
       <Stack.Screen name="index" />
       {/* Always reachable: an invite link should show its preview before gating on sign-up. */}
+      <Stack.Screen name="join/index" />
       <Stack.Screen name="join/[code]" />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />

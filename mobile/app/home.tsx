@@ -128,6 +128,11 @@ export default function Home() {
         variant="secondary"
       />
       <TapeButton
+        title="Join with a code"
+        onPress={() => router.push("/join")}
+        variant="secondary"
+      />
+      <TapeButton
         title="My Account"
         onPress={() => router.push("/account")}
         variant="secondary"
