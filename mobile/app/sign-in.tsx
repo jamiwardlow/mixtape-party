@@ -243,6 +243,13 @@ export default function SignIn() {
       )}
       {error && <ErrorNote>{error}</ErrorNote>}
       <TapeButton title={busy === 'submit' ? (mode === 'sign-up' ? 'Creating account…' : 'Signing in…') : 'Continue'} onPress={submit} disabled={!!busy} />
+      {mode === 'sign-up' && (
+        <Label style={styles.note}>
+          By creating an account you agree to the{' '}
+          <Label accessibilityRole="link" style={styles.underline} onPress={() => router.push('/terms')}>Terms of Use</Label> and{' '}
+          <Label accessibilityRole="link" style={styles.underline} onPress={() => router.push('/privacy')}>Privacy Policy</Label>.
+        </Label>
+      )}
       {mode === 'sign-in' && (
         <Label style={styles.link} onPress={() => router.push('/forgot-password')}>
           Forgot password?
@@ -280,6 +287,7 @@ export default function SignIn() {
 
 const styles = StyleSheet.create({
   note: { textAlign: 'center' },
+  underline: { textDecorationLine: 'underline' },
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
   link: { paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },

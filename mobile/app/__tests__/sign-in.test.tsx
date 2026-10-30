@@ -242,6 +242,19 @@ describe('initial mode', () => {
   });
 });
 
+describe('terms acknowledgement', () => {
+  it('shows linked terms and privacy on sign-up only', async () => {
+    await render(<SignIn />);
+    expect(screen.queryByText(/By creating an account/)).toBeNull();
+    await switchToSignUp();
+    expect(screen.getByText(/By creating an account/)).toBeTruthy();
+    await fireEvent.press(screen.getAllByText('Terms of Use')[0]);
+    expect(mockPush).toHaveBeenCalledWith('/terms');
+    await fireEvent.press(screen.getAllByText('Privacy Policy')[0]);
+    expect(mockPush).toHaveBeenCalledWith('/privacy');
+  });
+});
+
 describe('link layout', () => {
   // Nothing to recover in sign-up mode -- the account does not exist yet.
   it('offers password recovery only to returning users', async () => {
