@@ -33,7 +33,8 @@ A social music-discovery game built around anonymous submission + guessing, rath
 
 - Two supported services, each with a distinct brand identity to surface per track: YouTube Music, Bandcamp.
 - No official brand logo asset files are present in the repo yet — badges must be built from brand color + wordmark/monogram until real logo assets are supplied.
-- Mobile app currently has no design system, no NativeWind, and no dark/light theming — all screens use unstyled default React Native `Button`/`StyleSheet` primitives.
+- The mobile app uses the Sticker Pop design system (`DESIGN.md`, `mobile/lib/theme.ts`, `mobile/lib/ui.tsx`): plain React Native styles, no NativeWind, one light theme, no dark mode.
+- Store art (feature graphic, store icon) is not made yet (#137). App icon and splash are done.
 
 ## Brand Commitments
 
@@ -52,4 +53,4 @@ No real user testimonials, screenshots, or brand assets on hand. Do not fabricat
 
 ## Accessibility & Inclusion
 
-No product-specific accessibility requirement established yet.
+No formal requirement. In practice: reel animation respects the OS reduce-motion setting, errors use an alert live region, and focus rings are drawn on web.

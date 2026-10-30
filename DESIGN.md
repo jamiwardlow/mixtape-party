@@ -36,9 +36,15 @@ Custom fonts: never use `fontWeight`; use the explicit bold family.
 - Service badges are built from brand color + wordmark, never logos (PRODUCT.md).
 - Anonymity: nothing may reveal a submitter before guesses lock.
 
-## Not built yet (specced in the artifact)
+## Built
 
-PhaseSteps, Chip, Toast, Leaderboard row, cassette SVG with spinning reels, sticker-badge logo,
-app icon/splash (#137). Screens still partly on raw `Text`/inline styles: home, league, round
-submit/guess/results, account, favorites, create-league, schedule, final, forgot/reset-password,
-auth/complete, plus `ThemeIdeas`, `Reactions`, `Standings`, `Avatar`.
+Components live in `mobile/lib/ui.tsx`: `PhaseSteps`, `Chip`, `Toast`, `LeaderboardRow`, `StickerBadge`
+(the logo), `Cassette` (spinning reels; still under reduced motion), `TapeButton`, `TapeInput`,
+`ServiceBadge`, `InitialDisc`. All screens were restyled on Sticker Pop (#155), and the web client adapts
+to desktop/tablet widths (#156). The marketing page is `mobile/landing.html`.
+
+## Not built yet
+
+Store art (#137): the Play Store feature graphic and 512px store icon. The splash is built: a Sunshine
+`#FFD93D` background with the pink badge (`mobile/assets/splash-icon.png`), configured in `app.json`; Android
+uses a smaller `imageWidth` so the 12+ circular crop doesn't clip the badge.
