@@ -87,7 +87,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
         'bandcamp page parse failed',
         parsed.toString(),
         res.url,
-        res.headers.get('content-type'),
+        res.headers?.get('content-type'),
         html.length,
         html.slice(0, 300).replace(/\s+/g, ' '),
       );
