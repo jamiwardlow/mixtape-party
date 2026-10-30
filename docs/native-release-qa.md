@@ -4,7 +4,7 @@ Run this against a TestFlight (iOS) and Play internal testing (Android) build be
 Use a real device for each platform; note build number, device, and OS at the top of the run.
 
 Emulator and push setup (FCM, Expo push tokens, sending a test push): see [`mobile/CLAUDE.md`](../mobile/CLAUDE.md).
-Release build and submit steps: see the native release section of the mobile docs (#146).
+Release build and submit steps: "Cutting a native release" in the same file (#146).
 Issue/triage conventions: [`docs/agents/`](agents/issue-tracker.md).
 
 Mark each item pass/fail; file a failure as its own issue and link it here.
@@ -41,7 +41,7 @@ Mark each item pass/fail; file a failure as its own issue and link it here.
 - [ ] Preview plays and pauses on a submitted track
 - [ ] Starting a second preview stops the first
 - [ ] Audio stops when leaving the screen
-- [ ] Plays with the iOS silent switch on (expected behavior per product intent) and respects volume
+- [ ] iOS silent switch on: note whether preview audio plays and confirm that is intended
 
 ## Link-out
 - [ ] "Open in YouTube Music" opens the YouTube Music app (or web fallback if not installed)
@@ -54,7 +54,7 @@ Mark each item pass/fail; file a failure as its own issue and link it here.
 
 ## Safety and account
 - [ ] Report a submission/user; confirmation shown
-- [ ] Block a user; their content disappears and they can't be unblocked by accident
+- [ ] Block a user; their content is hidden from you
 - [ ] Account deletion: confirmation flow completes, signs out, can't sign back in, data gone
 
 ## Offline and errors

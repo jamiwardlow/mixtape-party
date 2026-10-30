@@ -11,7 +11,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mixtapeparty.app",
       "usesAppleSignIn": true,
-      "associatedDomains": ["applinks:mixtape-party.com"]
+      "associatedDomains": [
+        "applinks:mixtape-party.com",
+        "applinks:mixtape-party.com"
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,14 +34,43 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/auth" },
-            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/reset-password" },
-            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/round" },
-            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/league" },
-            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/join" }
+            {
+              "scheme": "https",
+              "host": "mixtape-party.com",
+              "pathPrefix": "/auth"
+            },
+            {
+              "scheme": "https",
+              "host": "mixtape-party.com",
+              "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "mixtape-party.com",
+              "pathPrefix": "/round"
+            },
+            {
+              "scheme": "https",
+              "host": "mixtape-party.com",
+              "pathPrefix": "/league"
+            },
+            {
+              "scheme": "https",
+              "host": "mixtape-party.com",
+              "pathPrefix": "/join"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
+      ],
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
@@ -54,7 +89,9 @@
           "image": "./assets/splash-icon.png",
           "backgroundColor": "#FFD93D",
           "imageWidth": 512,
-          "android": { "imageWidth": 200 }
+          "android": {
+            "imageWidth": 200
+          }
         }
       ],
       "@react-native-community/datetimepicker",
@@ -65,7 +102,8 @@
           "photosPermission": "Mixtape Party uses your photo library so you can pick a profile photo."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-font"
     ],
     "extra": {
       "eas": {
