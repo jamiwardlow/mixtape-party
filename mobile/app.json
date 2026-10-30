@@ -12,7 +12,6 @@
       "bundleIdentifier": "com.mixtapeparty.app",
       "usesAppleSignIn": true,
       "associatedDomains": [
-        "applinks:mixtape-party.com",
         "applinks:mixtape-party.com"
       ],
       "infoPlist": {
