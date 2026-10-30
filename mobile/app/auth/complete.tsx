@@ -28,6 +28,12 @@ export default function AuthComplete() {
     const authToken =
       Platform.OS === 'web' ? new URLSearchParams(window.location.hash.replace(/^#/, '')).get('t') : nativeToken;
     if (!authToken) {
+      // A native deep link can open this route with no token while sign-in.tsx is still handing
+      // the real one over; bounce to sign-in rather than flashing an error.
+      if (Platform.OS !== 'web') {
+        router.replace('/sign-in');
+        return;
+      }
       setError('This sign-in link is missing its token.');
       return;
     }

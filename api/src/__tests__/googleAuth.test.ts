@@ -22,7 +22,7 @@ afterAll(async () => {
 async function startFlow(app: Express, query = '') {
   const started = await request(app).get(`/auth/google/start${query}`);
   const setCookie = started.headers['set-cookie'] as unknown as string[];
-  const cookie = setCookie[0].split(';')[0];
+  const cookie = setCookie.map((c) => c.split(';')[0]).join('; ');
   const state = new URL(started.headers.location).searchParams.get('state') as string;
   return { started, cookie, state };
 }
@@ -214,6 +214,15 @@ describe('GET /auth/google/callback', () => {
       const { cookie, state } = await startFlow(app, native);
 
       const res = await request(app).get(`/auth/google/callback?error=access_denied&state=${state}`).set('Cookie', cookie);
+
+      expect(res.headers.location).toBe('mixtapeparty://auth/complete#error=google_cancelled');
+    });
+
+    it('sends a stateless native cancel back to the app', async () => {
+      const { app } = buildApp(testDb.pool);
+      const { cookie } = await startFlow(app, native);
+
+      const res = await request(app).get('/auth/google/callback?error=access_denied').set('Cookie', cookie);
 
       expect(res.headers.location).toBe('mixtapeparty://auth/complete#error=google_cancelled');
     });

@@ -24,6 +24,8 @@ export interface GoogleAuthDeps {
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const STATE_COOKIE = 'g_state';
+// Remembers a native-initiated flow for the one case the signed state can't: a stateless cancel.
+const NATIVE_COOKIE = 'g_native';
 // The only return target a native client may ask for. An exact-match allow-list, never a prefix or
 // a caller-supplied URL: the token rides this redirect, so anything open would hand it to a stranger.
 export const NATIVE_RETURN_URL = 'mixtapeparty://auth/complete';
@@ -96,6 +98,15 @@ export function createGoogleAuthRouter(deps: GoogleAuthDeps): Router {
       maxAge: OAUTH_STATE_TTL_MS,
     });
 
+    if (returnTo === NATIVE_RETURN_URL) {
+      res.cookie(NATIVE_COOKIE, '1', {
+        httpOnly: true,
+        secure: deps.googleRedirectUri.startsWith('https:'),
+        sameSite: 'lax',
+        maxAge: OAUTH_STATE_TTL_MS,
+      });
+    }
+
     const params = new URLSearchParams({
       client_id: deps.googleClientId,
       // From config, never req.headers.host — a forged Host header would send the authorization
@@ -112,17 +123,23 @@ export function createGoogleAuthRouter(deps: GoogleAuthDeps): Router {
     const cookieNonce = readCookie(req.headers.cookie, STATE_COOKIE);
     // One shot either way: cleared before any branch can return.
     res.clearCookie(STATE_COOKIE);
+    const nativeCookie = readCookie(req.headers.cookie, NATIVE_COOKIE) === '1';
+    res.clearCookie(NATIVE_COOKIE);
 
     const { code, state, error } = req.query;
     const verified = typeof state === 'string' ? verifyStateToken(state, deps.sessionSecret) : null;
-    // Only a signed state can send the user back to the app; without one (a cancel can arrive
-    // stateless) the web sign-in page is the safe default.
+    // Only a signed state can send the user back to the app with a token. The error branch also
+    // trusts the cookie: it redirects to a fixed URL carrying no secret, and a stateless cancel
+    // would otherwise strand the auth-session browser on the web sign-in page.
     const native = verified?.native === true;
+    const returnBase = native ? NATIVE_RETURN_URL : `${deps.appBaseUrl}/auth/complete`;
     if (typeof code !== 'string') {
       // `?error=access_denied` with no code is the user clicking cancel on the consent screen —
       // an ordinary outcome, not a server fault.
       const reason = error === 'access_denied' ? 'google_cancelled' : 'google_failed';
-      res.redirect(native ? `${NATIVE_RETURN_URL}#error=${reason}` : `${deps.appBaseUrl}/sign-in?error=${reason}`);
+      res.redirect(
+        native || nativeCookie ? `${NATIVE_RETURN_URL}#error=${reason}` : `${deps.appBaseUrl}/sign-in?error=${reason}`,
+      );
       return;
     }
 
@@ -159,7 +176,7 @@ export function createGoogleAuthRouter(deps: GoogleAuthDeps): Router {
     // exactly one way to turn a redirect into a session. Fragment, not query param: the web service
     // logs query strings, and this token is a live credential until POST /sessions/token burns it.
     const token = await issueAuthToken(deps.pool, accountId, 'sign_in', GOOGLE_HANDOFF_TTL_MS);
-    res.redirect(`${native ? NATIVE_RETURN_URL : `${deps.appBaseUrl}/auth/complete`}#t=${token}`);
+    res.redirect(`${returnBase}#t=${token}`);
   });
 
   return router;
