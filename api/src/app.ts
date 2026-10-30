@@ -11,6 +11,7 @@ import { createCommentsRouter } from './routes/comments.js';
 import { createExportRouter } from './routes/export.js';
 import { createGoogleAuthRouter, type GoogleProfile } from './routes/googleAuth.js';
 import { createGuessingRouter } from './routes/guessing.js';
+import { createInboundEmailRouter, type InboundEmailDeps } from './routes/inboundEmail.js';
 import { createLeaguesRouter } from './routes/leagues.js';
 import { createModerationRouter } from './routes/moderation.js';
 import { createNotificationsRouter } from './routes/notifications.js';
@@ -19,7 +20,7 @@ import { createSubmissionsRouter } from './routes/submissions.js';
 import { createSweepRouter } from './routes/sweep.js';
 import type { EmailChannel, PushChannel } from './notifications/types.js';
 
-export interface AppDeps {
+export interface AppDeps extends InboundEmailDeps {
   pool: Pool;
   sessionSecret: string;
   /** Origin of the web client, where emailed password-reset and sign-in links land. */
@@ -55,6 +56,8 @@ export function createApp(deps: AppDeps): Express {
   deps = { ...deps, appBaseUrl };
   const app = express();
   app.use(cors());
+  // Before express.json(): the webhook signature needs the raw body.
+  app.use(createInboundEmailRouter(deps));
   app.use(express.json());
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use(createAccountsRouter(deps));

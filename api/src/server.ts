@@ -50,6 +50,10 @@ const app = createApp({
   emailChannel,
   reportEmail: process.env.REPORT_EMAIL,
   sweepSecret: process.env.SWEEP_SECRET,
+  inboundWebhookSecret: process.env.RESEND_WEBHOOK_SECRET,
+  resendApiKey,
+  emailFrom,
+  forwardTo: process.env.INBOUND_FORWARD_TO,
 });
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(`api listening on :${port}`));
