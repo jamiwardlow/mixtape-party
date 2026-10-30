@@ -1,5 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import { Avatar } from './Avatar';
+import { PlayerLink } from './PlayerLink';
 import { nameOf, type Score } from './rounds';
 import { BodyText, LeaderboardRow } from './ui';
 
@@ -28,14 +29,15 @@ export function StandingRows({ standings, token }: { standings: Score[]; token: 
   return (
     <>
       {standings.map((player, i) => (
+        <PlayerLink key={player.accountId} accountId={player.accountId}>
         <LeaderboardRow
-          key={player.accountId}
           rank={i + 1}
           name={nameOf(player)}
           points={player.score}
           pointsTestID={`standings-${player.accountId}`}
           avatar={<Avatar size={28} label="" url={player.avatarUrl} token={token} initial={nameOf(player)[0]} />}
         />
+        </PlayerLink>
       ))}
     </>
   );

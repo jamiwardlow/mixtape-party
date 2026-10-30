@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { PlayerLink } from '../../../lib/PlayerLink';
 import { ReportBlock } from '../../../lib/Moderation';
 import {
   PHASE_META,
@@ -167,8 +168,12 @@ export default function LeagueOverview() {
             return (
               <View key={member.accountId} testID={`roster-${member.accountId}`} style={styles.row}>
                 <View style={styles.inline}>
-                  <Avatar size={28} label="" url={member.avatarUrl} token={token} initial={nameOf(member)[0]} />
-                  <BodyText>{nameOf(member)}</BodyText>
+                  <PlayerLink accountId={member.accountId}>
+                    <View style={styles.inline}>
+                      <Avatar size={28} label="" url={member.avatarUrl} token={token} initial={nameOf(member)[0]} />
+                      <BodyText>{nameOf(member)}</BodyText>
+                    </View>
+                  </PlayerLink>
                   {member.accountId === overview.host.accountId && <Label>host</Label>}
                 </View>
                 <View style={styles.inline}>

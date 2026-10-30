@@ -141,6 +141,50 @@ function parseRoundInput(
   return { theme: theme.trim(), submissionAt, guessingAt };
 }
 
+/** The account's leagues with their current round, for /leagues/mine and the public profile. */
+export async function listLeagues(pool: Pool, accountId: string) {
+  const result = await pool.query<{
+    league_id: string;
+    league_name: string;
+    season_length: number;
+    joined_at: string;
+    round_id: string | null;
+    round_number: number | null;
+    theme: string | null;
+    submission_deadline: string | null;
+    guessing_deadline: string | null;
+    submitted: boolean;
+  }>(
+    `SELECT l.id AS league_id, l.name AS league_name, l.season_length, lm.joined_at,
+            r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline,
+            EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.account_id = $1) AS submitted
+     FROM leagues l
+     JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
+     LEFT JOIN LATERAL (
+       SELECT id, round_number, theme, submission_deadline, guessing_deadline
+       FROM rounds WHERE league_id = l.id ${CURRENT_ROUND_CLAUSE}
+     ) r ON true
+     ORDER BY l.name`,
+    [accountId],
+  );
+
+  const now = new Date();
+  return result.rows.map((row) => ({
+    id: row.league_id,
+    name: row.league_name,
+    seasonLength: row.season_length,
+    joinedAt: row.joined_at,
+    concluded: isSeasonConcluded(
+      { seasonLength: row.season_length },
+      row.round_id
+        ? { id: row.round_id, roundNumber: row.round_number!, guessingDeadline: row.guessing_deadline! }
+        : null,
+      now,
+    ),
+    round: row.round_id ? summarizeRound(row, now) : null,
+  }));
+}
+
 export function createLeaguesRouter(deps: LeaguesDeps): Router {
   const router = Router();
 
@@ -319,48 +363,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
 
   router.get('/leagues/mine', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const result = await deps.pool.query<{
-      league_id: string;
-      league_name: string;
-      season_length: number;
-      joined_at: string;
-      round_id: string | null;
-      round_number: number | null;
-      theme: string | null;
-      submission_deadline: string | null;
-      guessing_deadline: string | null;
-      submitted: boolean;
-    }>(
-      `SELECT l.id AS league_id, l.name AS league_name, l.season_length, lm.joined_at,
-              r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline,
-              EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.account_id = $1) AS submitted
-       FROM leagues l
-       JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
-       LEFT JOIN LATERAL (
-         SELECT id, round_number, theme, submission_deadline, guessing_deadline
-         FROM rounds WHERE league_id = l.id ${CURRENT_ROUND_CLAUSE}
-       ) r ON true
-       ORDER BY l.name`,
-      [accountId],
-    );
-
-    const now = new Date();
-    res.json({
-      leagues: result.rows.map((row) => ({
-        id: row.league_id,
-        name: row.league_name,
-        seasonLength: row.season_length,
-        joinedAt: row.joined_at,
-        concluded: isSeasonConcluded(
-          { seasonLength: row.season_length },
-          row.round_id
-            ? { id: row.round_id, roundNumber: row.round_number!, guessingDeadline: row.guessing_deadline! }
-            : null,
-          now,
-        ),
-        round: row.round_id ? summarizeRound(row, now) : null,
-      })),
-    });
+    res.json({ leagues: await listLeagues(deps.pool, accountId) });
   });
 
   // The whole season, for the schedule screen (#77) -- /leagues/mine and the invite preview both

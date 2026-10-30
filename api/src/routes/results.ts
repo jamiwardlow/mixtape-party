@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
-import { blockedIds, maskBlocked } from './blocks.js';
+import { blockedIds, isUuid, maskBlocked } from './blocks.js';
+import { loadFavorites } from './guessing.js';
+import { listLeagues } from './leagues.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   isLeagueMember,
@@ -57,7 +59,7 @@ type Bestie = Player & { count: number };
  * rounds, or just `leagueId`'s when given (same deadline rule as `correctGuessCounts`). `guessedMe` = people who guessed my tracks;
  * `iGuessed` = people whose tracks I guessed.
  */
-async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' | 'iGuessed', leagueId?: string): Promise<Bestie[]> {
+export async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' | 'iGuessed', leagueId?: string): Promise<Bestie[]> {
   const [meCol, themCol] = direction === 'guessedMe' ? ['s.account_id', 'g.guesser_account_id'] : ['g.guesser_account_id', 's.account_id'];
   const result = await pool.query<{ account_id: string; display_name: string | null; count: string }>(
     `SELECT a.id AS account_id, a.display_name, count(*) AS count
@@ -85,6 +87,52 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       topBesties(deps.pool, accountId, 'iGuessed'),
     ]);
     res.json({ guessedMe, iGuessed });
+  });
+
+  // Public fields only, open to any signed-in user (#177). Never email, tokens or notification settings.
+  // A player the viewer has blocked is a 404, same as one that doesn't exist.
+  router.get('/players/:id', requireAuth(deps), async (req, res) => {
+    const viewerId = (req as unknown as AuthedRequest).accountId;
+    const id = req.params.id;
+    const found = isUuid(id)
+      ? (
+          await deps.pool.query<{ display_name: string | null; avatar_updated_at: Date | null; pronouns: string | null; about_me: string | null }>(
+            'SELECT display_name, avatar_updated_at, pronouns, about_me FROM accounts WHERE id = $1',
+            [id],
+          )
+        ).rows[0]
+      : undefined;
+    const blocked = await blockedIds(deps.pool, viewerId);
+    if (!found || blocked.has(id)) {
+      res.status(404).json({ error: 'player not found' });
+      return;
+    }
+    const [leagues, favorites, guessedMe, iGuessed] = await Promise.all([
+      listLeagues(deps.pool, id),
+      loadFavorites(deps.pool, id),
+      topBesties(deps.pool, id, 'guessedMe'),
+      topBesties(deps.pool, id, 'iGuessed'),
+    ]);
+    res.json({
+      accountId: id,
+      displayName: found.display_name,
+      avatarUrl: avatarUrlOf(id, found.avatar_updated_at),
+      pronouns: found.pronouns,
+      aboutMe: found.about_me,
+      leagues: leagues.map(({ name, concluded, seasonLength, joinedAt }) => ({ name, concluded, seasonLength, joinedAt })),
+      favorites: favorites.map(({ submissionId, leagueName, roundTheme, service, title, artist }) => ({
+        submissionId,
+        leagueName,
+        roundTheme,
+        service,
+        title,
+        artist,
+      })),
+      besties: {
+        guessedMe: guessedMe.map((b) => maskBlocked(b, blocked)),
+        iGuessed: iGuessed.map((b) => maskBlocked(b, blocked)),
+      },
+    });
   });
 
   router.get('/leagues/:leagueId/besties', requireAuth(deps), async (req, res) => {

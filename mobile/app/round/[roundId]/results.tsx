@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FlatList, Linking, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { PlayerLink } from '../../../lib/PlayerLink';
 import { ReportBlock } from '../../../lib/Moderation';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import type { Player, ServiceName } from '../../../lib/rounds';
@@ -150,8 +151,16 @@ function ReplyNode({
       }}
     >
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-        {reply.mine ? null : <Avatar size={20} label="" url={reply.author.avatarUrl} token={token} initial={(reply.author.displayName ?? '?')[0]} />}
-        <HandText>{reply.mine ? 'You' : (reply.author.displayName ?? 'A player')}</HandText>
+        {reply.mine ? (
+          <HandText>You</HandText>
+        ) : (
+          <PlayerLink accountId={reply.author.accountId}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Avatar size={20} label="" url={reply.author.avatarUrl} token={token} initial={(reply.author.displayName ?? '?')[0]} />
+              <HandText>{reply.author.displayName ?? 'A player'}</HandText>
+            </View>
+          </PlayerLink>
+        )}
         <BodyText>{reply.body}</BodyText>
       </View>
       <Reactions reactions={reply.reactions} onToggle={(e) => actions.react(`/replies/${reply.replyId}/reactions`, e)} />
@@ -187,8 +196,12 @@ function CommentThread({ comment, actions }: { comment: Comment; actions: Thread
       {/* Your own comment is already on screen in its editor. */}
       {comment.mine ? null : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-          <Avatar size={20} label="" url={comment.guesser.avatarUrl} token={token} initial={(comment.guesser.displayName ?? '?')[0]} />
-          <HandText>{comment.guesser.displayName ?? 'A player'}</HandText>
+          <PlayerLink accountId={comment.guesser.accountId}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Avatar size={20} label="" url={comment.guesser.avatarUrl} token={token} initial={(comment.guesser.displayName ?? '?')[0]} />
+              <HandText>{comment.guesser.displayName ?? 'A player'}</HandText>
+            </View>
+          </PlayerLink>
           <BodyText>“{comment.comment}”</BodyText>
         </View>
       )}
@@ -318,13 +331,14 @@ export default function RoundResults() {
             </View>
           ) : null}
           {results?.scores.map((score, i) => (
+            <PlayerLink key={score.accountId} accountId={score.accountId}>
             <LeaderboardRow
-              key={score.accountId}
               rank={i + 1}
               name={score.displayName ?? 'A player'}
               points={score.score}
               avatar={<Avatar size={28} label="" url={score.avatarUrl} token={token} initial={(score.displayName ?? '?')[0]} />}
             />
+            </PlayerLink>
           ))}
         </JCard>
         {playlists.length > 0 ? (

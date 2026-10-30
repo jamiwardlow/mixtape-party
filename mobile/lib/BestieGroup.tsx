@@ -1,3 +1,4 @@
+import { PlayerLink } from './PlayerLink';
 import { nameOf } from './rounds';
 import { BodyText, Label, LeaderboardRow } from './ui';
 
@@ -13,7 +14,9 @@ export function BestieGroup({ caption, besties }: { caption: string; besties: Be
       <Label>{caption}</Label>
       {besties.length === 0 && <BodyText>No correct guesses yet</BodyText>}
       {besties.map((b) => (
-        <LeaderboardRow key={b.accountId} name={nameOf(b)} points={b.count} />
+        <PlayerLink key={b.accountId} accountId={b.accountId}>
+          <LeaderboardRow name={nameOf(b)} points={b.count} />
+        </PlayerLink>
       ))}
     </>
   );

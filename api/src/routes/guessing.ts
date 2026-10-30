@@ -33,6 +33,23 @@ interface PreviewRow {
   isrc: string | null;
 }
 
+/** The account's favorites, newest first. The submitter is deliberately not selected: favorites never reveal who submitted a track. */
+export async function loadFavorites(pool: Pool, accountId: string) {
+  const found = await pool.query(
+    `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
+            r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt"
+     FROM favorites f
+     JOIN submissions s ON s.id = f.submission_id
+     JOIN rounds r ON r.id = s.round_id
+     JOIN leagues l ON l.id = r.league_id
+     JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = f.account_id
+     WHERE f.account_id = $1
+     ORDER BY f.created_at DESC`,
+    [accountId],
+  );
+  return found.rows;
+}
+
 export function createGuessingRouter(deps: GuessingDeps): Router {
   const router = Router();
   const previewUrl = (row: PreviewRow) =>
@@ -180,27 +197,15 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     res.json({ url: await previewUrl(found.rows[0]) });
   });
 
-  // The submitter is deliberately not selected: favorites never reveal who submitted a track.
   router.get('/favorites', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const found = await deps.pool.query(
-      `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
-              r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt"
-       FROM favorites f
-       JOIN submissions s ON s.id = f.submission_id
-       JOIN rounds r ON r.id = s.round_id
-       JOIN leagues l ON l.id = r.league_id
-       JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = f.account_id
-       WHERE f.account_id = $1
-       ORDER BY f.created_at DESC`,
-      [accountId],
-    );
+    const favorites = await loadFavorites(deps.pool, accountId);
     const exported = await deps.pool.query<{ playlist_external_id: string }>(
       "SELECT playlist_external_id FROM favorite_exports WHERE account_id = $1 AND service = 'youtube_music'",
       [accountId],
     );
     const externalId = exported.rows[0]?.playlist_external_id;
-    res.json({ favorites: found.rows, playlistUrl: externalId ? PLAYLIST_URL.youtube_music(externalId) : null });
+    res.json({ favorites, playlistUrl: externalId ? PLAYLIST_URL.youtube_music(externalId) : null });
   });
 
   router.post('/rounds/:roundId/submissions/:submissionId/guesses', requireAuth(deps), async (req, res) => {

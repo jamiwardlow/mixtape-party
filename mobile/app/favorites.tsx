@@ -1,21 +1,12 @@
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { FlatList, Linking, View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { fetchApi } from '../lib/api';
+import { FavoritesList, type Favorite } from '../lib/FavoritesList';
 import { usePreview } from '../lib/preview';
-import type { ServiceName } from '../lib/rounds';
 import { useSession } from '../lib/session';
-import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton } from '../lib/ui';
-
-interface Favorite {
-  submissionId: string;
-  leagueName: string;
-  roundTheme: string;
-  service: ServiceName;
-  title: string;
-  artist: string;
-}
+import { BodyText, ErrorNote, JCard, Label, ReelSpinner, Screen, TapeButton } from '../lib/ui';
 
 interface Skipped {
   submissionId: string;
@@ -122,38 +113,18 @@ export default function Favorites() {
       ) : null}
       {favorites === null ? (
         error ? null : <ReelSpinner />
-      ) : favorites.length === 0 ? (
-        <BodyText>
-          No favorites yet. Tap the heart on a track on a round's results screen to save it here.
-        </BodyText>
       ) : (
-        <FlatList
-          data={favorites}
-          keyExtractor={(item) => item.submissionId}
-          ItemSeparatorComponent={Sprocket}
-          renderItem={({ item }) => (
-            <JCard>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <ServiceBadge service={item.service} />
-                <TapeButton
-                  title={playingId === item.submissionId ? 'Stop' : 'Play'}
-                  onPress={() => {
-                    setNoPreview(null);
-                    toggle(item.submissionId);
-                  }}
-                  variant="secondary"
-                />
-              </View>
-              <HandText>
-                {item.title} — {item.artist}
-              </HandText>
-              <Label>
-                {item.leagueName} · {item.roundTheme}
-              </Label>
-              {noPreview === item.submissionId ? <Label>No preview available for this track.</Label> : null}
-              <TapeButton title="Unfavorite" onPress={() => unfavorite(item.submissionId)} variant="secondary" />
-            </JCard>
-          )}
+        <FavoritesList
+          editable
+          favorites={favorites}
+          empty="No favorites yet. Tap the heart on a track on a round's results screen to save it here."
+          playingId={playingId}
+          noPreview={noPreview}
+          onPlay={(id) => {
+            setNoPreview(null);
+            toggle(id);
+          }}
+          onUnfavorite={unfavorite}
         />
       )}
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />

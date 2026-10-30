@@ -52,6 +52,7 @@ function RootNavigator() {
         <Stack.Screen name="create-league" />
         <Stack.Screen name="account" />
         <Stack.Screen name="favorites" />
+        <Stack.Screen name="player/[id]" />
         <Stack.Screen name="league/[leagueId]/index" />
         <Stack.Screen name="league/[leagueId]/schedule" />
         <Stack.Screen name="round/[roundId]/index" />
