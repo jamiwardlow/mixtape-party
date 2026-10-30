@@ -35,8 +35,8 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "TODO",
-        "appleTeamId": "TODO"
+        "ascAppId": "6828562097",
+        "appleTeamId": "D5TLK455G6"
       },
       "android": {
         "serviceAccountKeyPath": "TODO",
