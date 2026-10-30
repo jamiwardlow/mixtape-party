@@ -17,6 +17,7 @@ import {
   type Player,
   type RoundActivity,
 } from './rounds.js';
+import { blockedIds, maskBlocked } from './blocks.js';
 import { correctGuessCounts, scoreboard } from './results.js';
 
 export type LeaguesDeps = AccountsDeps;
@@ -442,9 +443,10 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       loadCurrentRound(deps.pool, leagueId),
     ]);
 
+    const blocked = await blockedIds(deps.pool, accountId);
     const now = new Date();
     const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }]),
+      membersResult.rows.map((row) => [row.account_id, maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked)]),
     );
 
     const activity = new Map<string, RoundActivity>(roundsResult.rows.map((row) => [row.id, emptyRoundActivity()]));
@@ -472,9 +474,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       },
       host: players.get(league.hostAccountId) ?? { accountId: league.hostAccountId, displayName: null },
       members: membersResult.rows.map((row) => ({
-        accountId: row.account_id,
-        displayName: row.display_name,
-        avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at),
+        ...maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked),
         joinedAt: row.joined_at,
       })),
       standings: scores,
@@ -537,8 +537,9 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       ),
     ]);
 
+    const blocked = await blockedIds(deps.pool, accountId);
     const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }]),
+      membersResult.rows.map((row) => [row.account_id, maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked)]),
     );
     const mine = submissionsResult.rows.find((row) => row.account_id === accountId);
     const activity: RoundActivity = {

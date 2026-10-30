@@ -29,7 +29,7 @@ async function setup() {
     );
   const guessId = (await results(c)).comments[0].guessId as string;
   const report = (m: { token: string }, body: object) => request(app).post('/reports').set(auth(m)).send(body);
-  return { app, emailChannel, pushChannel, a, b, c, auth, results, guessId, report };
+  return { app, emailChannel, pushChannel, a, b, c, auth, results, guessId, report, leagueId: league.leagueId };
 }
 
 describe('reports and blocks (#144)', () => {
@@ -132,6 +132,16 @@ describe('follow-ups (#167)', () => {
     expect((await results(c)).comments[0].replies).toEqual([]);
     const { submitter } = await results(c); // b's own track
     expect(submitter).toEqual({ accountId: b.accountId, displayName: 'Blocked player' });
+  });
+
+  it('masks a blocked player in the league overview roster and standings', async () => {
+    const { app, b, c, auth, leagueId } = await setup();
+    await request(app).put(`/blocks/${b.accountId}`).set(auth(c));
+    const overview = (await request(app).get(`/leagues/${leagueId}/overview`).set(auth(c))).body;
+    const masked = { accountId: b.accountId, displayName: 'Blocked player' };
+    expect(overview.members.find((m: { accountId: string }) => m.accountId === b.accountId)).toMatchObject(masked);
+    expect(overview.standings.find((m: { accountId: string }) => m.accountId === b.accountId)).toMatchObject(masked);
+    expect(overview.members.find((m: { accountId: string }) => m.accountId === b.accountId).avatarUrl).toBeUndefined();
   });
 });
 

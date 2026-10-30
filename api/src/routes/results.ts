@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
-import { blockedIds } from './blocks.js';
+import { blockedIds, maskBlocked } from './blocks.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   isLeagueMember,
@@ -133,9 +133,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const players = new Map<string, Player>(
       membersResult.rows.map((row) => [
         row.account_id,
-        blocked.has(row.account_id)
-          ? { accountId: row.account_id, displayName: 'Blocked player' }
-          : { accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) },
+        maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked),
       ]),
     );
 

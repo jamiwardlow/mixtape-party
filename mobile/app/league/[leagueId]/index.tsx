@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { ReportBlock } from '../../../lib/Moderation';
 import {
   PHASE_META,
   phaseLabel,
@@ -68,16 +69,16 @@ export default function LeagueOverview() {
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
+  async function load() {
+    const res = await fetchApi(`/leagues/${leagueId}/overview`, { token: token ?? undefined });
+    if (!res.ok) {
+      setError((await res.json().catch(() => null))?.error ?? 'Could not load this league');
+      return;
+    }
+    setOverview(await res.json());
+  }
   useEffect(() => {
-    if (!token) return;
-    (async () => {
-      const res = await fetchApi(`/leagues/${leagueId}/overview`, { token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not load this league');
-        return;
-      }
-      setOverview(await res.json());
-    })();
+    if (token) load();
   }, [token, leagueId]);
 
   if (!overview) {
@@ -176,6 +177,7 @@ export default function LeagueOverview() {
                   {submitters && <Label>{submitted ? 'Submitted' : 'No track yet'}</Label>}
                   {guessed && <Label>Guessed</Label>}
                 </View>
+                {member.accountId === profile?.id ? null : <ReportBlock author={member} onBlocked={load} />}
               </View>
             );
           })}

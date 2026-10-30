@@ -23,3 +23,8 @@ export async function sharesLeague(pool: Pool, a: string, b: string) {
     )
   ).rowCount;
 }
+
+/** A blocked player shows as "Blocked player" with no photo wherever the blocker sees a roster. */
+export function maskBlocked<T extends { accountId: string; displayName: string | null; avatarUrl?: string | null }>(player: T, blocked: Set<string>): T {
+  return blocked.has(player.accountId) ? { ...player, displayName: 'Blocked player', avatarUrl: undefined } : player;
+}
