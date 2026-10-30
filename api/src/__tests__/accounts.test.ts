@@ -159,3 +159,50 @@ describe('PATCH /accounts/me', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('PATCH /accounts/me pronouns and About Me (#176)', () => {
+  const patch = async (app: ReturnType<typeof buildApp>, token: string, body: object) =>
+    request(app).patch('/accounts/me').set('Authorization', `Bearer ${token}`).send(body);
+  const signUp = async (app: ReturnType<typeof buildApp>, email: string) =>
+    (await request(app).post('/accounts').send({ email, password: 'password123' })).body.token as string;
+
+  it('saves both fields without touching the name, and GET returns them', async () => {
+    const app = buildApp();
+    const token = await signUp(app, 'about@example.com');
+    await patch(app, token, { displayName: 'Sam' });
+
+    const res = await patch(app, token, { pronouns: ' she/her · JAH-mee ', aboutMe: 'Hi\nthere' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ displayName: 'Sam', pronouns: 'she/her · JAH-mee', aboutMe: 'Hi\nthere' });
+    const me = await request(app).get('/accounts/me').set('Authorization', `Bearer ${token}`);
+    expect(me.body).toMatchObject({ pronouns: 'she/her · JAH-mee', aboutMe: 'Hi\nthere' });
+  });
+
+  it('clears a field when blank', async () => {
+    const app = buildApp();
+    const token = await signUp(app, 'clear@example.com');
+    await patch(app, token, { pronouns: 'they/them' });
+
+    const res = await patch(app, token, { pronouns: '  ' });
+
+    expect(res.body.pronouns).toBeNull();
+  });
+
+  it('rejects over-length input', async () => {
+    const app = buildApp();
+    const token = await signUp(app, 'over@example.com');
+
+    expect((await patch(app, token, { pronouns: 'x'.repeat(41) })).status).toBe(400);
+    expect((await patch(app, token, { aboutMe: 'x'.repeat(501) })).status).toBe(400);
+    expect((await patch(app, token, { aboutMe: 'x'.repeat(500) })).status).toBe(200);
+  });
+
+  it('rejects non-text values and an empty body', async () => {
+    const app = buildApp();
+    const token = await signUp(app, 'junk@example.com');
+
+    expect((await patch(app, token, { pronouns: 5 })).status).toBe(400);
+    expect((await patch(app, token, {})).status).toBe(400);
+  });
+});

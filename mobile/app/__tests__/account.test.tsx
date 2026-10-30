@@ -4,7 +4,8 @@ import Account from '../account';
 
 const mockRefreshProfile = jest.fn();
 const mockSignOut = jest.fn();
-let mockProfile: { id: string; email: string; displayName?: string | null; avatarUrl?: string | null } | null;
+let mockProfile: { id: string; email: string; displayName?: string | null; avatarUrl?: string | null; pronouns?: string | null; aboutMe?: string | null } | null;
+let mockFavorites: { title: string; artist: string }[];
 
 jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: jest.fn() }));
 jest.mock('expo-image-manipulator', () => ({
@@ -28,6 +29,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockLeagues = [];
   mockBesties = { guessedMe: [], iGuessed: [] };
+  mockFavorites = [];
   mockProfile = { id: 'a1', email: 'jami@example.com' };
   globalThis.fetch = jest.fn(async (url: string) =>
     new Response(
@@ -38,7 +40,9 @@ beforeEach(() => {
             ? { leagues: mockLeagues }
             : url.includes('/accounts/me/besties')
               ? mockBesties
-              : mockProfile,
+              : url.includes('/favorites')
+                ? { favorites: mockFavorites }
+                : mockProfile,
       ),
       { status: 200 },
     ),
@@ -100,12 +104,59 @@ describe('display name', () => {
   });
 });
 
-it('opens the favorites screen', async () => {
-  await render(<Account />);
+describe('favorites section', () => {
+  it('explains itself, shows a count and a preview, and opens the editor', async () => {
+    mockFavorites = [
+      { title: 'Song A', artist: 'Band A' },
+      { title: 'Song B', artist: 'Band B' },
+    ];
 
-  await fireEvent.press(screen.getByText('Favorites'));
+    await render(<Account />);
 
-  expect(router.push).toHaveBeenCalledWith('/favorites');
+    expect(screen.getByText('Favorites')).toBeTruthy();
+    expect(screen.getByText(/Tracks you hearted/)).toBeTruthy();
+    expect(await screen.findByText('2 favorites')).toBeTruthy();
+    expect(screen.getByText('Song A · Band A')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Open favorites'));
+    expect(router.push).toHaveBeenCalledWith('/favorites');
+  });
+});
+
+describe('about you', () => {
+  it('seeds pronouns and About Me from the profile', async () => {
+    mockProfile = { id: 'a1', email: 'jami@example.com', pronouns: 'she/her', aboutMe: 'Hello' };
+
+    await render(<Account />);
+
+    expect(screen.getByDisplayValue('she/her')).toBeTruthy();
+    expect(screen.getByDisplayValue('Hello')).toBeTruthy();
+  });
+
+  it('patches both fields and re-reads the profile', async () => {
+    await render(<Account />);
+    await fireEvent.changeText(screen.getByPlaceholderText(/Pronouns/), 'she/her · JAH-mee');
+    await fireEvent.changeText(screen.getByPlaceholderText('About me'), 'Hi there');
+
+    await fireEvent.press(screen.getByText('Save about you'));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/accounts/me'),
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ pronouns: 'she/her · JAH-mee', aboutMe: 'Hi there' }) }),
+      ),
+    );
+    expect(mockRefreshProfile).toHaveBeenCalled();
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+  });
+
+  it('shows the API error', async () => {
+    await render(<Account />);
+    (fetch as jest.Mock).mockImplementation(async () => new Response(JSON.stringify({ error: 'aboutMe must be at most 500 characters' }), { status: 400 }));
+
+    await fireEvent.press(screen.getByText('Save about you'));
+
+    expect(await screen.findByText('aboutMe must be at most 500 characters')).toBeTruthy();
+  });
 });
 
 describe('notification toggles', () => {
@@ -305,8 +356,10 @@ describe('besties', () => {
 
     await render(<Account />);
 
-    expect(await screen.findByText('Gets me')).toBeTruthy();
-    expect(screen.getByText('I get them')).toBeTruthy();
+    expect(await screen.findByText('Players who guess your songs correctly')).toBeTruthy();
+    expect(screen.getByText('Players whose songs you guess correctly')).toBeTruthy();
+    expect(screen.queryByText('Gets me')).toBeNull();
+    expect(screen.queryByText('I get them')).toBeNull();
     expect(screen.getByText('Dana')).toBeTruthy();
     expect(screen.getByText('5')).toBeTruthy();
     expect(screen.getByText('A player')).toBeTruthy();

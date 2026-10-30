@@ -281,6 +281,47 @@ export default function Account() {
     }
   }
 
+  const [pronouns, setPronouns] = useState(profile?.pronouns ?? '');
+  const [aboutMe, setAboutMe] = useState(profile?.aboutMe ?? '');
+  const [savingAbout, setSavingAbout] = useState(false);
+  const [aboutError, setAboutError] = useState<string | null>(null);
+  const [aboutSaved, setAboutSaved] = useState(false);
+
+  useEffect(() => {
+    setPronouns(profile?.pronouns ?? '');
+    setAboutMe(profile?.aboutMe ?? '');
+  }, [profile?.pronouns, profile?.aboutMe]);
+
+  async function saveAbout() {
+    if (!token || savingAbout) return;
+    setAboutError(null);
+    setAboutSaved(false);
+    setSavingAbout(true);
+    try {
+      const res = await fetchApi('/accounts/me', { method: 'PATCH', token, body: { pronouns, aboutMe } });
+      if (!res.ok) {
+        setAboutError((await res.json().catch(() => null))?.error ?? "Couldn't save that. Try again.");
+        return;
+      }
+      await refreshProfile();
+      setAboutSaved(true);
+    } catch {
+      setAboutError("Couldn't reach the server. Try again.");
+    } finally {
+      setSavingAbout(false);
+    }
+  }
+
+  const [favorites, setFavorites] = useState<{ title: string; artist: string }[] | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchApi('/favorites', { token })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((b) => setFavorites(b.favorites ?? []))
+      .catch(() => {});  // leave the count out rather than claim 0
+  }, [token]);
+
   const [confirming, setConfirming] = useState(false);
   const [proof, setProof] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -349,6 +390,48 @@ export default function Account() {
         {nameError && <ErrorNote>{nameError}</ErrorNote>}
       </JCard>
       <JCard>
+        <HandText>About you</HandText>
+        <Label>Optional.</Label>
+        <TapeInput
+          placeholder="Pronouns / pronunciation (e.g. she/her · JAH-mee)"
+          maxLength={40}
+          value={pronouns}
+          onChangeText={(next) => {
+            setPronouns(next);
+            setAboutSaved(false);
+          }}
+        />
+        <TapeInput
+          placeholder="About me"
+          maxLength={500}
+          multiline
+          style={{ minHeight: 96, textAlignVertical: 'top' }}
+          value={aboutMe}
+          onChangeText={(next) => {
+            setAboutMe(next);
+            setAboutSaved(false);
+          }}
+        />
+        {savingAbout ? <ReelSpinner /> : <TapeButton title="Save about you" onPress={saveAbout} />}
+        {aboutSaved && <BodyText>Saved.</BodyText>}
+        {aboutError && <ErrorNote>{aboutError}</ErrorNote>}
+      </JCard>
+      <JCard>
+        <HandText>Favorites</HandText>
+        <Label>
+          Tracks you hearted on a results screen, saved here so you can hear them again or export them as a playlist.
+        </Label>
+        {favorites && (
+          <>
+            <BodyText>{favorites.length === 1 ? '1 favorite' : `${favorites.length} favorites`}</BodyText>
+            {favorites.slice(0, 3).map((f, i) => (
+              <Label key={i}>{`${f.title} · ${f.artist}`}</Label>
+            ))}
+          </>
+        )}
+        <TapeButton title="Open favorites" onPress={() => router.push('/favorites')} />
+      </JCard>
+      <JCard>
         <HandText>Notifications</HandText>
         <Label>Reminders and updates about your leagues. Sign-in and password emails always send.</Label>
         {(
@@ -385,8 +468,8 @@ export default function Account() {
           <ReelSpinner />
         ) : (
           <>
-            <BestieGroup title="Gets me" caption="Correct guesses of your songs" besties={besties.guessedMe} />
-            <BestieGroup title="I get them" caption="Their songs you guessed correctly" besties={besties.iGuessed} />
+            <BestieGroup caption="Players who guess your songs correctly" besties={besties.guessedMe} />
+            <BestieGroup caption="Players whose songs you guess correctly" besties={besties.iGuessed} />
           </>
         )}
       </JCard>
@@ -411,7 +494,6 @@ export default function Account() {
         )}
         {deleteError && <ErrorNote>{deleteError}</ErrorNote>}
       </JCard>
-      <TapeButton title="Favorites" onPress={() => router.push('/favorites')} />
       <TapeButton title="Back" onPress={() => router.back()} variant="secondary" />
       <LegalLinks />
       </ScrollView>

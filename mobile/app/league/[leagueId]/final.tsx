@@ -70,8 +70,8 @@ export default function SeasonWrapUp() {
             <ReelSpinner />
           ) : (
             <>
-              <BestieGroup title="Gets me" caption="Correct guesses of your songs" besties={besties.guessedMe} />
-              <BestieGroup title="I get them" caption="Their songs you guessed correctly" besties={besties.iGuessed} />
+              <BestieGroup caption="Players who guess your songs correctly" besties={besties.guessedMe} />
+              <BestieGroup caption="Players whose songs you guess correctly" besties={besties.iGuessed} />
             </>
           )}
         </JCard>

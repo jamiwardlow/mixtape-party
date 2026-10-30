@@ -14,6 +14,9 @@ export interface Profile {
   displayName?: string | null;
   /** Path (with a cache-busting ?v=) served by the authenticated GET /accounts/:id/avatar; null when unset. */
   avatarUrl?: string | null;
+  /** Free text, e.g. "she/her · JAH-mee"; null when unset (#176). */
+  pronouns?: string | null;
+  aboutMe?: string | null;
 }
 
 interface SessionContextValue {

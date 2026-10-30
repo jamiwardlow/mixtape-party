@@ -46,8 +46,10 @@ it('shows winners, final standings and both Besties groups for a concluded leagu
   expect(within(await screen.findByTestId('winners')).getByText('Ada')).toBeTruthy();
   expect(screen.getByTestId('standings-a').props.children).toBe(5);
   expect(screen.getByTestId('standings-b').props.children).toBe(2);
-  expect(await screen.findByText('Gets me')).toBeTruthy();
-  expect(screen.getByText('I get them')).toBeTruthy();
+  expect(await screen.findByText('Players who guess your songs correctly')).toBeTruthy();
+  expect(screen.getByText('Players whose songs you guess correctly')).toBeTruthy();
+  expect(screen.queryByText('Gets me')).toBeNull();
+  expect(screen.queryByText('I get them')).toBeNull();
   expect(screen.getByText('3')).toBeTruthy();
 });
 

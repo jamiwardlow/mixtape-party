@@ -22,6 +22,10 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar_updated_at TIMESTAMPTZ;
 -- #143: set when the account is deleted (scrubbed in place; see DELETE /accounts/me).
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+-- #176: optional pronouns/pronunciation and About Me.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS pronouns TEXT;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS about_me TEXT;
+
 CREATE TABLE IF NOT EXISTS leagues (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,

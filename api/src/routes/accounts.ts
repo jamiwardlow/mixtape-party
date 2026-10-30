@@ -45,6 +45,8 @@ export function requireAuth(deps: Pick<AccountsDeps, 'sessionSecret' | 'pool'>):
 // nobody is required to fill in -- and a name accepted at sign-up that PATCH then refuses would
 // leave the owner unable to edit their own name.
 const MAX_DISPLAY_NAME = 40;
+const MAX_PRONOUNS = 40;
+const MAX_ABOUT_ME = 500;
 
 // ponytail: avatars live in Postgres bytea (client resizes to ~256px, so rows stay small). Move to
 // a bucket if avatars grow or get fetched in bulk, e.g. a roster of hundreds.
@@ -129,16 +131,36 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
   // nearly all of them -- ever gets one. Responds with the /accounts/me body so the client reuses
   // one parser. No uniqueness check: two friends in a league can both be "Sam" (#81).
   router.patch('/accounts/me', requireAuth(deps), async (req, res) => {
-    const { displayName } = (req.body ?? {}) as Record<string, unknown>;
-    // Trimmed before the length check *and* before storing -- " Sam " kept verbatim makes a roster
-    // of otherwise aligned names read ragged.
-    const name = typeof displayName === 'string' ? displayName.trim() : '';
-    if (name.length === 0 || name.length > MAX_DISPLAY_NAME) {
-      res.status(400).json({ error: `displayName must be 1-${MAX_DISPLAY_NAME} characters` });
-      return;
-    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const sets: string[] = [];
     const accountId = (req as unknown as AuthedRequest).accountId;
-    await deps.pool.query('UPDATE accounts SET display_name = $2 WHERE id = $1', [accountId, name]);
+    const values: unknown[] = [accountId];
+    const fail = (error: string) => void res.status(400).json({ error });
+
+    if ('displayName' in body) {
+      // Trimmed before the length check *and* before storing -- " Sam " kept verbatim makes a roster
+      // of otherwise aligned names read ragged.
+      const name = typeof body.displayName === 'string' ? body.displayName.trim() : '';
+      if (name.length === 0 || name.length > MAX_DISPLAY_NAME) return fail(`displayName must be 1-${MAX_DISPLAY_NAME} characters`);
+      values.push(name);
+      sets.push(`display_name = $${values.length}`);
+    }
+    // Optional text: blank clears it (stored as NULL), too long is rejected rather than truncated.
+    for (const [key, column, max] of [
+      ['pronouns', 'pronouns', MAX_PRONOUNS],
+      ['aboutMe', 'about_me', MAX_ABOUT_ME],
+    ] as const) {
+      if (!(key in body)) continue;
+      const value = body[key];
+      if (value !== null && typeof value !== 'string') return fail(`${key} must be text`);
+      const text = value?.trim() ?? '';
+      if (text.length > max) return fail(`${key} must be at most ${max} characters`);
+      values.push(text || null);
+      sets.push(`${column} = $${values.length}`);
+    }
+    if (sets.length === 0) return fail('nothing to update');
+
+    await deps.pool.query(`UPDATE accounts SET ${sets.join(', ')} WHERE id = $1`, values);
     await sendProfile(deps.pool, accountId, res);
   });
 
@@ -197,7 +219,7 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
       }
       await client.query(
         `UPDATE accounts SET email = 'deleted-' || id || '@deleted.invalid', password_hash = NULL, google_sub = NULL, apple_sub = NULL,
-                display_name = NULL, avatar = NULL, avatar_content_type = NULL, avatar_updated_at = NULL, deleted_at = now()
+                display_name = NULL, pronouns = NULL, about_me = NULL, avatar = NULL, avatar_content_type = NULL, avatar_updated_at = NULL, deleted_at = now()
           WHERE id = $1`,
         [accountId],
       );
@@ -263,8 +285,10 @@ async function sendProfile(pool: Pool, accountId: string, res: Response): Promis
     email: string;
     display_name: string | null;
     avatar_updated_at: Date | null;
+    pronouns: string | null;
+    about_me: string | null;
   }>(
-    'SELECT id, email, display_name, avatar_updated_at FROM accounts WHERE id = $1',
+    'SELECT id, email, display_name, avatar_updated_at, pronouns, about_me FROM accounts WHERE id = $1',
     [accountId],
   );
   const account = accountResult.rows[0];
@@ -277,6 +301,8 @@ async function sendProfile(pool: Pool, accountId: string, res: Response): Promis
     email: account.email,
     displayName: account.display_name,
     avatarUrl: avatarUrlOf(account.id, account.avatar_updated_at),
+    pronouns: account.pronouns,
+    aboutMe: account.about_me,
   });
 }
 

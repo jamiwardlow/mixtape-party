@@ -7,10 +7,9 @@ export interface Bestie {
   count: number;
 }
 
-export function BestieGroup({ title, caption, besties }: { title: string; caption: string; besties: Bestie[] }) {
+export function BestieGroup({ caption, besties }: { caption: string; besties: Bestie[] }) {
   return (
     <>
-      <Label>{title}</Label>
       <Label>{caption}</Label>
       {besties.length === 0 && <BodyText>No correct guesses yet</BodyText>}
       {besties.map((b) => (
