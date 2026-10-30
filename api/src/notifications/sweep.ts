@@ -290,4 +290,6 @@ export async function runNotificationSweep(deps: NotificationSweepDeps, now: Dat
   await sweepSeasonConcluded(deps, now);
   await sweepPlaylists(deps, now);
   await sweepGuessingOpen(deps, now);
+  // Housekeeping; a push-service outage must not fail the sweep.
+  await deps.pushChannel.checkReceipts?.().catch((err) => console.error('push receipt check failed', err));
 }

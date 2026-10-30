@@ -20,6 +20,8 @@ export interface PushToken {
 /** Delivers a notification to every device an account has registered (Seam: notification channel). */
 export interface PushChannel {
   send(tokens: PushToken[], payload: NotificationPayload): Promise<void>;
+  /** Prunes tokens the push service reports as dead, once its receipts are ready. Run by the sweep. */
+  checkReceipts?(): Promise<void>;
 }
 
 /** Delivers a notification by email, as the fallback channel alongside push. */

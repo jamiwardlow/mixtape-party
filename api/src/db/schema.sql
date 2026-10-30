@@ -179,6 +179,13 @@ CREATE TABLE IF NOT EXISTS push_tokens (
   UNIQUE (account_id, platform, token)
 );
 
+-- Expo push tickets awaiting a receipt, so the sweep can prune tokens Expo reports as dead.
+CREATE TABLE IF NOT EXISTS push_receipts (
+  ticket_id TEXT PRIMARY KEY,
+  token TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- In-app notification inbox. Always populated regardless of the push/email toggles above, since
 -- the inbox itself has no channel toggle per #30's acceptance criteria.
 CREATE TABLE IF NOT EXISTS notifications (

@@ -47,7 +47,6 @@ const appleIdentityVerifier = createAppleIdentityVerifier(process.env.APPLE_BUND
 
 const youtubeMusicAdapter = new YouTubeMusicAdapter();
 const bandcampAdapter = new BandcampAdapter();
-const pushChannel = new ExpoWebPushChannel();
 // No key, no sender: local dev and CI need neither a Resend account nor outbound mail.
 const resendApiKey = process.env.RESEND_API_KEY;
 const emailFrom = process.env.EMAIL_FROM;
@@ -55,6 +54,7 @@ if (resendApiKey && !emailFrom) throw new Error('EMAIL_FROM is not set');
 const emailChannel = resendApiKey ? new ResendEmailChannel(resendApiKey, emailFrom!) : new NoopEmailChannel();
 
 const pool = createPool();
+const pushChannel = new ExpoWebPushChannel(pool);
 const app = createApp({
   pool,
   sessionSecret,

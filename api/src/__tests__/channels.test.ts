@@ -7,7 +7,7 @@ it('sends the deep-link data in the Expo push body', async () => {
   const fetchMock = vi.fn(async () => new Response('{}'));
   vi.stubGlobal('fetch', fetchMock);
 
-  await new ExpoWebPushChannel().send([{ platform: 'expo', token: 'ExponentPushToken[a]' }], {
+  await new ExpoWebPushChannel({ query: async () => ({}) } as never).send([{ platform: 'expo', token: 'ExponentPushToken[a]' }], {
     title: 't',
     body: 'b',
     data: { roundId: 'round-1' },
