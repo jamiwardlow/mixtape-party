@@ -60,6 +60,19 @@ async function fillPassword(password = 'hunter22') {
   await fireEvent.changeText(screen.getByPlaceholderText('Password'), password);
 }
 
+describe('inbox extras', () => {
+  it('opens the mail app from the inbox state, and shows the contact link on the email screen', async () => {
+    const open = jest.spyOn(require('react-native').Linking, 'openURL').mockResolvedValue(true);
+    (fetch as jest.Mock).mockResolvedValue(NO_CONTENT());
+    await render(<SignIn />);
+    expect(screen.getByText('Contact')).toBeTruthy();
+    await typeEmail();
+    await fireEvent.press(screen.getByText('Email me a link'));
+    await fireEvent.press(await screen.findByText('Open mail app'));
+    expect(open).toHaveBeenCalledWith('mailto:');
+  });
+});
+
 describe('email first', () => {
   it('sends a magic link and shows the inbox state', async () => {
     (fetch as jest.Mock).mockResolvedValue(NO_CONTENT());

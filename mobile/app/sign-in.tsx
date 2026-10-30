@@ -3,8 +3,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, TextInput, View } from 'react-native';
+import { Linking, Platform, StyleSheet, TextInput, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
+import { LegalLinks } from '../lib/legal';
 import { useSession } from '../lib/session';
 import { useTheme } from '../lib/theme';
 import { BodyText, ErrorNote, HandText, Label, Page, StickerBadge, TapeButton, TapeInput } from '../lib/ui';
@@ -207,6 +208,7 @@ export default function SignIn() {
         <BodyText>
           We sent a sign-in link to <BodyText style={styles.bold}>{email}</BodyText>. Tap it on this device and you're in.
         </BodyText>
+        <TapeButton title="Open mail app" variant="secondary" onPress={() => Linking.openURL('mailto:')} />
         {errorNote}
         <Label style={styles.link} onPress={emailSignInLink}>
           {busy === 'link' ? 'Sending link…' : 'Resend link'}
@@ -306,6 +308,7 @@ export default function SignIn() {
         <Label accessibilityRole="link" style={styles.underline} onPress={() => router.push('/terms')}>Terms of Use</Label> and{' '}
         <Label accessibilityRole="link" style={styles.underline} onPress={() => router.push('/privacy')}>Privacy Policy</Label>.
       </Label>
+      <LegalLinks />
     </Page>
   );
 }

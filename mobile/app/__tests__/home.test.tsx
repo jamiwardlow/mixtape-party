@@ -6,9 +6,16 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
 }));
 
+let mockProfile: { email: string; displayName?: string | null } = { email: 'ada@example.com' };
+const mockRefresh = jest.fn();
+jest.mock('../../lib/storage', () => ({
+  deviceStorage: { get: jest.fn(async () => null), set: jest.fn(async () => {}) },
+}));
+
 jest.mock('../../lib/session', () => ({
   useSession: () => ({
-    profile: { email: 'ada@example.com' },
+    profile: mockProfile,
+    refreshProfile: mockRefresh,
     token: 'tok-1',
     signOut: jest.fn(),
     pendingInviteCode: null,
@@ -26,6 +33,7 @@ const leagues = [
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockProfile = { email: 'ada@example.com' };
   globalThis.fetch = jest.fn(
     async () => new Response(JSON.stringify({ leagues }), { status: 200 }),
   ) as unknown as typeof fetch;
@@ -64,4 +72,33 @@ it('opens the season wrap-up for a concluded league', async () => {
   fireEvent.press(await screen.findByText(/Office League/));
 
   expect(router.push).toHaveBeenCalledWith({ pathname: '/league/[leagueId]/final', params: { leagueId: 'league-1' } });
+});
+
+describe('name prompt', () => {
+  it('asks a nameless account for a name and saves it', async () => {
+    mockProfile = { email: 'ada@example.com', displayName: null };
+    await render(<Home />);
+    await fireEvent.changeText(await screen.findByPlaceholderText('Display name'), '  Ada ');
+
+    await fireEvent.press(screen.getByText('Save name'));
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/accounts/me'),
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ displayName: 'Ada' }) }),
+    );
+    expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  it('can be skipped, and never shows to a named account', async () => {
+    mockProfile = { email: 'ada@example.com', displayName: null };
+    await render(<Home />);
+    await fireEvent.press(await screen.findByText('Skip'));
+    expect(screen.queryByPlaceholderText('Display name')).toBeNull();
+  });
+
+  it('stays out of the way once a name is set', async () => {
+    mockProfile = { email: 'ada@example.com', displayName: 'Ada' };
+    await render(<Home />);
+    expect(screen.queryByPlaceholderText('Display name')).toBeNull();
+  });
 });

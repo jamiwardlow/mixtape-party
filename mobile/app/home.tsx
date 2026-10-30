@@ -3,15 +3,18 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { fetchApi } from "../lib/api";
 import { useSession } from "../lib/session";
+import { deviceStorage } from "../lib/storage";
 import { phaseLabel, type RoundPhase } from "../lib/rounds";
 import {
   Cassette,
+  ErrorNote,
   HandText,
   JCard,
   Label,
   PressScale,
   Screen,
   TapeButton,
+  TapeInput,
   Toast,
   focusRing,
   type WebState,
@@ -35,12 +38,40 @@ interface LeagueSummary {
   round: RoundSummary | null;
 }
 
+const NAME_SKIPPED_KEY = "name_prompt_skipped";
+
 export default function Home() {
   const t = useTheme();
-  const { profile, token, signOut, pendingInviteCode, setPendingInviteCode } =
+  const { profile, token, signOut, refreshProfile, pendingInviteCode, setPendingInviteCode } =
     useSession();
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
+  // Magic-link and social signups never see a name field, so ask once here. Skip is remembered.
+  const [name, setName] = useState("");
+  const [nameSkipped, setNameSkipped] = useState(true);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    deviceStorage.get(NAME_SKIPPED_KEY).then((v) => setNameSkipped(!!v), () => {});
+  }, []);
+
+  async function saveName() {
+    const trimmed = name.trim();
+    if (!token || !trimmed) return;
+    setNameError(null);
+    try {
+      const res = await fetchApi("/accounts/me", { method: "PATCH", token, body: { displayName: trimmed } });
+      if (!res.ok) return setNameError((await res.json().catch(() => null))?.error ?? "Couldn't save your name. Try again.");
+      await refreshProfile();
+    } catch {
+      setNameError("Couldn't reach the server. Try again.");
+    }
+  }
+
+  function skipName() {
+    setNameSkipped(true);
+    void deviceStorage.set(NAME_SKIPPED_KEY, "1").catch(() => {});
+  }
 
   async function loadLeagues() {
     if (!token) return;
@@ -81,6 +112,16 @@ export default function Home() {
     <Screen label="Mixtape Party" wide>
       <Label>Signed in as {profile?.email}</Label>
       {joinMessage && <Toast>{joinMessage}</Toast>}
+      {profile?.displayName === null && !nameSkipped && (
+        <JCard>
+          <Label>What should your friends call you?</Label>
+          {/* The API caps a name at 40, same as My Account. */}
+          <TapeInput placeholder="Display name" accessibilityLabel="Display name" maxLength={40} autoComplete="name" textContentType="name" returnKeyType="go" onSubmitEditing={saveName} value={name} onChangeText={setName} />
+          {nameError && <ErrorNote>{nameError}</ErrorNote>}
+          <TapeButton title="Save name" onPress={saveName} disabled={!name.trim()} />
+          <Label accessibilityRole="button" style={{ minHeight: 44, textAlign: "center", textDecorationLine: "underline" }} onPress={skipName}>Skip</Label>
+        </JCard>
+      )}
       <ScrollView
         contentContainerStyle={{
           gap: 12,
