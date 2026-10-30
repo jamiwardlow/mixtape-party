@@ -475,7 +475,7 @@ export default function Account() {
       </JCard>
       <JCard>
         <BlockedPlayers />
-        <Label>Report or block someone from their profile, or from a comment or reply on the results screen.</Label>
+        <Label>Report or block someone from their profile.</Label>
       </JCard>
       <JCard>
         <HandText>Delete account</HandText>

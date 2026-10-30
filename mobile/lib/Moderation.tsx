@@ -14,26 +14,20 @@ const REASONS = [
 ] as const;
 
 /**
- * Report and Block for someone else's comment or reply (#144), or, with no target, for the player
- * themselves from a roster (just their name and photo). Their name and photo can be reported
- * from here too, and blocking hides everything of theirs from your results. `onBlocked` re-reads
- * the results so it disappears straight away.
+ * Report and Block for another player, from their profile. Reports cover their name or photo, and
+ * blocking hides everything of theirs from your results. `onBlocked` runs once they're blocked.
  */
 export function ReportBlock({
   author,
-  targetType,
-  targetId,
   onBlocked,
 }: {
   author: Player;
-  targetType?: 'comment' | 'reply';
-  targetId?: string;
   onBlocked: () => void;
 }) {
   const { token } = useSession();
   const [open, setOpen] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
-  const [what, setWhat] = useState<{ type: string; id: string }>(targetType && targetId ? { type: targetType, id: targetId } : { type: 'display_name', id: author.accountId });
+  const [what, setWhat] = useState<{ type: string; id: string }>({ type: 'display_name', id: author.accountId });
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
@@ -66,7 +60,6 @@ export function ReportBlock({
         <View style={{ gap: 6 }}>
           <HandText>What are you reporting?</HandText>
           {[
-            ...(targetType && targetId ? [[targetType, targetId, `This ${targetType}`]] : []),
             ['display_name', author.accountId, 'Their name'],
             ['avatar', author.accountId, 'Their photo'],
           ].map(([type, id, title]) => (
