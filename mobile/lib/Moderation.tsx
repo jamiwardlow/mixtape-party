@@ -14,20 +14,26 @@ const REASONS = [
 ] as const;
 
 /**
- * Report and Block for another player, from their profile. Reports cover their name or photo, and
- * blocking hides everything of theirs from your results. `onBlocked` runs once they're blocked.
+ * Report (and Block) for another player. On their profile it's both: reports cover their name or
+ * photo, and blocking hides everything of theirs from your results, then `onBlocked` runs. On a
+ * comment or reply (#144) pass `targetType`/`targetId` and no `onBlocked` for just a quiet Report
+ * link, since Block lives on the profile.
  */
 export function ReportBlock({
   author,
+  targetType,
+  targetId,
   onBlocked,
 }: {
   author: Player;
-  onBlocked: () => void;
+  targetType?: 'comment' | 'reply';
+  targetId?: string;
+  onBlocked?: () => void;
 }) {
   const { token } = useSession();
   const [open, setOpen] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
-  const [what, setWhat] = useState<{ type: string; id: string }>({ type: 'display_name', id: author.accountId });
+  const [what, setWhat] = useState<{ type: string; id: string }>(targetType && targetId ? { type: targetType, id: targetId } : { type: 'display_name', id: author.accountId });
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
@@ -39,17 +45,23 @@ export function ReportBlock({
 
   async function block() {
     const res = await fetchApi(`/blocks/${author.accountId}`, { method: 'PUT', token: token ?? undefined });
-    if (res.ok) onBlocked();
+    if (res.ok) onBlocked?.();
     else setStatus('error');
   }
 
   if (status === 'sent') return <Label>Thanks, we’ll take a look.</Label>;
   return (
     <View style={{ gap: 6 }}>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <TapeButton title="Report" variant="secondary" onPress={() => setOpen(!open)} />
-        <TapeButton title="Block" variant="secondary" onPress={() => setConfirmingBlock(!confirmingBlock)} />
-      </View>
+      {onBlocked ? (
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <TapeButton title="Report" variant="secondary" onPress={() => setOpen(!open)} />
+          <TapeButton title="Block" variant="secondary" onPress={() => setConfirmingBlock(!confirmingBlock)} />
+        </View>
+      ) : (
+        <Label accessibilityRole="link" onPress={() => setOpen(!open)}>
+          Report
+        </Label>
+      )}
       {confirmingBlock ? (
         <View style={{ gap: 6 }}>
           <BodyText>Hide everything from {author.displayName ?? 'this player'}? You can unblock them from My Account.</BodyText>
@@ -60,6 +72,7 @@ export function ReportBlock({
         <View style={{ gap: 6 }}>
           <HandText>What are you reporting?</HandText>
           {[
+            ...(targetType && targetId ? [[targetType, targetId, `This ${targetType}`]] : []),
             ['display_name', author.accountId, 'Their name'],
             ['avatar', author.accountId, 'Their photo'],
           ].map(([type, id, title]) => (

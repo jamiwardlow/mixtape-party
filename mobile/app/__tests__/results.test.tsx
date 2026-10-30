@@ -118,6 +118,11 @@ describe('comment threads', () => {
     expect(await screen.findByText('“so Sam”')).toBeTruthy();
     expect(screen.getByText('🔥 2 ✓')).toBeTruthy();
 
+    // Block lives on the profile; the comment only gets a quiet Report.
+    expect(screen.queryByText('Block')).toBeNull();
+    await fireEvent.press(screen.getByText('Report'));
+    expect(screen.getByText(/This comment/)).toBeTruthy();
+
     await fireEvent.changeText(screen.getByPlaceholderText('Reply'), 'agreed');
     await fireEvent.press(screen.getByText('Send reply'));
     await waitFor(() =>

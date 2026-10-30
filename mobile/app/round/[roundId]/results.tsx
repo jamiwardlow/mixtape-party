@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FlatList, Linking, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { ReportBlock } from '../../../lib/Moderation';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import type { Player, ServiceName } from '../../../lib/rounds';
@@ -169,7 +170,9 @@ function ReplyNode({
             <TapeButton title="Edit" variant="secondary" onPress={() => { setDraft(reply.body); setMode(mode === 'edit' ? 'view' : 'edit'); }} />
             <TapeButton title="Delete" variant="secondary" onPress={() => actions.deleteReply(reply.replyId)} />
           </>
-        ) : null}
+        ) : (
+          <ReportBlock author={reply.author} targetType="reply" targetId={reply.replyId} />
+        )}
       </View>
       {mode !== 'view' ? (
         <>
@@ -201,6 +204,7 @@ function CommentThread({ comment, actions }: { comment: Comment; actions: Thread
           <BodyText>“{comment.comment}”</BodyText>
         </View>
       )}
+      {comment.mine ? null : <ReportBlock author={comment.guesser} targetType="comment" targetId={comment.guessId} />}
       <Reactions reactions={comment.reactions} onToggle={(e) => actions.react(`/guesses/${comment.guessId}/reactions`, e)} />
       {comment.replies
         .filter((r) => r.parentReplyId === null)
