@@ -32,7 +32,7 @@ export const NATIVE_RETURN_URL = 'mixtapeparty://auth/complete';
 
 // ponytail: bare `name=value` split, so no RFC 6265 quoted values — fine for the one base64url
 // nonce we set. Add cookie-parser if this app ever reads a cookie it did not write.
-function readCookie(header: string | undefined, name: string): string | null {
+export function readCookie(header: string | undefined, name: string): string | null {
   for (const part of header?.split(';') ?? []) {
     const [key, ...value] = part.trim().split('=');
     if (key === name) return decodeURIComponent(value.join('='));
@@ -48,8 +48,13 @@ function readCookie(header: string | undefined, name: string): string | null {
  *
  * Returns null when the email belongs to an account already linked to a *different* Google sub.
  */
-async function findOrCreateAccount(pool: Pool, profile: GoogleProfile): Promise<string | null> {
-  const existing = await pool.query<{ id: string }>('SELECT id FROM accounts WHERE google_sub = $1', [profile.sub]);
+export async function findOrCreateAccount(
+  pool: Pool,
+  profile: GoogleProfile,
+  column: 'google_sub' | 'apple_sub' = 'google_sub',
+): Promise<string | null> {
+  // `column` is a closed union, never caller input, so interpolating it is safe.
+  const existing = await pool.query<{ id: string }>(`SELECT id FROM accounts WHERE ${column} = $1`, [profile.sub]);
   if (existing.rows[0]) return existing.rows[0].id;
 
   // Auto-linking onto an existing password account is safe precisely because the caller proved
@@ -57,9 +62,9 @@ async function findOrCreateAccount(pool: Pool, profile: GoogleProfile): Promise<
   // same address: COALESCE alone would leave the original google_sub in place but still return the
   // victim's id, which signs the stranger straight into their account.
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO accounts (email, google_sub, display_name) VALUES ($1, $2, $3)
-     ON CONFLICT (email) DO UPDATE SET google_sub = COALESCE(accounts.google_sub, EXCLUDED.google_sub)
-     WHERE accounts.google_sub IS NULL OR accounts.google_sub = EXCLUDED.google_sub
+    `INSERT INTO accounts (email, ${column}, display_name) VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE SET ${column} = COALESCE(accounts.${column}, EXCLUDED.${column})
+     WHERE accounts.${column} IS NULL OR accounts.${column} = EXCLUDED.${column}
      RETURNING id`,
     [profile.email.toLowerCase(), profile.sub, profile.name],
   );

@@ -9,6 +9,7 @@ import { createAccountsRouter } from './routes/accounts.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCommentsRouter } from './routes/comments.js';
 import { createExportRouter } from './routes/export.js';
+import { createAppleAuthRouter } from './routes/appleAuth.js';
 import { createGoogleAuthRouter, type GoogleProfile } from './routes/googleAuth.js';
 import { createGuessingRouter } from './routes/guessing.js';
 import { createInboundEmailRouter, type InboundEmailDeps } from './routes/inboundEmail.js';
@@ -31,6 +32,11 @@ export interface AppDeps extends InboundEmailDeps {
   googleRedirectUri?: string;
   /** Injected so the callback — the most security-sensitive route here — is testable without Google. */
   googleTokenExchange: (code: string) => Promise<GoogleProfile>;
+  /** Sign in with Apple: Services ID and the redirect URI registered against it. Unset leaves
+   *  /auth/apple/start answering 503, like Google. */
+  appleClientId?: string;
+  appleRedirectUri?: string;
+  appleTokenExchange: (code: string) => Promise<GoogleProfile>;
   youtubeMusicAdapter: MusicServiceAdapter;
   // App-owned music.youtube.com session cookie shared by all users' exports — see youtubeMusicAdapter.ts.
   youtubeMusicCookie?: string;
@@ -63,6 +69,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(createAccountsRouter(deps));
   app.use(createAuthRouter(deps));
   app.use(createGoogleAuthRouter(deps));
+  app.use(createAppleAuthRouter(deps));
   app.use(createLeaguesRouter(deps));
   app.use(createSubmissionsRouter(deps));
   app.use(createGuessingRouter(deps));

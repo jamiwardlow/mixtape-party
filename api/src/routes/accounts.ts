@@ -196,7 +196,7 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
         await client.query(`DELETE FROM ${table} WHERE account_id = $1`, [accountId]);
       }
       await client.query(
-        `UPDATE accounts SET email = 'deleted-' || id || '@deleted.invalid', password_hash = NULL, google_sub = NULL,
+        `UPDATE accounts SET email = 'deleted-' || id || '@deleted.invalid', password_hash = NULL, google_sub = NULL, apple_sub = NULL,
                 display_name = NULL, avatar = NULL, avatar_content_type = NULL, avatar_updated_at = NULL, deleted_at = now()
           WHERE id = $1`,
         [accountId],

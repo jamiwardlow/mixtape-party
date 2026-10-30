@@ -298,6 +298,14 @@ describe('Google button on native', () => {
     expect(open.mock.calls[0][1]).toBe('mixtapeparty://auth/complete');
   });
 
+  it('runs the same flow against /auth/apple/start', async () => {
+    open.mockResolvedValue({ type: 'success', url: 'mixtapeparty://auth/complete#t=abc123' });
+    await render(<SignIn />);
+    await fireEvent.press(screen.getByText('Continue with Apple'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    expect(open.mock.calls[0][0]).toContain(`${API_URL}/auth/apple/start?return=`);
+  });
+
   it('shows the error when Google bounces back without a token', async () => {
     open.mockResolvedValue({ type: 'success', url: 'mixtapeparty://auth/complete#error=google_cancelled' });
     await render(<SignIn />);

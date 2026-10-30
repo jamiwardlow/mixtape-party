@@ -24,6 +24,7 @@ export default function Privacy() {
           title: 'Who else handles it',
           body: [
             'Google: if you choose “Continue with Google”, Google tells us your email address and name.',
+            'Apple: if you choose “Continue with Apple”, Apple tells us your email address (possibly a private relay address) and, the first time, your name.',
             'Resend sends our emails (sign-in links, password resets, reminders).',
             'Expo delivers push notifications to your device.',
             'Neon and Google Cloud host our database and servers.',

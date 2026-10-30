@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { createAppleTokenExchange } from './routes/appleAuth.js';
 import { createGoogleTokenExchange } from './routes/googleAuth.js';
 import { createPool } from './db/pool.js';
 import { YouTubeMusicAdapter } from './adapters/youtubeMusicAdapter.js';
@@ -26,6 +27,22 @@ const googleTokenExchange = createGoogleTokenExchange({
   redirectUri: googleRedirectUri ?? '',
 });
 
+// Sign in with Apple: same all-or-nothing rule. The private key is the .p8 contents; Secret Manager
+// often flattens its newlines to a literal \n, so restore them.
+const appleKey = process.env.APPLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+const appleConfigured = Boolean(
+  process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && appleKey && process.env.APPLE_REDIRECT_URI,
+);
+const appleClientId = appleConfigured ? process.env.APPLE_CLIENT_ID : undefined;
+const appleRedirectUri = appleConfigured ? process.env.APPLE_REDIRECT_URI : undefined;
+const appleTokenExchange = createAppleTokenExchange({
+  clientId: appleClientId ?? '',
+  teamId: process.env.APPLE_TEAM_ID ?? '',
+  keyId: process.env.APPLE_KEY_ID ?? '',
+  privateKey: appleKey ?? '',
+  redirectUri: appleRedirectUri ?? '',
+});
+
 const youtubeMusicAdapter = new YouTubeMusicAdapter();
 const bandcampAdapter = new BandcampAdapter();
 const pushChannel = new ExpoWebPushChannel();
@@ -43,6 +60,9 @@ const app = createApp({
   googleClientId,
   googleRedirectUri,
   googleTokenExchange,
+  appleClientId,
+  appleRedirectUri,
+  appleTokenExchange,
   youtubeMusicAdapter,
   youtubeMusicCookie: process.env.YOUTUBE_MUSIC_COOKIE,
   bandcampAdapter,

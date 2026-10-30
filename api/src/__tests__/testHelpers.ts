@@ -22,6 +22,8 @@ export class FakeGoogleTokenExchange {
   };
 }
 
+export const FakeAppleTokenExchange = FakeGoogleTokenExchange;
+
 export function buildApp(
   pool: Pool,
   {
@@ -36,6 +38,7 @@ export function buildApp(
   const pushChannel = new FakePushChannel();
   const emailChannel = new FakeEmailChannel();
   const googleTokenExchange = new FakeGoogleTokenExchange();
+  const appleTokenExchange = new FakeAppleTokenExchange();
   const app = createApp({
     pool,
     sessionSecret: 'test-secret',
@@ -44,6 +47,9 @@ export function buildApp(
     googleClientId: googleConfigured ? 'test-google-client-id' : undefined,
     googleRedirectUri: googleConfigured ? 'https://api.test/auth/google/callback' : undefined,
     googleTokenExchange: googleTokenExchange.exchange,
+    appleClientId: googleConfigured ? 'test.apple.client' : undefined,
+    appleRedirectUri: googleConfigured ? 'https://api.test/auth/apple/callback' : undefined,
+    appleTokenExchange: appleTokenExchange.exchange,
     youtubeMusicAdapter,
     youtubeMusicCookie,
     bandcampAdapter,
@@ -52,7 +58,7 @@ export function buildApp(
     reportEmail: 'owner@app.test',
     sweepSecret: sweepSecret ?? undefined,
   });
-  return { app, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange };
+  return { app, youtubeMusicAdapter, bandcampAdapter, pushChannel, emailChannel, googleTokenExchange, appleTokenExchange };
 }
 
 export async function signUp(app: Express, email: string) {

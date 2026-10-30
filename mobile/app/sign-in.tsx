@@ -13,6 +13,8 @@ import { Chip, ErrorNote, Label, Page, StickerBadge, TapeButton, TapeInput } fro
 const GOOGLE_ERRORS: Record<string, string> = {
   google_cancelled: 'Google sign-in was cancelled.',
   google_failed: 'Google sign-in failed. Try again.',
+  apple_cancelled: 'Apple sign-in was cancelled.',
+  apple_failed: 'Apple sign-in failed. Try again.',
 };
 
 // Same floor as POST /accounts (api/src/routes/accounts.ts); the server stays the authority.
@@ -39,8 +41,8 @@ export default function SignIn() {
   const passwordRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
 
-  // The in-app browser hands back the final mixtapeparty:// URL; the token (or an error) is in its fragment.
-  async function googleNative() {
+  // Shared by both providers. The in-app browser hands back the final mixtapeparty:// URL; the token (or an error) is in its fragment.
+  async function providerNative(provider: 'google' | 'apple') {
     setGoogling(true);
     setError(null);
     try {
@@ -51,16 +53,16 @@ export default function SignIn() {
       const challenge = (await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 }))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_URL}/auth/google/start?return=${encodeURIComponent(NATIVE_RETURN_URL)}&code_challenge=${challenge}`,
+        `${API_URL}/auth/${provider}/start?return=${encodeURIComponent(NATIVE_RETURN_URL)}&code_challenge=${challenge}`,
         NATIVE_RETURN_URL,
       );
       if (result.type !== 'success') return;
       const params = new URLSearchParams(result.url.split('#')[1] ?? '');
       const token = params.get('t');
       if (token) router.push({ pathname: '/auth/complete', params: { t: token, v: verifier } });
-      else setError(GOOGLE_ERRORS[params.get('error') ?? ''] ?? 'Google sign-in failed.');
+      else setError(GOOGLE_ERRORS[params.get('error') ?? ''] ?? `${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed.`);
     } catch {
-      setError('Google sign-in failed. Try again.');
+      setError(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed. Try again.`);
     } finally {
       setGoogling(false);
     }
@@ -160,7 +162,8 @@ export default function SignIn() {
       </View>
       {/* Web: a full-page navigation, not a fetch — the OAuth redirect has to happen in the browser's
           address bar, and the state cookie is set on the API's own origin along the way. */}
-      <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; } : googleNative} />
+      <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; } : () => providerNative('google')} />
+      <TapeButton title={googling ? 'Redirecting…' : 'Continue with Apple'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/apple/start`; } : () => providerNative('apple')} />
       <View style={styles.divider}>
         <View style={[styles.rule, { backgroundColor: t.ink }]} />
         <Label>or</Label>
