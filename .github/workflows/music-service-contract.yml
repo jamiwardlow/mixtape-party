@@ -46,7 +46,7 @@ jobs:
             title: Bandcamp contract test is failing against the real page
             causes: |
               1. Bandcamp changed the track page markup — the `data-tralbum` attribute that `api/src/adapters/bandcampAdapter.ts` parses moved or was renamed, so `submit()` returns null and every pasted Bandcamp link is rejected as invalid. Check the page source, fix the parse path, and re-capture `api/src/adapters/__tests__/fixtures/bandcampTrackPage.html`.
-              2. Bandcamp is bot-blocking the runner (403/429), which the adapter now surfaces as an outage rather than an invalid link. Check whether production is affected before changing the parse.
+              2. Bandcamp is bot-blocking the runner (403/429, or a 200 "Client Challenge" page), which the adapter now surfaces as an outage rather than an invalid link. Check whether production is affected before changing the parse.
               3. The default test URL was taken down, so the page 404s. Set a `BANDCAMP_TEST_URL` repo variable pointing at another long-lived streamable track.
             impact: assume pasting a Bandcamp link into a round is broken.
     steps:

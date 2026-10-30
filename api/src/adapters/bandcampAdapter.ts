@@ -74,6 +74,11 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     if (!res.ok) return null;
 
     const html = await res.text();
+    // Datacenter IPs (CI runners, possibly Cloud Run) are served a 200 "Client Challenge" bot wall in
+    // place of the page, which looks like a bad link unless we name it.
+    if (html.includes('<title>Client Challenge</title>')) {
+      throw new ServiceUnavailableError('bandcamp', 'bandcamp served a bot challenge');
+    }
     const encoded = html.match(TRALBUM_PATTERN)?.[1];
     const data = encoded ? safeParse(decodeHtmlEntities(encoded)) : null;
 
@@ -89,7 +94,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
         res.url,
         res.headers?.get('content-type'),
         html.length,
-        html.slice(0, 3100).replace(/\s+/g, ' '),
+        html.slice(0, 300).replace(/\s+/g, ' '),
       );
       return null;
     }

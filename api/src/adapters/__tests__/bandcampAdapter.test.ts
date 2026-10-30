@@ -91,6 +91,16 @@ describe('BandcampAdapter.submit', () => {
 
   // Scraping a public page invites bot-blocking, and the caller maps null to a 400 telling the
   // player their link is invalid. A refusal is an outage, so it has to throw instead.
+  // GitHub's runner (and likely other datacenter IPs) get HTTP 200 with a "Client Challenge" bot
+  // wall instead of the track page. Same outage, different disguise.
+  it('throws ServiceUnavailableError on a 200 Client Challenge page rather than rejecting the link', async () => {
+    stubFetch('<!DOCTYPE html><html><head><title>Client Challenge</title></head><body></body></html>');
+
+    await expect(new BandcampAdapter().submit('https://tycho.bandcamp.com/track/awake')).rejects.toThrow(
+      ServiceUnavailableError,
+    );
+  });
+
   it.each([403, 429, 503])('throws ServiceUnavailableError on HTTP %i rather than rejecting the link', async (status) => {
     stubFetch('<html>blocked</html>', status);
 
