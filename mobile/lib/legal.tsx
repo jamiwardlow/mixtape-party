@@ -13,15 +13,19 @@ export interface LegalSection {
 }
 
 /** Privacy · Terms links for sign-in and My Account; the stores need both reachable in-app. */
-export function LegalLinks() {
+export function LegalLinks({ policies = true }: { policies?: boolean }) {
   return (
     <View style={styles.links}>
-      <Label accessibilityRole="link" style={styles.link} onPress={() => router.push('/privacy')}>
-        Privacy Policy
-      </Label>
-      <Label accessibilityRole="link" style={styles.link} onPress={() => router.push('/terms')}>
-        Terms of Use
-      </Label>
+      {policies && (
+        <>
+          <Label accessibilityRole="link" style={styles.link} onPress={() => router.push('/privacy')}>
+            Privacy Policy
+          </Label>
+          <Label accessibilityRole="link" style={styles.link} onPress={() => router.push('/terms')}>
+            Terms of Use
+          </Label>
+        </>
+      )}
       <Label accessibilityRole="link" style={styles.link} onPress={openContactEmail}>
         Contact
       </Label>

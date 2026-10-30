@@ -284,7 +284,9 @@ export default function SignIn() {
       <BodyText>New or returning, same door.</BodyText>
       {emailInput}
       {errorNote}
-      <TapeButton title={busy === 'link' ? 'Sending link…' : 'Email me a link'} onPress={emailSignInLink} disabled={!!busy || googling} />
+      <View style={styles.center}>
+        <TapeButton title={busy === 'link' ? 'Sending link…' : 'Email me a link'} onPress={emailSignInLink} disabled={!!busy || googling} />
+      </View>
       <View style={styles.divider}>
         <View style={[styles.rule, { backgroundColor: t.ink }]} />
         <Label>or</Label>
@@ -293,12 +295,8 @@ export default function SignIn() {
       {/* Web: a full-page navigation, not a fetch — the OAuth redirect has to happen in the browser's
           address bar, and the state cookie is set on the API's own origin along the way. */}
       <View style={styles.pair}>
-        <View style={styles.half}>
-          <TapeButton title={googling ? 'Redirecting…' : 'Google'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; } : () => providerNative('google')} />
-        </View>
-        <View style={styles.half}>
-          <TapeButton title={googling ? 'Redirecting…' : 'Apple'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/apple/start`; } : Platform.OS === 'ios' ? appleNative : () => providerNative('apple')} />
-        </View>
+        <TapeButton title={googling ? 'Redirecting…' : 'Google'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; } : () => providerNative('google')} />
+        <TapeButton title={googling ? 'Redirecting…' : 'Apple'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/apple/start`; } : Platform.OS === 'ios' ? appleNative : () => providerNative('apple')} />
       </View>
       <Label style={styles.link} onPress={() => go('password')}>
         Use a password instead
@@ -308,7 +306,7 @@ export default function SignIn() {
         <Label accessibilityRole="link" style={styles.underline} onPress={() => router.push('/terms')}>Terms of Use</Label> and{' '}
         <Label accessibilityRole="link" style={styles.underline} onPress={() => router.push('/privacy')}>Privacy Policy</Label>.
       </Label>
-      <LegalLinks />
+      <LegalLinks policies={false} />
     </Page>
   );
 }
@@ -316,14 +314,14 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   note: { textAlign: 'center' },
   underline: { textDecorationLine: 'underline' },
+  center: { alignItems: 'center' },
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
   link: { paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
   showLink: { minHeight: 44, textAlign: 'right', textDecorationLine: 'underline', textAlignVertical: 'center' },
   title: { fontSize: 30, transform: [{ rotate: '-2deg' }] },
   bold: { fontWeight: '700' },
-  pair: { flexDirection: 'row', gap: 10 },
-  half: { flex: 1 },
+  pair: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rule: { flex: 1, height: 3 },
 });
