@@ -28,6 +28,11 @@ function validSignature(secret: string, id: string, timestamp: string, body: str
   });
 }
 
+// Resend's error body says why (e.g. restricted API key), so it goes in the thrown message and the logs.
+async function failure(what: string, r: Response): Promise<Error> {
+  return new Error(`${what} failed with ${r.status}: ${(await r.text().catch(() => '')).slice(0, 500)}`);
+}
+
 interface ReceivedEmail {
   from: string;
   subject?: string;
@@ -77,13 +82,13 @@ export function createInboundEmailRouter(deps: InboundEmailDeps): Router {
     // Any failure below is a 500 so Resend retries the webhook.
     const auth = { Authorization: `Bearer ${resendApiKey}` };
     const got = await doFetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`, { headers: auth });
-    if (!got.ok) throw new Error(`resend receiving get failed with ${got.status}`);
+    if (!got.ok) throw await failure('resend receiving get', got);
     const email = (await got.json()) as ReceivedEmail;
 
     const attachments = await Promise.all(
       (email.attachments ?? []).map(async (a) => {
         const file = await doFetch(a.download_url);
-        if (!file.ok) throw new Error(`attachment download failed with ${file.status}`);
+        if (!file.ok) throw await failure('attachment download', file);
         return {
           filename: a.filename,
           content: Buffer.from(await file.arrayBuffer()).toString('base64'),
@@ -106,7 +111,7 @@ export function createInboundEmailRouter(deps: InboundEmailDeps): Router {
         attachments,
       }),
     });
-    if (!sent.ok) throw new Error(`resend forward failed with ${sent.status}`);
+    if (!sent.ok) throw await failure('resend forward', sent);
     res.json({ ok: true });
   });
 
