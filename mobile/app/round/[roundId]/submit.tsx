@@ -5,7 +5,7 @@ import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import type { ServiceName } from '../../../lib/rounds';
-import { BodyText, Chip, ErrorNote, JCard, Label, PhaseSteps, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -140,8 +140,6 @@ export default function SubmitTrack() {
 
   return (
     <Screen label={title}>
-      {/* Outside the FlatList, so it stays on screen however long the results get. */}
-      <TapeButton title="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />
       {current && (
         <JCard>
           <Label>{submitted ? 'Track submitted — your current track' : 'Your current track'}</Label>
@@ -152,7 +150,6 @@ export default function SubmitTrack() {
           </View>
         </JCard>
       )}
-      <PhaseSteps phase="submission" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {SERVICES.map((s) => (
           <Chip key={s} label={BUTTON_LABEL[s] ?? s} selected={s === service} onPress={() => setService(s)} />
@@ -198,6 +195,7 @@ export default function SubmitTrack() {
         </>
       )}
       {error && <ErrorNote>{error}</ErrorNote>}
+      <TapeButton title="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />
     </Screen>
   );
 }
