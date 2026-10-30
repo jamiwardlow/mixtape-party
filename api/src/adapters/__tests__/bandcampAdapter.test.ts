@@ -117,6 +117,42 @@ describe('BandcampAdapter.submit', () => {
   });
 });
 
+describe('BandcampAdapter.submit with embed code', () => {
+  const playerData = (d: object) => `<div data-player-data="${JSON.stringify(d).replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"></div>`;
+
+  it('reads a track off the iframe snippet via the player page', async () => {
+    stubFetch(playerData({ artist: 'Cirith Ungol', tracks: [{ title: "Witch's Game", art_id: 2438750692 }] }));
+
+    const result = await new BandcampAdapter().submit(
+      '<iframe src="https://bandcamp.com/EmbeddedPlayer/track=2784557145/size=large/"></iframe>',
+    );
+
+    expect(result).toEqual({
+      externalId: 'track=2784557145',
+      title: "Witch's Game",
+      artist: 'Cirith Ungol',
+      service: 'bandcamp',
+      artId: 2438750692,
+    });
+    expect(fetch).toHaveBeenCalledWith('https://bandcamp.com/EmbeddedPlayer/track=2784557145', expect.anything());
+  });
+
+  it('uses the album title and art for an album embed', async () => {
+    stubFetch(playerData({ artist: 'Tycho', album_title: 'Awake', album_art_id: 7, tracks: [{ title: 'Awake', art_id: 1 }] }));
+
+    const result = await new BandcampAdapter().submit('https://bandcamp.com/EmbeddedPlayer/album=5/size=large/');
+
+    expect(result).toMatchObject({ externalId: 'album=5', title: 'Awake', artist: 'Tycho', artId: 7 });
+  });
+
+  it('throws ServiceUnavailableError when the player page is challenged', async () => {
+    stubFetch('<title>Client Challenge</title>');
+    await expect(new BandcampAdapter().submit('https://bandcamp.com/EmbeddedPlayer/track=1')).rejects.toBeInstanceOf(
+      ServiceUnavailableError,
+    );
+  });
+});
+
 describe('BandcampAdapter.getPreviewUrl', () => {
   const track = { externalId: 'track=148177487', title: 'Awake', artist: 'Tycho', service: 'bandcamp' as const };
 

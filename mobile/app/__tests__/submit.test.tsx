@@ -134,6 +134,17 @@ describe('search and submit', () => {
     expect(lastPost()).toEqual({ service: 'bandcamp', comment: '', url: 'https://band.bandcamp.com/track/song' });
   });
 
+  it('tells the player to paste the embed code when Bandcamp is blocked', async () => {
+    globalThis.fetch = jest.fn(async () => new Response('{"error":"bandcamp unavailable"}', { status: 503 })) as unknown as typeof fetch;
+    await render(<SubmitTrack />);
+
+    await fireEvent.press(screen.getByText('Paste a link from Bandcamp'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Bandcamp track/album URL'), 'https://band.example.org/x');
+    await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
+
+    await waitFor(() => expect(screen.getByText(/paste the embed code/)).toBeTruthy());
+  });
+
   it('reads the Bandcamp page on the device when the server is bot-walled (503)', async () => {
     const tralbum = JSON.stringify({ id: 7, item_type: 'track', art_id: 9, artist: 'Band &amp; Co', current: { title: 'Song' } }).replace(/"/g, '&quot;');
     globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {

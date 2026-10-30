@@ -50,6 +50,11 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
   readonly service = 'bandcamp' as const;
 
   async submit(url: string): Promise<TrackResult | null> {
+    // The track page is bot-walled for datacenter IPs, so also take the Share → Embed iframe code
+    // (or its player URL): the id in it is enough to read the player page, a different host.
+    const embed = url.match(EMBED_PATTERN);
+    if (embed) return this.submitEmbed(embed[1], embed[2]);
+
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -110,6 +115,38 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     };
   }
 
+  private async submitEmbed(kind: string, id: string): Promise<TrackResult | null> {
+    let res: Response;
+    try {
+      res = await fetch(`https://bandcamp.com/EmbeddedPlayer/${kind}=${id}`, { signal: AbortSignal.timeout(5000) });
+    } catch (err) {
+      throw new ServiceUnavailableError('bandcamp', 'bandcamp is unreachable', { cause: err });
+    }
+    if (!res.ok && res.status !== 404 && res.status !== 410) {
+      console.error('bandcamp embed fetch refused', kind, id, res.status);
+      throw new ServiceUnavailableError('bandcamp', `bandcamp returned HTTP ${res.status}`);
+    }
+    if (!res.ok) return null;
+    const html = await res.text();
+    if (html.includes('<title>Client Challenge</title>')) {
+      console.error('bandcamp embed bot challenge', kind, id, res.status, html.length);
+      throw new ServiceUnavailableError('bandcamp', 'bandcamp served a bot challenge');
+    }
+    const encoded = html.match(PLAYER_DATA_PATTERN)?.[1];
+    const data = encoded ? (safeParse(decodeHtmlEntities(encoded)) as EmbedData | null) : null;
+    const isAlbum = kind === 'album';
+    const title = isAlbum ? data?.album_title : data?.tracks?.[0]?.title;
+    const artId = isAlbum ? data?.album_art_id : data?.tracks?.[0]?.art_id;
+    if (!data?.artist || !title) return null;
+    return {
+      externalId: `${kind}=${id}`,
+      title,
+      artist: data.artist,
+      service: this.service,
+      artId: typeof artId === 'number' ? artId : undefined,
+    };
+  }
+
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     const [, kind, id] = track.externalId.match(/^(track|album)=(\d+)$/) ?? [];
     if (!kind || !id) throw new Error(`invalid bandcamp externalId: ${track.externalId}`);
@@ -130,6 +167,15 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
       return null;
     }
   }
+}
+
+const EMBED_PATTERN = /bandcamp\.com\/EmbeddedPlayer\/(track|album)=(\d{1,20})/;
+
+interface EmbedData {
+  artist?: string;
+  album_title?: string;
+  album_art_id?: number | null;
+  tracks?: { title?: string; art_id?: number | null }[];
 }
 
 interface PlayerData {

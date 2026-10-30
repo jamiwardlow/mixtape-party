@@ -107,6 +107,10 @@ export default function SubmitTrack() {
         const resolved = await resolveBandcampUrl(body.url);
         if (resolved) res = await post({ ...resolved });
       }
+      if (res.status === 503 && service === 'bandcamp') {
+        setError('Bandcamp blocked that link. On the track page tap Share → Embed, then paste the embed code here instead.');
+        return;
+      }
       if (!res.ok) {
         setError((await res.json().catch(() => null))?.error ?? 'Could not submit that track');
         return;
