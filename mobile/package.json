@@ -47,10 +47,10 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "build:ios": "eas build --platform ios --profile production",
-    "build:android": "eas build --platform android --profile production",
-    "submit:ios": "eas submit --platform ios --profile production --latest",
-    "submit:android": "eas submit --platform android --profile production --latest"
+    "build:ios": "npx eas-cli build --platform ios --profile production",
+    "build:android": "npx eas-cli build --platform android --profile production",
+    "submit:ios": "npx eas-cli submit --platform ios --profile production --latest",
+    "submit:android": "npx eas-cli submit --platform android --profile production --latest"
   },
   "private": true,
   "jest": {

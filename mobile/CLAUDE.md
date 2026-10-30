@@ -27,7 +27,7 @@ Verified on an Apple Silicon Mac.
 
 ## Cutting a native release
 
-Manual only: Cloud Build deploys web and API, and nothing builds native on push. Run from `mobile/` while logged in to EAS (`eas login`).
+Manual only: Cloud Build deploys web and API, and nothing builds native on push. Run from `mobile/` while logged in to EAS (`npx eas-cli login`; the scripts run EAS through `npx`, since a `devDependency` breaks `npm ci` on EAS).
 
 1. `npm run build:ios` / `npm run build:android` — the `production` profile in `eas.json`.
 2. `npm run submit:ios` / `npm run submit:android` — submits the latest finished build (TestFlight / Play `internal` track).
