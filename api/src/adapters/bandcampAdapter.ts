@@ -89,7 +89,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
         res.url,
         res.headers?.get('content-type'),
         html.length,
-        html.slice(0, 300).replace(/\s+/g, ' '),
+        html.slice(0, 3100).replace(/\s+/g, ' '),
       );
       return null;
     }
