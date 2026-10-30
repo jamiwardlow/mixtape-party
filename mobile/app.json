@@ -10,7 +10,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mixtapeparty.app",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:mixtape-party.com"]
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +22,21 @@
       },
       "package": "com.mixtapeparty.app",
       "googleServicesFile": "./google-services.json",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/auth" },
+            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/reset-password" },
+            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/round" },
+            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/league" },
+            { "scheme": "https", "host": "mixtape-party.com", "pathPrefix": "/join" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
