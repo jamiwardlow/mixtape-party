@@ -69,6 +69,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     // URL is genuinely not a track page. Anything else is an outage the caller must surface as
     // 503, not as a 400 telling the player their perfectly good link is invalid.
     if (!res.ok && res.status !== 404 && res.status !== 410) {
+      console.error('bandcamp fetch refused', parsed.toString(), res.status, res.headers?.get('content-type'));
       throw new ServiceUnavailableError('bandcamp', `bandcamp returned HTTP ${res.status}`);
     }
     if (!res.ok) return null;
@@ -77,6 +78,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     // Datacenter IPs (CI runners, possibly Cloud Run) are served a 200 "Client Challenge" bot wall in
     // place of the page, which looks like a bad link unless we name it.
     if (html.includes('<title>Client Challenge</title>')) {
+      console.error('bandcamp bot challenge', parsed.toString(), res.status, res.url, html.length);
       throw new ServiceUnavailableError('bandcamp', 'bandcamp served a bot challenge');
     }
     const encoded = html.match(TRALBUM_PATTERN)?.[1];
