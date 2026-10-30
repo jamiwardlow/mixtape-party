@@ -43,8 +43,9 @@ Components live in `mobile/lib/ui.tsx`: `PhaseSteps`, `Chip`, `Toast`, `Leaderbo
 `ServiceBadge`, `InitialDisc`. All screens were restyled on Sticker Pop (#155), and the web client adapts
 to desktop/tablet widths (#156). The marketing page is `mobile/landing.html`.
 
-## Not built yet
+## Store art and splash
 
-Store art (#137): the Play Store feature graphic and 512px store icon. The splash is built: a Sunshine
+Store art (#137) is in `mobile/assets/store/`: `feature-graphic.png` (1024x500, Sunshine with the headline and a
+cassette) and `icon-512.png` (the app icon downscaled; Play rounds it). The splash is a Sunshine
 `#FFD93D` background with the pink badge (`mobile/assets/splash-icon.png`), configured in `app.json`; Android
 uses a smaller `imageWidth` so the 12+ circular crop doesn't clip the badge.
