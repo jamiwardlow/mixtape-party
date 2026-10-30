@@ -37,6 +37,8 @@ export interface AppDeps extends InboundEmailDeps {
   appleClientId?: string;
   appleRedirectUri?: string;
   appleTokenExchange: (code: string) => Promise<GoogleProfile>;
+  /** Native iOS sheet: verifies the client-supplied identity token (signature, iss, aud = bundle id, exp). */
+  appleIdentityVerifier: (identityToken: string) => Promise<GoogleProfile>;
   youtubeMusicAdapter: MusicServiceAdapter;
   // App-owned music.youtube.com session cookie shared by all users' exports — see youtubeMusicAdapter.ts.
   youtubeMusicCookie?: string;

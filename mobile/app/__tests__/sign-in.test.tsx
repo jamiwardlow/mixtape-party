@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import SignIn from '../sign-in';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { API_URL } from '../../lib/api';
 
 jest.mock('expo-crypto', () => {
@@ -12,6 +13,10 @@ jest.mock('expo-crypto', () => {
     CryptoEncoding: { BASE64: 'base64' },
   };
 });
+jest.mock('expo-apple-authentication', () => ({
+  signInAsync: jest.fn(),
+  AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+}));
 jest.mock('expo-web-browser', () => ({ openAuthSessionAsync: jest.fn() }));
 
 const mockSignIn = jest.fn();
@@ -298,12 +303,22 @@ describe('Google button on native', () => {
     expect(open.mock.calls[0][1]).toBe('mixtapeparty://auth/complete');
   });
 
-  it('runs the same flow against /auth/apple/start', async () => {
-    open.mockResolvedValue({ type: 'success', url: 'mixtapeparty://auth/complete#t=abc123' });
+  it('uses the native Apple sheet on iOS and posts the identity token', async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockResolvedValue({ identityToken: 'jwt', fullName: { givenName: 'Ada', familyName: 'Lovelace' } });
     await render(<SignIn />);
     await fireEvent.press(screen.getByText('Continue with Apple'));
-    await waitFor(() => expect(mockPush).toHaveBeenCalled());
-    expect(open.mock.calls[0][0]).toContain(`${API_URL}/auth/apple/start?return=`);
+    await waitFor(() => expect(mockSignIn).toHaveBeenCalledWith('tok-1'));
+    expect(open).not.toHaveBeenCalled();
+    const [url, init] = (fetch as jest.Mock).mock.calls[0];
+    expect(url).toContain('/auth/apple/native');
+    expect(JSON.parse(init.body)).toEqual({ identityToken: 'jwt', fullName: 'Ada Lovelace' });
+  });
+
+  it('shows a cancelled note when the Apple sheet is dismissed', async () => {
+    (AppleAuthentication.signInAsync as jest.Mock).mockRejectedValue({ code: 'ERR_REQUEST_CANCELED' });
+    await render(<SignIn />);
+    await fireEvent.press(screen.getByText('Continue with Apple'));
+    expect(await screen.findByText('Apple sign-in was cancelled.')).toBeTruthy();
   });
 
   it('shows the error when Google bounces back without a token', async () => {

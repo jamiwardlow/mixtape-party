@@ -1,10 +1,10 @@
-import { generateKeyPairSync, verify } from 'node:crypto';
+import { generateKeyPairSync, sign, verify } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { buildApp, signUp } from './testHelpers.js';
 import { startTestDb, type TestDb } from './testDb.js';
-import { createAppleTokenExchange } from '../routes/appleAuth.js';
+import { createAppleIdentityVerifier, createAppleTokenExchange } from '../routes/appleAuth.js';
 
 let testDb: TestDb;
 beforeAll(async () => {
@@ -119,5 +119,48 @@ describe('createAppleTokenExchange', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('native Sign in with Apple', () => {
+  it('signs in with the identity token, naming a new account from fullName, and reuses it by sub', async () => {
+    const { app, appleTokenExchange } = buildApp(testDb.pool);
+    appleTokenExchange.issue('tok', { sub: 'apple-1', email: 'n@example.com' });
+    const first = await request(app).post('/auth/apple/native').send({ identityToken: 'tok', fullName: 'Ada Lovelace' });
+    const second = await request(app).post('/auth/apple/native').send({ identityToken: 'tok', fullName: 'Other' });
+    expect(first.body.token).toEqual(expect.any(String));
+    expect(second.status).toBe(200);
+    const { rows } = await testDb.pool.query('SELECT display_name, apple_sub FROM accounts');
+    expect(rows).toEqual([{ display_name: 'Ada Lovelace', apple_sub: 'apple-1' }]);
+  });
+
+  it('rejects a token the verifier refuses', async () => {
+    const { app } = buildApp(testDb.pool);
+    expect((await request(app).post('/auth/apple/native').send({ identityToken: 'forged' })).status).toBe(401);
+    expect((await request(app).post('/auth/apple/native').send({})).status).toBe(400);
+  });
+});
+
+describe('createAppleIdentityVerifier', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'k1' };
+  const mint = (claims: object, key = privateKey, kid = 'k1') => {
+    const b = (v: object) => Buffer.from(JSON.stringify(v)).toString('base64url');
+    const input = `${b({ alg: 'RS256', kid })}.${b({ iss: 'https://appleid.apple.com', aud: 'com.app', exp: Math.floor(Date.now() / 1000) + 60, sub: 's', email: 'a@b.co', email_verified: 'true', ...claims })}`;
+    return `${input}.${sign('sha256', Buffer.from(input), key).toString('base64url')}`;
+  };
+  const verifyToken = createAppleIdentityVerifier('com.app', async () => [jwk]);
+
+  it('accepts a valid token', async () => {
+    expect(await verifyToken(mint({}))).toEqual({ sub: 's', email: 'a@b.co', emailVerified: true, name: null });
+  });
+
+  it('rejects a forged signature, wrong audience, wrong issuer, and expiry', async () => {
+    const other = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
+    await expect(verifyToken(mint({}, other))).rejects.toThrow('bad signature');
+    await expect(verifyToken(mint({ aud: 'svc.id' }))).rejects.toThrow('wrong aud');
+    await expect(verifyToken(mint({ iss: 'https://evil.test' }))).rejects.toThrow('wrong iss');
+    await expect(verifyToken(mint({ exp: 1 }))).rejects.toThrow('expired');
+    await expect(verifyToken(mint({}, privateKey, 'unknown'))).rejects.toThrow('no apple key');
   });
 });

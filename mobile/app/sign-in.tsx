@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
@@ -63,6 +64,31 @@ export default function SignIn() {
       else setError(GOOGLE_ERRORS[params.get('error') ?? ''] ?? `${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed.`);
     } catch {
       setError(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed. Try again.`);
+    } finally {
+      setGoogling(false);
+    }
+  }
+
+  // iOS: the system sheet, no web view. It hands back a signed identity token the API verifies;
+  // the name only comes on the very first sign-in, so send it along.
+  async function appleNative() {
+    setGoogling(true);
+    setError(null);
+    try {
+      const { identityToken, fullName } = await AppleAuthentication.signInAsync({
+        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
+      });
+      const res = await fetchApi('/auth/apple/native', {
+        method: 'POST',
+        body: { identityToken, fullName: [fullName?.givenName, fullName?.familyName].filter(Boolean).join(' ') || null },
+      });
+      if (!res.ok) {
+        setError((await res.json().catch(() => null))?.error ?? 'Apple sign-in failed. Try again.');
+        return;
+      }
+      await signIn((await res.json()).token);
+    } catch (e) {
+      setError((e as { code?: string }).code === 'ERR_REQUEST_CANCELED' ? GOOGLE_ERRORS.apple_cancelled : GOOGLE_ERRORS.apple_failed);
     } finally {
       setGoogling(false);
     }
@@ -163,7 +189,7 @@ export default function SignIn() {
       {/* Web: a full-page navigation, not a fetch — the OAuth redirect has to happen in the browser's
           address bar, and the state cookie is set on the API's own origin along the way. */}
       <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; } : () => providerNative('google')} />
-      <TapeButton title={googling ? 'Redirecting…' : 'Continue with Apple'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/apple/start`; } : () => providerNative('apple')} />
+      <TapeButton title={googling ? 'Redirecting…' : 'Continue with Apple'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/apple/start`; } : Platform.OS === 'ios' ? appleNative : () => providerNative('apple')} />
       <View style={styles.divider}>
         <View style={[styles.rule, { backgroundColor: t.ink }]} />
         <Label>or</Label>

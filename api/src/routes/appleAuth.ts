@@ -1,6 +1,6 @@
-import { createPrivateKey, randomBytes, sign } from 'node:crypto';
+import { createPrivateKey, createPublicKey, randomBytes, sign, verify, type JsonWebKey } from 'node:crypto';
 import express, { Router } from 'express';
-import { OAUTH_STATE_TTL_MS, signStateToken, timingSafeStringEqual, verifyStateToken } from '../auth.js';
+import { OAUTH_STATE_TTL_MS, signSessionToken, signStateToken, timingSafeStringEqual, verifyStateToken } from '../auth.js';
 import { GOOGLE_HANDOFF_TTL_MS, issueAuthToken } from '../authTokens.js';
 import { NATIVE_RETURN_URL, findOrCreateAccount, readCookie, type GoogleProfile } from './googleAuth.js';
 import type { AppDeps } from '../app.js';
@@ -110,6 +110,37 @@ export function createAppleAuthRouter(deps: AppDeps): Router {
     res.redirect(303, `${returnBase}#t=${token}`);
   });
 
+  // Native iOS: the app hands us the identity token from the system sheet. It arrives from the
+  // client, so appleIdentityVerifier checks its signature; the name is client-supplied and only
+  // ever used for a brand-new account, exactly like the web `user` field.
+  router.post('/auth/apple/native', express.json(), async (req, res) => {
+    const { identityToken, fullName } = (req.body ?? {}) as { identityToken?: unknown; fullName?: unknown };
+    if (typeof identityToken !== 'string') {
+      res.status(400).json({ error: 'identityToken is required' });
+      return;
+    }
+    let profile: GoogleProfile;
+    try {
+      profile = await deps.appleIdentityVerifier(identityToken);
+    } catch (err) {
+      console.error('apple identity token rejected', err);
+      res.status(401).json({ error: 'invalid apple identity token' });
+      return;
+    }
+    if (profile.emailVerified !== true) {
+      res.status(403).json({ error: 'apple account email is not verified' });
+      return;
+    }
+    if (!profile.name && typeof fullName === 'string') profile = { ...profile, name: fullName.trim().slice(0, 40) || null };
+
+    const accountId = await findOrCreateAccount(deps.pool, profile, 'apple_sub');
+    if (!accountId) {
+      res.status(409).json({ error: 'email is already linked to a different apple account' });
+      return;
+    }
+    res.json({ token: signSessionToken(accountId, deps.sessionSecret) });
+  });
+
   return router;
 }
 
@@ -163,4 +194,51 @@ export function createAppleTokenExchange(config: {
     if (!claims.email) throw new Error('apple id_token had no email');
     return { sub: claims.sub, email: claims.email, emailVerified: String(claims.email_verified) === 'true', name: null };
   };
+}
+
+const APPLE_JWKS_URL = 'https://appleid.apple.com/auth/keys';
+const JWKS_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Verifies an identity token from the native Sign in with Apple sheet: RS256 signature against
+ * Apple's JWKS, then iss, aud (the app bundle id, not the Services ID) and exp.
+ */
+export function createAppleIdentityVerifier(bundleId: string, fetchKeys: () => Promise<JsonWebKey[]> = fetchAppleKeys) {
+  let cache: { keys: JsonWebKey[]; at: number } | undefined;
+  const keys = async (refresh: boolean) => {
+    // A forged token with a random kid forces a refetch; at most one a minute so abuse can't make us hammer Apple.
+    const age = cache ? Date.now() - cache.at : Infinity;
+    if (!cache || (refresh && age > 60_000) || age > JWKS_TTL_MS) cache = { keys: await fetchKeys(), at: Date.now() };
+    return cache.keys;
+  };
+
+  return async (identityToken: string): Promise<GoogleProfile> => {
+    const [h, p, sig] = identityToken.split('.');
+    if (!h || !p || !sig) throw new Error('malformed identity token');
+    const header = JSON.parse(Buffer.from(h, 'base64url').toString('utf8')) as { alg?: string; kid?: string };
+    if (header.alg !== 'RS256') throw new Error(`unexpected alg ${header.alg}`);
+
+    // One refetch on an unknown kid covers Apple rotating keys inside our cache window.
+    let jwk = (await keys(false)).find((k) => (k as { kid?: string }).kid === header.kid);
+    jwk ??= (await keys(true)).find((k) => (k as { kid?: string }).kid === header.kid);
+    if (!jwk) throw new Error('no apple key for kid');
+    if (!verify('sha256', Buffer.from(`${h}.${p}`), createPublicKey({ key: jwk, format: 'jwk' }), Buffer.from(sig, 'base64url'))) {
+      throw new Error('bad signature');
+    }
+
+    const claims = JSON.parse(Buffer.from(p, 'base64url').toString('utf8')) as {
+      iss?: string; aud?: string; exp?: number; sub?: string; email?: string; email_verified?: boolean | string;
+    };
+    if (claims.iss !== 'https://appleid.apple.com') throw new Error('wrong iss');
+    if (claims.aud !== bundleId) throw new Error('wrong aud');
+    if (typeof claims.exp !== 'number' || claims.exp * 1000 <= Date.now()) throw new Error('expired');
+    if (!claims.sub || !claims.email) throw new Error('identity token missing sub or email');
+    return { sub: claims.sub, email: claims.email, emailVerified: String(claims.email_verified) === 'true', name: null };
+  };
+}
+
+async function fetchAppleKeys(): Promise<JsonWebKey[]> {
+  const response = await fetch(APPLE_JWKS_URL);
+  if (!response.ok) throw new Error(`apple jwks returned ${response.status}`);
+  return ((await response.json()) as { keys: JsonWebKey[] }).keys;
 }

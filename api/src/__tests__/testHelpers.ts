@@ -50,6 +50,8 @@ export function buildApp(
     appleClientId: googleConfigured ? 'test.apple.client' : undefined,
     appleRedirectUri: googleConfigured ? 'https://api.test/auth/apple/callback' : undefined,
     appleTokenExchange: appleTokenExchange.exchange,
+    // Stands in for the signature check; the real one is covered in appleAuth.test.ts. The "token" is just a registered code.
+    appleIdentityVerifier: appleTokenExchange.exchange,
     youtubeMusicAdapter,
     youtubeMusicCookie,
     bandcampAdapter,

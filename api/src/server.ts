@@ -1,5 +1,5 @@
 import { createApp } from './app.js';
-import { createAppleTokenExchange } from './routes/appleAuth.js';
+import { createAppleIdentityVerifier, createAppleTokenExchange } from './routes/appleAuth.js';
 import { createGoogleTokenExchange } from './routes/googleAuth.js';
 import { createPool } from './db/pool.js';
 import { YouTubeMusicAdapter } from './adapters/youtubeMusicAdapter.js';
@@ -43,6 +43,8 @@ const appleTokenExchange = createAppleTokenExchange({
   redirectUri: appleRedirectUri ?? '',
 });
 
+const appleIdentityVerifier = createAppleIdentityVerifier(process.env.APPLE_BUNDLE_ID ?? 'com.mixtapeparty.app');
+
 const youtubeMusicAdapter = new YouTubeMusicAdapter();
 const bandcampAdapter = new BandcampAdapter();
 const pushChannel = new ExpoWebPushChannel();
@@ -63,6 +65,7 @@ const app = createApp({
   appleClientId,
   appleRedirectUri,
   appleTokenExchange,
+  appleIdentityVerifier,
   youtubeMusicAdapter,
   youtubeMusicCookie: process.env.YOUTUBE_MUSIC_COOKIE,
   bandcampAdapter,
