@@ -427,4 +427,30 @@ describe('POST /rounds/:roundId/submissions', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('accepts a bandcamp track the device resolved itself, without a url', async () => {
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ service: 'bandcamp', externalId: 'track=123', title: 'Song', artist: 'Band', artId: 456 });
+
+    expect(res.status).toBe(201);
+    const row = await testDb.pool.query('SELECT external_id, title, art_id FROM submissions WHERE id = $1', [res.body.submissionId]);
+    expect(row.rows[0]).toMatchObject({ external_id: 'track=123', title: 'Song', art_id: '456' });
+  });
+
+  it('rejects device-resolved bandcamp metadata with a malformed externalId', async () => {
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
+
+    const res = await request(app)
+      .post(`/rounds/${roundId}/submissions`)
+      .set('Authorization', `Bearer ${player.token}`)
+      .send({ service: 'bandcamp', externalId: 'https://evil.example', title: 'Song', artist: 'Band' });
+
+    expect(res.status).toBe(400);
+  });
 });

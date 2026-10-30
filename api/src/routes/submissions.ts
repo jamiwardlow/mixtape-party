@@ -63,15 +63,30 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    const { externalId, title, artist, isrc, url } = body;
+    const { externalId, title, artist, isrc, url, artId } = body;
     const parsed = parseComment(body.comment);
     if (!parsed.ok) {
       res.status(400).json({ error: parsed.error });
       return;
     }
     const comment = parsed.comment;
+    // Bandcamp bot-walls our server, so a device that read the page itself may send what it found
+    // (externalId/title/artist/artId) instead of the url. Only shape and length are checked: the
+    // worst a lying client can do is put a wrong label on its own submission.
+    const clientResolved =
+      service === 'bandcamp' &&
+      typeof url !== 'string' &&
+      typeof externalId === 'string' &&
+      /^(track|album)=\d{1,20}$/.test(externalId) &&
+      typeof title === 'string' &&
+      typeof artist === 'string' &&
+      title.trim() !== '' &&
+      artist.trim() !== '' &&
+      title.length <= 300 &&
+      artist.length <= 300 &&
+      (artId === undefined || artId === null || (Number.isSafeInteger(artId) && artId >= 0));
     if (service === 'bandcamp') {
-      if (typeof url !== 'string') {
+      if (typeof url !== 'string' && !clientResolved) {
         res.status(400).json({ error: 'url is required' });
         return;
       }
@@ -107,10 +122,12 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     }
 
     let resolved: { externalId: string; title: string; artist: string; isrc: string | null; artId: number | null };
-    if (service === 'bandcamp') {
+    if (clientResolved) {
+      resolved = { externalId, title, artist, isrc: null, artId: artId ?? null };
+    } else if (service === 'bandcamp') {
       let submitted;
       try {
-        submitted = await deps.bandcampAdapter.submit(url);
+        submitted = await deps.bandcampAdapter.submit(url as string);
       } catch (err) {
         if (err instanceof ServiceUnavailableError) {
           res.status(503).json({ error: 'bandcamp unavailable' });

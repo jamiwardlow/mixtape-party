@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, Platform, View } from 'react-native';
+import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import type { ServiceName } from '../../../lib/rounds';
@@ -97,7 +98,15 @@ export default function SubmitTrack() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetchApi(`/rounds/${roundId}/submissions`, { method: 'POST', token, body: { service, comment, ...body } });
+      const post = (extra: Record<string, unknown>) =>
+        fetchApi(`/rounds/${roundId}/submissions`, { method: 'POST', token, body: { service, comment, ...extra } });
+      let res = await post(body);
+      // Bandcamp blocks our server's fetch; a native device isn't blocked (web can't: CORS), so read
+      // the page here and send what it says.
+      if (res.status === 503 && service === 'bandcamp' && Platform.OS !== 'web' && typeof body.url === 'string') {
+        const resolved = await resolveBandcampUrl(body.url);
+        if (resolved) res = await post({ ...resolved });
+      }
       if (!res.ok) {
         setError((await res.json().catch(() => null))?.error ?? 'Could not submit that track');
         return;
