@@ -5,7 +5,6 @@ import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { PlayerLink } from '../../../lib/PlayerLink';
-import { ReportBlock } from '../../../lib/Moderation';
 import {
   PHASE_META,
   phaseLabel,
@@ -182,7 +181,6 @@ export default function LeagueOverview() {
                   {submitters && <Label>{submitted ? 'Submitted' : 'No track yet'}</Label>}
                   {guessed && <Label>Guessed</Label>}
                 </View>
-                {member.accountId === profile?.id ? null : <ReportBlock author={member} onBlocked={load} />}
               </View>
             );
           })}

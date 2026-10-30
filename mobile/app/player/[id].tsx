@@ -5,6 +5,7 @@ import { fetchApi } from '../../lib/api';
 import { Avatar } from '../../lib/Avatar';
 import { BestieGroup, type Bestie } from '../../lib/BestieGroup';
 import { FavoritesList, type Favorite } from '../../lib/FavoritesList';
+import { ReportBlock } from '../../lib/Moderation';
 import { nameOf } from '../../lib/rounds';
 import { useSession } from '../../lib/session';
 import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, TapeButton } from '../../lib/ui';
@@ -58,7 +59,11 @@ export default function Player() {
               <HandText>{nameOf(player)}</HandText>
               {player.pronouns ? <Label>{player.pronouns}</Label> : null}
               <BodyText>{player.aboutMe || 'Nothing here yet.'}</BodyText>
-              {me?.id === player.accountId && <TapeButton title="Edit on My Account" onPress={() => router.push('/account')} />}
+              {me?.id === player.accountId ? (
+                <TapeButton title="Edit on My Account" onPress={() => router.push('/account')} />
+              ) : (
+                <ReportBlock author={player} onBlocked={() => router.back()} />
+              )}
             </JCard>
             <JCard>
               <HandText>Favorites</HandText>

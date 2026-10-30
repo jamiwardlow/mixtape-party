@@ -72,3 +72,13 @@ it('says so when the player is not found', async () => {
   await render(<Player />);
   await waitFor(() => expect(screen.getByText("Couldn't find that player.")).toBeTruthy());
 });
+
+it('offers Report and Block on another player, not on your own profile', async () => {
+  stub(200);
+  await render(<Player />);
+  await waitFor(() => expect(screen.getByText('Report')).toBeTruthy());
+  expect(screen.getByText('Block')).toBeTruthy();
+  mockMe = 'p1';
+  await render(<Player />);
+  await waitFor(() => expect(screen.getByText('Edit on My Account')).toBeTruthy());
+});

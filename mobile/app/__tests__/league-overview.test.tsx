@@ -295,11 +295,7 @@ it('has no wrap-up link mid-season', async () => {
   expect(screen.queryByText('Season wrap-up')).toBeNull();
 });
 
-it('lets you report a player from the roster without them having commented', async () => {
+it('keeps Report and Block off the roster', async () => {
   await show(inRound(submissionRound));
-
-  const row = within(screen.getByTestId(`roster-${bo.accountId}`));
-  await fireEvent.press(row.getByText('Report'));
-  expect(row.getByText(/Their name/)).toBeTruthy();
-  expect(row.queryByText(/^This /)).toBeNull();
+  expect(screen.queryByText('Report')).toBeNull();
 });
