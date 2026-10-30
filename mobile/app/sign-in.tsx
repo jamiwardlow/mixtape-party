@@ -314,7 +314,7 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   note: { textAlign: 'center' },
   underline: { textDecorationLine: 'underline' },
-  center: { alignItems: 'center' },
+  center: { flexDirection: 'row', justifyContent: 'center' },
   // paddingVertical, not just margin: these are the tap targets, and ui.tsx holds every
   // other control in this app to a 44pt minimum.
   link: { paddingVertical: 11, textAlign: 'center', textDecorationLine: 'underline' },
