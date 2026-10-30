@@ -115,12 +115,12 @@ export function createAuthRouter(deps: AuthDeps): Router {
   // Generic `sign_in` exchange rather than a magic-link-specific route: the Google handoff (#48)
   // redirects with the same kind of token and redeems it here.
   router.post('/sessions/token', async (req, res) => {
-    const { token } = req.body ?? {};
-    if (typeof token !== 'string') {
+    const { token, codeVerifier } = req.body ?? {};
+    if (typeof token !== 'string' || (codeVerifier !== undefined && typeof codeVerifier !== 'string')) {
       res.status(400).json({ error: 'token is required' });
       return;
     }
-    const accountId = await consumeAuthToken(deps.pool, token, 'sign_in');
+    const accountId = await consumeAuthToken(deps.pool, token, 'sign_in', codeVerifier);
     if (!accountId) {
       res.status(401).json({ error: 'invalid or expired token' });
       return;

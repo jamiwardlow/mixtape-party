@@ -75,6 +75,14 @@ export function createGoogleAuthRouter(deps: GoogleAuthDeps): Router {
       res.status(400).json({ error: 'invalid return target' });
       return;
     }
+    // Native flows must bind the handoff token to the app instance (PKCE S256): the custom scheme
+    // can be claimed by another app, which would otherwise read the token off the redirect.
+    // Challenge = base64url(sha256(verifier)) of a 32-byte verifier, so exactly 43 chars.
+    const codeChallenge = req.query.code_challenge;
+    if (returnTo === NATIVE_RETURN_URL && (typeof codeChallenge !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(codeChallenge))) {
+      res.status(400).json({ error: 'code_challenge is required for native sign-in' });
+      return;
+    }
     if (!deps.googleClientId || !deps.googleRedirectUri) {
       res.status(503).json({ error: 'google sign-in is not configured' });
       return;
@@ -114,7 +122,12 @@ export function createGoogleAuthRouter(deps: GoogleAuthDeps): Router {
       redirect_uri: deps.googleRedirectUri,
       response_type: 'code',
       scope: 'openid email profile',
-      state: signStateToken(nonce, deps.sessionSecret, returnTo === NATIVE_RETURN_URL),
+      state: signStateToken(
+        nonce,
+        deps.sessionSecret,
+        returnTo === NATIVE_RETURN_URL,
+        returnTo === NATIVE_RETURN_URL ? (codeChallenge as string) : undefined,
+      ),
     });
     res.redirect(`${GOOGLE_AUTH_URL}?${params}`);
   });
@@ -175,7 +188,7 @@ export function createGoogleAuthRouter(deps: GoogleAuthDeps): Router {
     // Reuses the existing `sign_in` token exchange rather than minting a session here, so there is
     // exactly one way to turn a redirect into a session. Fragment, not query param: the web service
     // logs query strings, and this token is a live credential until POST /sessions/token burns it.
-    const token = await issueAuthToken(deps.pool, accountId, 'sign_in', GOOGLE_HANDOFF_TTL_MS);
+    const token = await issueAuthToken(deps.pool, accountId, 'sign_in', GOOGLE_HANDOFF_TTL_MS, verified?.codeChallenge);
     res.redirect(`${returnBase}#t=${token}`);
   });
 

@@ -1,7 +1,17 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import SignIn from '../sign-in';
 import * as WebBrowser from 'expo-web-browser';
+import { API_URL } from '../../lib/api';
 
+jest.mock('expo-crypto', () => {
+  const nodeCrypto = require('node:crypto');
+  return {
+    getRandomBytes: (n: number) => new Uint8Array(nodeCrypto.randomBytes(n)),
+    digestStringAsync: async (_alg: string, data: string) => nodeCrypto.createHash('sha256').update(data).digest('base64'),
+    CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+    CryptoEncoding: { BASE64: 'base64' },
+  };
+});
 jest.mock('expo-web-browser', () => ({ openAuthSessionAsync: jest.fn() }));
 
 const mockSignIn = jest.fn();
@@ -277,8 +287,14 @@ describe('Google button on native', () => {
     open.mockResolvedValue({ type: 'success', url: 'mixtapeparty://auth/complete#t=abc123' });
     await render(<SignIn />);
     await fireEvent.press(screen.getByText('Continue with Google'));
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith({ pathname: '/auth/complete', params: { t: 'abc123' } }));
-    expect(open.mock.calls[0][0]).toMatch(/\/auth\/google\/start\?return=mixtapeparty%3A%2F%2Fauth%2Fcomplete$/);
+    await waitFor(() => expect(mockPush).toHaveBeenCalled());
+    const { t, v } = mockPush.mock.calls[0][0].params;
+    expect(t).toBe('abc123');
+    // The challenge sent to the API is the S256 of the verifier handed to /auth/complete.
+    const challenge = require('node:crypto').createHash('sha256').update(v).digest('base64url');
+    expect(open.mock.calls[0][0]).toBe(
+      `${API_URL}/auth/google/start?return=mixtapeparty%3A%2F%2Fauth%2Fcomplete&code_challenge=${challenge}`,
+    );
     expect(open.mock.calls[0][1]).toBe('mixtapeparty://auth/complete');
   });
 

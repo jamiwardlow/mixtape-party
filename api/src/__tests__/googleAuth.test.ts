@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
@@ -197,7 +198,9 @@ describe('GET /auth/google/callback', () => {
   });
 
   describe('native return target', () => {
-    const native = `?return=${encodeURIComponent('mixtapeparty://auth/complete')}`;
+    const verifier = 'v'.repeat(43);
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const native = `?return=${encodeURIComponent('mixtapeparty://auth/complete')}&code_challenge=${challenge}`;
 
     it('hands the sign_in token to the app scheme when the flow began natively', async () => {
       const { app, googleTokenExchange } = buildApp(testDb.pool);
@@ -216,6 +219,25 @@ describe('GET /auth/google/callback', () => {
       const res = await request(app).get(`/auth/google/callback?error=access_denied&state=${state}`).set('Cookie', cookie);
 
       expect(res.headers.location).toBe('mixtapeparty://auth/complete#error=google_cancelled');
+    });
+
+    it('rejects a native start with no code_challenge', async () => {
+      const { app } = buildApp(testDb.pool);
+      const res = await request(app).get(`/auth/google/start?return=${encodeURIComponent('mixtapeparty://auth/complete')}`);
+      expect(res.status).toBe(400);
+    });
+
+    it('binds the handoff token to the verifier', async () => {
+      const { app, googleTokenExchange } = buildApp(testDb.pool);
+      googleTokenExchange.issue('code-p', { sub: 'google-p', email: 'pkce@example.com', name: 'Ada' });
+      const { cookie, state } = await startFlow(app, native);
+      const res = await callback(app, { code: 'code-p', state, cookie });
+      const token = res.headers.location.split('#t=')[1];
+
+      const exchange = (body: object) => request(app).post('/sessions/token').send({ token, ...body });
+      expect((await exchange({})).status).toBe(401);
+      expect((await exchange({ codeVerifier: 'x'.repeat(43) })).status).toBe(401);
+      expect((await exchange({ codeVerifier: verifier })).status).toBe(200);
     });
 
     it('sends a stateless native cancel back to the app', async () => {

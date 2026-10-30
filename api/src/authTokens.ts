@@ -24,12 +24,13 @@ export async function issueAuthToken(
   accountId: string,
   purpose: AuthTokenPurpose,
   ttlMs: number,
+  codeChallenge?: string,
 ): Promise<string> {
   const token = randomBytes(32).toString('base64url');
   await pool.query(
-    `INSERT INTO auth_tokens (token_hash, account_id, purpose, expires_at)
-     VALUES ($1, $2, $3, now() + make_interval(secs => $4))`,
-    [hashToken(token), accountId, purpose, ttlMs / 1000],
+    `INSERT INTO auth_tokens (token_hash, account_id, purpose, expires_at, code_challenge)
+     VALUES ($1, $2, $3, now() + make_interval(secs => $4), $5)`,
+    [hashToken(token), accountId, purpose, ttlMs / 1000, codeChallenge ?? null],
   );
   // ponytail: opportunistic sweep on the write path so the table doesn't grow forever — costs every
   // issue an extra round trip. Move it into runNotificationSweep's interval if that shows up.
@@ -42,15 +43,19 @@ export async function consumeAuthToken(
   pool: Pool,
   token: string,
   purpose: AuthTokenPurpose,
+  codeVerifier?: string,
 ): Promise<string | null> {
   // One atomic statement, never read-then-write. Every predicate is load-bearing: `purpose` stops a
   // magic link being redeemed at the password-reset endpoint, `used_at IS NULL` inside the UPDATE
-  // makes single use race-proof, and `expires_at` puts expiry on the database's clock.
+  // makes single use race-proof, and `expires_at` puts expiry on the database's clock. A token issued
+  // with a PKCE challenge only matches the verifier whose sha256 is that challenge; a wrong or
+  // missing verifier fails without burning it.
   const { rows } = await pool.query<{ account_id: string }>(
     `UPDATE auth_tokens SET used_at = now()
      WHERE token_hash = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()
+       AND (code_challenge IS NULL OR code_challenge = $3)
      RETURNING account_id`,
-    [hashToken(token), purpose],
+    [hashToken(token), purpose, codeVerifier === undefined ? null : createHash('sha256').update(codeVerifier).digest('base64url')],
   );
   return rows[0]?.account_id ?? null;
 }

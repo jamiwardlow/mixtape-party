@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
@@ -43,14 +44,20 @@ export default function SignIn() {
     setGoogling(true);
     setError(null);
     try {
+      // PKCE: another app can claim mixtapeparty:// and read the token off the redirect, but only
+      // this call holds the verifier the token is bound to.
+      const codeVerifier = Crypto.getRandomBytes(32).reduce((s, b) => s + String.fromCharCode(b), '');
+      const verifier = btoa(codeVerifier).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const challenge = (await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, { encoding: Crypto.CryptoEncoding.BASE64 }))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_URL}/auth/google/start?return=${encodeURIComponent(NATIVE_RETURN_URL)}`,
+        `${API_URL}/auth/google/start?return=${encodeURIComponent(NATIVE_RETURN_URL)}&code_challenge=${challenge}`,
         NATIVE_RETURN_URL,
       );
       if (result.type !== 'success') return;
       const params = new URLSearchParams(result.url.split('#')[1] ?? '');
       const token = params.get('t');
-      if (token) router.push({ pathname: '/auth/complete', params: { t: token } });
+      if (token) router.push({ pathname: '/auth/complete', params: { t: token, v: verifier } });
       else setError(GOOGLE_ERRORS[params.get('error') ?? ''] ?? 'Google sign-in failed.');
     } catch {
       setError('Google sign-in failed. Try again.');

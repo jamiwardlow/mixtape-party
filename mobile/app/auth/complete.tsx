@@ -14,7 +14,7 @@ import { BodyText, ErrorNote, ReelSpinner, Screen, TapeButton } from '../../lib/
 export default function AuthComplete() {
   const { signIn, token } = useSession();
   const [error, setError] = useState<string | null>(null);
-  const { t: nativeToken } = useLocalSearchParams<{ t?: string }>();
+  const { t: nativeToken, v: codeVerifier } = useLocalSearchParams<{ t?: string; v?: string }>();
   const exchanged = useRef(false);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function AuthComplete() {
     if (Platform.OS === 'web') window.history.replaceState(null, '', window.location.pathname + window.location.search);
 
     (async () => {
-      const res = await fetchApi('/sessions/token', { method: 'POST', body: { token: authToken } });
+      const res = await fetchApi('/sessions/token', { method: 'POST', body: { token: authToken, codeVerifier } });
       if (!res.ok) {
         // Belt and braces on the guard above: a spent token plus an existing session is a
         // duplicate exchange, not a failed sign-in.
