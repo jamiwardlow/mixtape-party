@@ -59,7 +59,7 @@ describe('GET /players/:id (#177)', () => {
 
     const res = await request(app).get(`/players/${a.accountId}`).set(auth(b));
     expect(res.body.leagues).toHaveLength(1);
-    expect(Object.keys(res.body.leagues[0]).sort()).toEqual(['concluded', 'joinedAt', 'name', 'seasonLength']);
+    expect(Object.keys(res.body.leagues[0]).sort()).toEqual(['concluded', 'id', 'joinedAt', 'name', 'seasonLength']);
     expect(res.body.favorites).toHaveLength(1);
     expect(res.body.favorites[0].submissionId).toBe(league.submissions[1].submissionId);
     expect(res.body.favorites[0]).not.toHaveProperty('favoritedAt');

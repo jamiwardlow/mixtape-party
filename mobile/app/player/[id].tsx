@@ -8,7 +8,7 @@ import { FavoritesList, type Favorite } from '../../lib/FavoritesList';
 import { ReportBlock } from '../../lib/Moderation';
 import { nameOf } from '../../lib/rounds';
 import { useSession } from '../../lib/session';
-import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, TapeButton } from '../../lib/ui';
+import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton } from '../../lib/ui';
 
 interface PlayerProfile {
   accountId: string;
@@ -16,7 +16,7 @@ interface PlayerProfile {
   avatarUrl: string | null;
   pronouns: string | null;
   aboutMe: string | null;
-  leagues: { name: string; concluded: boolean; seasonLength: number; joinedAt: string }[];
+  leagues: { id?: string; name: string; concluded: boolean; seasonLength: number; joinedAt: string }[];
   favorites: Favorite[];
   besties: { guessedMe: Bestie[]; iGuessed: Bestie[] };
 }
@@ -26,9 +26,17 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
     <>
       <Label>{title}</Label>
       {leagues.length === 0 && <BodyText>{empty}</BodyText>}
-      {leagues.map((l, i) => (
-        <BodyText key={i}>{`${l.name} · ${l.seasonLength} rounds · joined ${new Date(l.joinedAt).toLocaleDateString()}`}</BodyText>
-      ))}
+      {leagues.map((l, i) => {
+        const text = `${l.name} · ${l.seasonLength} rounds · joined ${new Date(l.joinedAt).toLocaleDateString()}`;
+        const id = l.id;
+        return id ? (
+          <PressScale key={i} accessibilityRole="link" onPress={() => router.push({ pathname: '/league/[leagueId]', params: { leagueId: id } })}>
+            <BodyText>{text}</BodyText>
+          </PressScale>
+        ) : (
+          <BodyText key={i}>{text}</BodyText>
+        );
+      })}
     </>
   );
 }

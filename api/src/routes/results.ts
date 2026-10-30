@@ -107,8 +107,9 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       res.status(404).json({ error: 'player not found' });
       return;
     }
-    const [leagues, favorites, guessedMe, iGuessed] = await Promise.all([
+    const [leagues, mine, favorites, guessedMe, iGuessed] = await Promise.all([
       listLeagues(deps.pool, id),
+      listLeagues(deps.pool, viewerId),
       loadFavorites(deps.pool, id),
       topBesties(deps.pool, id, 'guessedMe'),
       topBesties(deps.pool, id, 'iGuessed'),
@@ -119,7 +120,14 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       avatarUrl: avatarUrlOf(id, found.avatar_updated_at),
       pronouns: found.pronouns,
       aboutMe: found.about_me,
-      leagues: leagues.map(({ name, concluded, seasonLength, joinedAt }) => ({ name, concluded, seasonLength, joinedAt })),
+      // The id is only for leagues the viewer is in, so the app can link to a screen they can open.
+      leagues: leagues.map(({ id: leagueId, name, concluded, seasonLength, joinedAt }) => ({
+        ...(mine.some((m) => m.id === leagueId) && { id: leagueId }),
+        name,
+        concluded,
+        seasonLength,
+        joinedAt,
+      })),
       favorites: favorites.map(({ submissionId, leagueName, roundTheme, service, title, artist }) => ({
         submissionId,
         leagueName,

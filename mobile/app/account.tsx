@@ -419,7 +419,7 @@ export default function Account() {
       <JCard>
         <HandText>Favorites</HandText>
         <Label>
-          Tracks you hearted on a results screen, saved here so you can hear them again or export them as a playlist.
+          Tracks you hearted are saved here so you can listen again, or export them as a playlist.
         </Label>
         {favorites && (
           <>
