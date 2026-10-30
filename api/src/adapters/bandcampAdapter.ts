@@ -73,7 +73,8 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     }
     if (!res.ok) return null;
 
-    const encoded = (await res.text()).match(TRALBUM_PATTERN)?.[1];
+    const html = await res.text();
+    const encoded = html.match(TRALBUM_PATTERN)?.[1];
     const data = encoded ? safeParse(decodeHtmlEntities(encoded)) : null;
 
     const title = data?.current?.title;
@@ -82,7 +83,14 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
       // A 200 whose markup we can't parse is the shape #59 arrived in: no error, no log line, just
       // a link rejected as invalid. The daily contract job catches it within a day; this makes an
       // intra-day break diagnosable instead of silent.
-      console.error('bandcamp page parse failed', parsed.toString());
+      console.error(
+        'bandcamp page parse failed',
+        parsed.toString(),
+        res.url,
+        res.headers.get('content-type'),
+        html.length,
+        html.slice(0, 300).replace(/\s+/g, ' '),
+      );
       return null;
     }
 
