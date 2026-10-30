@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 import { API_URL, fetchApi } from '../lib/api';
@@ -18,6 +19,9 @@ const MIN_PASSWORD = 8;
 const BAD_EMAIL = 'Enter a valid email address';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Must match the API's NATIVE_RETURN_URL allow-list exactly.
+const NATIVE_RETURN_URL = 'mixtapeparty://auth/complete';
+
 export default function SignIn() {
   const { signIn } = useSession();
   const { error: googleError, mode: modeParam } = useLocalSearchParams<{ error?: string; mode?: string }>();
@@ -33,6 +37,27 @@ export default function SignIn() {
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
+
+  // The in-app browser hands back the final mixtapeparty:// URL; the token (or an error) is in its fragment.
+  async function googleNative() {
+    setGoogling(true);
+    setError(null);
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(
+        `${API_URL}/auth/google/start?return=${encodeURIComponent(NATIVE_RETURN_URL)}`,
+        NATIVE_RETURN_URL,
+      );
+      if (result.type !== 'success') return;
+      const params = new URLSearchParams(result.url.split('#')[1] ?? '');
+      const token = params.get('t');
+      if (token) router.push({ pathname: '/auth/complete', params: { t: token } });
+      else setError(GOOGLE_ERRORS[params.get('error') ?? ''] ?? 'Google sign-in failed.');
+    } catch {
+      setError('Google sign-in failed. Try again.');
+    } finally {
+      setGoogling(false);
+    }
+  }
 
   // Editing the address or switching mode invalidates whatever the last action said: an error
   // about the old input, or "check your email" naming an address the link never went to.
@@ -126,18 +151,14 @@ export default function SignIn() {
         <Chip label="Sign in" selected={mode === 'sign-in'} onPress={() => changeMode('sign-in')} />
         <Chip label="Create account" selected={mode === 'sign-up'} onPress={() => changeMode('sign-up')} />
       </View>
-      {Platform.OS === 'web' && (
-        // A full-page navigation, not a fetch: the OAuth redirect has to happen in the browser's
-        // address bar, and the state cookie is set on the API's own origin along the way.
-        <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={!!busy || googling} onPress={() => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; }} />
-      )}
-      {Platform.OS === 'web' && (
-        <View style={styles.divider}>
-          <View style={[styles.rule, { backgroundColor: t.ink }]} />
-          <Label>or</Label>
-          <View style={[styles.rule, { backgroundColor: t.ink }]} />
-        </View>
-      )}
+      {/* Web: a full-page navigation, not a fetch — the OAuth redirect has to happen in the browser's
+          address bar, and the state cookie is set on the API's own origin along the way. */}
+      <TapeButton title={googling ? 'Redirecting to Google…' : 'Continue with Google'} variant="secondary" disabled={!!busy || googling} onPress={Platform.OS === 'web' ? () => { setGoogling(true); window.location.href = `${API_URL}/auth/google/start`; } : googleNative} />
+      <View style={styles.divider}>
+        <View style={[styles.rule, { backgroundColor: t.ink }]} />
+        <Label>or</Label>
+        <View style={[styles.rule, { backgroundColor: t.ink }]} />
+      </View>
       <TapeInput
         placeholder="Email"
         accessibilityLabel="Email"

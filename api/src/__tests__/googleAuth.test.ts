@@ -19,8 +19,8 @@ afterAll(async () => {
 });
 
 /** Runs `/start` and hands back the two halves of the CSRF binding the callback expects. */
-async function startFlow(app: Express) {
-  const started = await request(app).get('/auth/google/start');
+async function startFlow(app: Express, query = '') {
+  const started = await request(app).get(`/auth/google/start${query}`);
   const setCookie = started.headers['set-cookie'] as unknown as string[];
   const cookie = setCookie[0].split(';')[0];
   const state = new URL(started.headers.location).searchParams.get('state') as string;
@@ -194,5 +194,38 @@ describe('GET /auth/google/callback', () => {
     expect(me.status).toBe(200);
     expect(me.body.email).toBe('handoff@example.com');
     expect(me.body.displayName).toBe('Alan');
+  });
+
+  describe('native return target', () => {
+    const native = `?return=${encodeURIComponent('mixtapeparty://auth/complete')}`;
+
+    it('hands the sign_in token to the app scheme when the flow began natively', async () => {
+      const { app, googleTokenExchange } = buildApp(testDb.pool);
+      googleTokenExchange.issue('code-n', { sub: 'google-n', email: 'native@example.com', name: 'Ada' });
+      const { cookie, state } = await startFlow(app, native);
+
+      const res = await callback(app, { code: 'code-n', state, cookie });
+
+      expect(res.headers.location).toMatch(/^mixtapeparty:\/\/auth\/complete#t=[A-Za-z0-9_-]+$/);
+    });
+
+    it('sends a native cancel back to the app, not the web sign-in page', async () => {
+      const { app } = buildApp(testDb.pool);
+      const { cookie, state } = await startFlow(app, native);
+
+      const res = await request(app).get(`/auth/google/callback?error=access_denied&state=${state}`).set('Cookie', cookie);
+
+      expect(res.headers.location).toBe('mixtapeparty://auth/complete#error=google_cancelled');
+    });
+
+    it.each(['https://evil.example/steal', 'mixtapeparty://auth/complete/../x', 'mixtapeparty://evil'])(
+      'rejects return target %s',
+      async (target) => {
+        const { app } = buildApp(testDb.pool);
+        const res = await request(app).get(`/auth/google/start?return=${encodeURIComponent(target)}`);
+        expect(res.status).toBe(400);
+        expect(res.headers['set-cookie']).toBeUndefined();
+      },
+    );
   });
 });

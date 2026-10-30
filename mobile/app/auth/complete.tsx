@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Platform } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { fetchApi } from '../../lib/api';
 import { useSession } from '../../lib/session';
@@ -13,6 +14,7 @@ import { BodyText, ErrorNote, ReelSpinner, Screen, TapeButton } from '../../lib/
 export default function AuthComplete() {
   const { signIn, token } = useSession();
   const [error, setError] = useState<string | null>(null);
+  const { t: nativeToken } = useLocalSearchParams<{ t?: string }>();
   const exchanged = useRef(false);
 
   useEffect(() => {
@@ -21,14 +23,16 @@ export default function AuthComplete() {
     if (exchanged.current) return;
     exchanged.current = true;
 
-    const hash = typeof window === 'undefined' ? '' : window.location.hash;
-    const authToken = new URLSearchParams(hash.replace(/^#/, '')).get('t');
+    // Native hands the token over as a route param (no address bar or access log to leak it to);
+    // web reads it from the fragment.
+    const authToken =
+      Platform.OS === 'web' ? new URLSearchParams(window.location.hash.replace(/^#/, '')).get('t') : nativeToken;
     if (!authToken) {
       setError('This sign-in link is missing its token.');
       return;
     }
     // Out of the address bar (and out of document.referrer) before anything else happens.
-    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (Platform.OS === 'web') window.history.replaceState(null, '', window.location.pathname + window.location.search);
 
     (async () => {
       const res = await fetchApi('/sessions/token', { method: 'POST', body: { token: authToken } });

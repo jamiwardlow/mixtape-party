@@ -1,5 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import SignIn from '../sign-in';
+import * as WebBrowser from 'expo-web-browser';
+
+jest.mock('expo-web-browser', () => ({ openAuthSessionAsync: jest.fn() }));
 
 const mockSignIn = jest.fn();
 const mockPush = jest.fn();
@@ -264,6 +267,35 @@ describe('Google button on web', () => {
     const tree = JSON.stringify(screen.toJSON());
     expect(tree.indexOf('Continue with Google')).toBeGreaterThan(-1);
     expect(tree.indexOf('Continue with Google')).toBeLessThan(tree.indexOf('"Email"'));
+  });
+});
+
+describe('Google button on native', () => {
+  const open = WebBrowser.openAuthSessionAsync as jest.Mock;
+
+  it('opens an auth session with the native return URL and exchanges the returned token', async () => {
+    open.mockResolvedValue({ type: 'success', url: 'mixtapeparty://auth/complete#t=abc123' });
+    await render(<SignIn />);
+    await fireEvent.press(screen.getByText('Continue with Google'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith({ pathname: '/auth/complete', params: { t: 'abc123' } }));
+    expect(open.mock.calls[0][0]).toMatch(/\/auth\/google\/start\?return=mixtapeparty%3A%2F%2Fauth%2Fcomplete$/);
+    expect(open.mock.calls[0][1]).toBe('mixtapeparty://auth/complete');
+  });
+
+  it('shows the error when Google bounces back without a token', async () => {
+    open.mockResolvedValue({ type: 'success', url: 'mixtapeparty://auth/complete#error=google_cancelled' });
+    await render(<SignIn />);
+    await fireEvent.press(screen.getByText('Continue with Google'));
+    expect(await screen.findByText('Google sign-in was cancelled.')).toBeTruthy();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet when the user dismisses the browser', async () => {
+    open.mockResolvedValue({ type: 'dismiss' });
+    await render(<SignIn />);
+    await fireEvent.press(screen.getByText('Continue with Google'));
+    await waitFor(() => expect(screen.getByText('Continue with Google')).toBeTruthy());
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });
 

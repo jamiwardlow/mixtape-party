@@ -66,11 +66,12 @@ export function verifySessionToken(token: string, secret: string): string | null
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 /** Signs the `state` for an OAuth round trip. Narrow wrapper on purpose: signPayload stays private. */
-export function signStateToken(nonce: string, secret: string): string {
-  return signPayload({ nonce }, secret, OAUTH_STATE_TTL_MS);
+export function signStateToken(nonce: string, secret: string, native = false): string {
+  return signPayload({ nonce, native }, secret, OAUTH_STATE_TTL_MS);
 }
 
-/** Returns the nonce the state was signed with, or null if the signature is bad or it has expired. */
-export function verifyStateToken(token: string, secret: string): string | null {
-  return verifyPayload<{ nonce: string }>(token, secret)?.nonce ?? null;
+/** Returns the nonce (and whether the flow began from the native app), or null if the signature is bad or it has expired. */
+export function verifyStateToken(token: string, secret: string): { nonce: string; native: boolean } | null {
+  const payload = verifyPayload<{ nonce: string; native?: boolean }>(token, secret);
+  return payload ? { nonce: payload.nonce, native: payload.native === true } : null;
 }
