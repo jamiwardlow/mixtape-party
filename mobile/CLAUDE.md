@@ -24,3 +24,15 @@ Verified on an Apple Silicon Mac.
 - **Zscaler (or any TLS-inspecting proxy) breaks FCM on the emulator.** Play services rejects the proxy certificate on `mtalk.google.com:5228`; the app logs `FirebaseMessaging: ... SERVICE_NOT_AVAILABLE` and no token registers. Check with `openssl s_client -connect mtalk.google.com:5228` and look at the issuer.
 - `registerPushToken` swallows every error (`catch {}`), so the only symptom is an empty `push_tokens` table. Use `adb logcat | grep FirebaseMessaging` to see why.
 - Needs FCM credentials uploaded to Expo for the project, or token fetch fails even on a good network.
+
+## Cutting a native release
+
+Manual only: Cloud Build deploys web and API, and nothing builds native on push. Run from `mobile/` while logged in to EAS (`eas login`).
+
+1. `npm run build:ios` / `npm run build:android` — the `production` profile in `eas.json`.
+2. `npm run submit:ios` / `npm run submit:android` — submits the latest finished build (TestFlight / Play `internal` track).
+
+- **Versions:** `appVersionSource: remote` and `autoIncrement: true`, so EAS owns the build number / versionCode; never edit it in `app.json`. Bump `version` in `app.json` only for a user-visible release.
+- **Credentials** (signing keys, FCM, App Store Connect API key) live in EAS, not the repo. Android submit needs a Play service account key; set `serviceAccountKeyPath` in `eas.json`.
+- **Before first submit:** replace the `TODO` values under `submit.production` in `eas.json` (`ascAppId`, `appleTeamId`, `serviceAccountKeyPath`).
+- **No OTA:** `expo-updates` is deliberately not installed (no `runtimeVersion`/channels); every JS change ships as a new build.
