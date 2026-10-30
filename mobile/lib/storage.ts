@@ -21,9 +21,6 @@ export const webStorage: SessionStorage = {
   },
 };
 
-// ponytail: nothing exercises secureStorage — reaching it from a test means patching
-// expo-secure-store, which is the module patching this seam exists to remove. It is four lines in
-// the same shape as webStorage; the check that covers it is signing in once on a device.
 export const secureStorage: SessionStorage = {
   get(key) {
     return SecureStore.getItemAsync(key);

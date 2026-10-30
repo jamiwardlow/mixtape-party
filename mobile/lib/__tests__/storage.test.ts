@@ -1,4 +1,11 @@
-import { webStorage } from '../storage';
+import * as SecureStore from 'expo-secure-store';
+import { secureStorage, webStorage } from '../storage';
+
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(),
+  setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
+}));
 
 // The web half is the reason this seam exists: under the default jest-expo preset `Platform.OS`
 // is never 'web', so nothing else in the suite reaches these guards.
@@ -49,5 +56,31 @@ describe('webStorage', () => {
 
     await expect(webStorage.set('session_token', 'tok-abc')).resolves.toBeUndefined();
     await expect(webStorage.get('session_token')).resolves.toBeNull();
+  });
+});
+
+describe('secureStorage', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('reads through to the keychain', async () => {
+    jest.mocked(SecureStore.getItemAsync).mockResolvedValue('tok-abc');
+
+    expect(await secureStorage.get('session_token')).toBe('tok-abc');
+    expect(SecureStore.getItemAsync).toHaveBeenCalledWith('session_token');
+  });
+
+  it('writes a value', async () => {
+    await secureStorage.set('session_token', 'tok-abc');
+
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('session_token', 'tok-abc');
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
+  // SecureStore rejects a null value, so clearing must delete the key.
+  it('deletes the key on a null value', async () => {
+    await secureStorage.set('session_token', null);
+
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('session_token');
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
   });
 });
