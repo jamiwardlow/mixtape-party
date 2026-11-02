@@ -218,7 +218,7 @@ async function sweepSeasonConcluded(deps: NotificationSweepDeps, now: Date): Pro
       members,
       'season_concluded',
       {
-        title: `${league.name}'s season has concluded`,
+        title: `${league.name}'s season has concluded. GGs!`,
         body: 'Check the final standings.',
         appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/league/${league.id}/final` : undefined,
         data: { leagueId: league.id, screen: 'final' },
