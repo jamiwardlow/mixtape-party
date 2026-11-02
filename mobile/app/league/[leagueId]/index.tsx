@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, Share, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { PlayerLink } from '../../../lib/PlayerLink';
@@ -14,6 +14,7 @@ import {
   type RoundPhase,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
+import { useTheme } from '../../../lib/theme';
 import { StandingRows, WinnersRow } from '../../../lib/Standings';
 import {
   BodyText,
@@ -25,6 +26,8 @@ import {
   Screen,
   Sprocket,
   TapeButton,
+  focusRing,
+  type WebState,
 } from '../../../lib/ui';
 
 /** One round of the season, as `GET /leagues/:leagueId/overview` describes it. */
@@ -62,12 +65,48 @@ interface Overview extends SeasonResult {
   rounds: OverviewRound[];
 }
 
+/** Quiet link at the end of the page; one tap opens an inline confirm card (#183). */
+function DeleteLeague({ name, roundCount, onDelete }: { name: string; roundCount: number; onDelete: () => void }) {
+  const t = useTheme();
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <View style={{ gap: 12, marginTop: 12 }}>
+      <View style={{ borderTopWidth: 2, borderStyle: 'dashed', borderColor: t.ink, opacity: 0.25 }} />
+      {confirming ? (
+        <JCard>
+          <HandText>Delete "{name}"?</HandText>
+          <BodyText>
+            {roundCount} {roundCount === 1 ? 'round' : 'rounds'} and all submissions go with it. This can't be undone.
+          </BodyText>
+          <View style={styles.inline}>
+            <TapeButton title="Keep it" variant="secondary" onPress={() => setConfirming(false)} />
+            <TapeButton title="Delete" variant="danger" onPress={onDelete} />
+          </View>
+        </JCard>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Delete league"
+          onPress={() => setConfirming(true)}
+          style={({ focused }: WebState) => [
+            { minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 8 },
+            focusRing(t, focused),
+          ]}
+        >
+          <Text style={{ color: t.ink, opacity: 0.75, fontFamily: t.font.body, fontSize: 14, textDecorationLine: 'underline' }}>
+            Delete league
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 export default function LeagueOverview() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
   const { token, profile } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function load() {
     const res = await fetchApi(`/leagues/${leagueId}/overview`, { token: token ?? undefined });
@@ -252,21 +291,19 @@ export default function LeagueOverview() {
             }
           />
         )}
-      </ScrollView>
-      {league.isHost &&
-        (confirmingDelete ? (
-          <TapeButton
-            title="Really delete this league? Tap to confirm"
-            variant="secondary"
-            onPress={async () => {
+
+        {league.isHost && (
+          <DeleteLeague
+            name={league.name}
+            roundCount={rounds.length}
+            onDelete={async () => {
               const res = await fetchApi(`/leagues/${league.id}`, { method: 'DELETE', token: token! });
               if (res.ok) router.replace('/home');
               else setError((await res.json().catch(() => null))?.error ?? 'Could not delete this league');
             }}
           />
-        ) : (
-          <TapeButton title="Delete league" variant="secondary" onPress={() => setConfirmingDelete(true)} />
-        ))}
+        )}
+      </ScrollView>
       <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
     </Screen>
   );

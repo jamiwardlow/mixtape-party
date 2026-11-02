@@ -183,7 +183,7 @@ export function TapeButton({
   title: string;
   onPress: () => void;
   disabled?: boolean;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger';
 }) {
   const t = useTheme();
   return (
@@ -199,7 +199,7 @@ export function TapeButton({
           {
             borderColor: t.ink,
             borderWidth: t.border,
-            backgroundColor: variant === 'secondary' ? t.shell : t.accent,
+            backgroundColor: variant === 'secondary' ? t.shell : variant === 'danger' ? t.tangerine : t.accent,
             transform: pressed ? [{ translateX: t.shadow }, { translateY: t.shadow }] : hovered ? [{ translateX: -1 }, { translateY: -1 }] : [],
           },
           focusRing(t, focused),
