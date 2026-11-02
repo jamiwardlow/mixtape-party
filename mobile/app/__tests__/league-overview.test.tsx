@@ -5,6 +5,7 @@ import LeagueOverview from '../league/[leagueId]/index';
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
   useLocalSearchParams: () => ({ leagueId: 'league-1' }),
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
 }));
 
 jest.mock('../../lib/session', () => ({

@@ -1,6 +1,6 @@
 import * as Linking from 'expo-linking';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
@@ -116,9 +116,12 @@ export default function LeagueOverview() {
     }
     setOverview(await res.json());
   }
-  useEffect(() => {
-    if (token) load();
-  }, [token, leagueId]);
+  // Refetch on every focus: coming back from submit leaves this screen mounted, so it'd show stale state.
+  useFocusEffect(
+    useCallback(() => {
+      if (token) load();
+    }, [token, leagueId]),
+  );
 
   if (!overview) {
     return (
