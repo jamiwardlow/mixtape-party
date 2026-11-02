@@ -32,7 +32,7 @@ export function FavoritesList({
 )) {
   if (favorites.length === 0) return <BodyText>{empty}</BodyText>;
   return (
-    <FlatList
+    <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
       data={favorites}
       keyExtractor={(item) => item.submissionId}
       ItemSeparatorComponent={Sprocket}

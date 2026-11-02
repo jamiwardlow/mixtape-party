@@ -96,7 +96,7 @@ export default function LeagueOverview() {
 
   return (
     <Screen label={league.name} wide>
-      <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
         <View style={styles.cols}>
         <View style={styles.col}>
         <JCard>

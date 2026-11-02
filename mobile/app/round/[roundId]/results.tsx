@@ -365,7 +365,7 @@ export default function RoundResults() {
           </JCard>
         ) : null}
         {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
-        <FlatList
+        <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
           ref={list}
           // ponytail: rows vary in height, so a miss (not yet laid out) just stays at the top.
           onScrollToIndexFailed={() => {}}

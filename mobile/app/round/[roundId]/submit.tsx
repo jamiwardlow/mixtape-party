@@ -177,7 +177,7 @@ export default function SubmitTrack() {
           <TapeButton title={searching ? 'Searching…' : 'Search'} onPress={search} disabled={searching || !query.trim()} variant="secondary" />
           {commentField}
           {searching && <ReelSpinner />}
-          <FlatList
+          <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
             data={results}
             keyExtractor={(item) => item.externalId}
             ItemSeparatorComponent={Sprocket}

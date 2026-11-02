@@ -53,7 +53,7 @@ export default function SeasonWrapUp() {
   const { league, standings, winners } = overview;
   return (
     <Screen label={league.name}>
-      <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
         <JCard>
           <Label>Season complete</Label>
           <WinnersRow winners={winners} token={token} />

@@ -90,7 +90,7 @@ export default function RoundOverview() {
 
   return (
     <Screen label={leagueName}>
-      <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
         <PhaseSteps phase={round.phase} />
         <JCard>
           <HandText testID="round-heading">{`Round ${round.number}`}</HandText>

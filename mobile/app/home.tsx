@@ -122,7 +122,7 @@ export default function Home() {
           <Label accessibilityRole="button" style={{ minHeight: 44, textAlign: "center", textDecorationLine: "underline" }} onPress={skipName}>Skip</Label>
         </JCard>
       )}
-      <ScrollView
+      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           gap: 12,
           flexDirection: "row",

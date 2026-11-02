@@ -130,7 +130,7 @@ export default function GuessRound() {
         <PhaseSteps phase="guessing" />
         {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         {playlistUrl ? <TapeButton title="Open playlist" onPress={() => Linking.openURL(playlistUrl)} /> : null}
-        <FlatList
+        <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
           data={tracks ?? []}
           keyExtractor={(item) => item.submissionId}
           ItemSeparatorComponent={Sprocket}

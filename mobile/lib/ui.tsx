@@ -5,6 +5,7 @@ import {
   Animated,
   Easing,
   Image,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   PressableProps,
@@ -56,12 +57,12 @@ export function Screen({ label, wide, children }: { label: string; wide?: boolea
   const t = useTheme();
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-      <View style={[styles.wrap, { maxWidth: wide ? 1120 : 640 }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.wrap, { maxWidth: wide ? 1120 : 640 }]}>
         <View style={styles.header}>
           <Text accessibilityRole="header" style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
         </View>
         <View style={styles.body}>{children}</View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
