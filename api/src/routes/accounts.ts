@@ -51,14 +51,19 @@ const MAX_ABOUT_ME = 500;
 // ponytail: avatars live in Postgres bytea (client resizes to ~256px, so rows stay small). Move to
 // a bucket if avatars grow or get fetched in bulk, e.g. a roster of hundreds.
 const MAX_AVATAR_BYTES = 200 * 1024;
-const AVATAR_TYPES = ['image/jpeg', 'image/png'];
 
-// 415 before the body is read, 413 when it exceeds the limit (body-parser's error would otherwise
-// fall through to the app's 500 handler).
-const avatarType: RequestHandler = (req, res, next) => {
-  if (AVATAR_TYPES.includes(req.header('content-type')?.split(';')[0].trim().toLowerCase() ?? '')) return next();
-    res.status(415).json({ error: 'avatar must be image/jpeg or image/png' });
-};
+// Sniff the bytes, not the Content-Type header: React Native's fetch can rewrite the header on a
+// Blob body, and the client always re-encodes to JPEG anyway.
+const AVATAR_MAGIC: [string, number[]][] = [
+  ['image/jpeg', [0xff, 0xd8, 0xff]],
+  ['image/png', [0x89, 0x50, 0x4e, 0x47]],
+];
+function sniffAvatarType(body: Buffer): string | undefined {
+  return AVATAR_MAGIC.find(([, magic]) => magic.every((b, i) => body[i] === b))?.[0];
+}
+
+// 413 when the body exceeds the limit (body-parser's error would otherwise fall through to the
+// app's 500 handler).
 const avatarTooLarge: ErrorRequestHandler = (err, _req, res, next) => {
   if (err?.type === 'entity.too.large') {
     res.status(413).json({ error: 'avatar must be at most 200kb' });
@@ -233,13 +238,17 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
     res.status(204).end();
   });
 
-  router.put('/accounts/me/avatar', requireAuth(deps), avatarType, avatarRaw, async (req: Request, res: Response) => {
+  router.put('/accounts/me/avatar', requireAuth(deps), avatarRaw, async (req: Request, res: Response) => {
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       res.status(400).json({ error: 'avatar body is required' });
       return;
     }
+    const contentType = sniffAvatarType(req.body);
+    if (!contentType) {
+      res.status(415).json({ error: 'avatar must be a JPEG or PNG image' });
+      return;
+    }
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const contentType = req.header('content-type')!.split(';')[0].trim().toLowerCase();
     await deps.pool.query(
       'UPDATE accounts SET avatar = $2, avatar_content_type = $3, avatar_updated_at = now() WHERE id = $1',
       [accountId, req.body, contentType],

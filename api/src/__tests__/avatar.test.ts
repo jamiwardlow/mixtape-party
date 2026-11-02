@@ -53,7 +53,9 @@ describe('account avatar', () => {
       request(app).put('/accounts/me/avatar').set('Authorization', me.auth).set('Content-Type', type).send(body);
 
     expect((await put('image/png', Buffer.alloc(201 * 1024))).status).toBe(413);
-    expect((await put('image/gif', png)).status).toBe(415);
+    expect((await put('image/png', Buffer.from('GIF89a'))).status).toBe(415);
+    // the header is not trusted: PNG bytes with a wrong or missing type still upload
+    expect((await put('application/octet-stream', png)).status).toBe(200);
   });
 
   it('requires auth, and 404s an unknown or malformed id', async () => {
