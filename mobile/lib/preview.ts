@@ -1,4 +1,4 @@
-import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchApi } from './api';
 
@@ -42,6 +42,9 @@ export function usePreview(previewPath: (submissionId: string) => string, token:
       }
       if (mine !== request.current) return;
       if (!url) return fallback(submissionId);
+      // iOS mutes expo-audio when the silent switch is on unless this is set.
+      await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+      if (mine !== request.current) return;
       const p = createAudioPlayer(url);
       player.current = p;
       p.addListener('playbackStatusUpdate', (s) => s.didJustFinish && player.current === p && stop());

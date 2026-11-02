@@ -4,7 +4,10 @@ import { PREVIEW_SECONDS, usePreview } from '../preview';
 
 const mockPlayer = { play: jest.fn(), remove: jest.fn(), addListener: jest.fn() };
 const mockCreate = jest.fn((_url: string) => mockPlayer);
-jest.mock('expo-audio', () => ({ createAudioPlayer: (url: string) => mockCreate(url) }));
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: (url: string) => mockCreate(url),
+  setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../api', () => ({ fetchApi: jest.fn() }));
 
 const path = (id: string) => `/rounds/r1/submissions/${id}/preview`;
