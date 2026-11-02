@@ -6,7 +6,6 @@ import { useSession } from "../lib/session";
 import { deviceStorage } from "../lib/storage";
 import { phaseLabel, type RoundPhase } from "../lib/rounds";
 import {
-  Cassette,
   ErrorNote,
   HandText,
   JCard,
@@ -132,7 +131,6 @@ export default function Home() {
       >
         {leagues.length === 0 && (
           <View style={{ width: "100%", gap: 12 }}>
-            <Cassette title="Your first mixtape" still />
             <Label>No leagues yet.</Label>
           </View>
         )}
