@@ -13,17 +13,22 @@ import { runEmbedOnlyAdapterContractTests } from '../contract.js';
 // `||`, not `??`: the CI job passes `BANDCAMP_TEST_URL: ${{ vars.BANDCAMP_TEST_URL }}`, and an
 // unset repo variable renders as an empty string rather than staying absent. `??` kept that ''
 // and the contract test "failed" on `submit('')` in 6ms without ever reaching Bandcamp (#68).
+// An embed URL, not the track page: Bandcamp serves datacenter IPs (CI runners, Cloud Run) a "Client
+// Challenge" bot wall on track pages, which is why the app now asks for Share → Embed code (#169).
+// The player page is the path that works from there. Track 148177487 is tycho/awake from #59.
+const DEFAULT_URL = 'https://bandcamp.com/EmbeddedPlayer/track=148177487';
+
 runEmbedOnlyAdapterContractTests(
   'bandcamp (real API)',
   () => new BandcampAdapter(),
-  () => process.env.BANDCAMP_TEST_URL || 'https://tycho.bandcamp.com/track/awake',
+  () => process.env.BANDCAMP_TEST_URL || DEFAULT_URL,
 );
 
 // #102: the preview reads the `file` shape off the embedded player page, which can change without notice.
 describe('bandcamp preview (real API)', () => {
   it('finds a streamable mp3 for a known streamable track', async () => {
     const adapter = new BandcampAdapter();
-    const track = await adapter.submit(process.env.BANDCAMP_TEST_URL || 'https://tycho.bandcamp.com/track/awake');
+    const track = await adapter.submit(process.env.BANDCAMP_TEST_URL || DEFAULT_URL);
     expect(await adapter.getPreviewUrl(track!)).toMatch(/^https:\/\/.+\/mp3-128\//);
   });
 });
