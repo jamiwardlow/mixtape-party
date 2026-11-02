@@ -391,7 +391,6 @@ export default function Account() {
       </JCard>
       <JCard>
         <HandText>About you</HandText>
-        <Label>Optional.</Label>
         <TapeInput
           placeholder="Pronouns / pronunciation (e.g. she/her · JAH-mee)"
           maxLength={40}
