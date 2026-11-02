@@ -20,6 +20,8 @@ export function usePreview(previewPath: (submissionId: string) => string, token:
   const stop = useCallback(() => {
     request.current++;
     if (timer.current) clearTimeout(timer.current);
+    // remove() alone leaves the native iOS player audible, so pause it first.
+    player.current?.pause();
     player.current?.remove();
     player.current = null;
     setPlayingId(null);

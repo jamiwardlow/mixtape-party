@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { fetchApi } from '../api';
 import { PREVIEW_SECONDS, usePreview } from '../preview';
 
-const mockPlayer = { play: jest.fn(), remove: jest.fn(), addListener: jest.fn() };
+const mockPlayer = { play: jest.fn(), pause: jest.fn(), remove: jest.fn(), addListener: jest.fn() };
 const mockCreate = jest.fn((_url: string) => mockPlayer);
 jest.mock('expo-audio', () => ({
   createAudioPlayer: (url: string) => mockCreate(url),
@@ -43,6 +43,14 @@ it('falls back to the link when there is no preview', async () => {
 
   expect(fallback).toHaveBeenCalledWith('s1');
   expect(mockCreate).not.toHaveBeenCalled();
+});
+
+it('pauses before removing when stopped', async () => {
+  previewIs('https://cdn/p.mp3');
+  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
+  await act(async () => result.current.toggle('s1'));
+  await act(async () => result.current.toggle('s1'));
+  expect(mockPlayer.pause).toHaveBeenCalled();
 });
 
 it('stops when toggled again, and cuts a full-length track at the preview length', async () => {
