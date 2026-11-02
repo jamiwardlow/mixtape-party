@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { fetchApi } from './api';
 import { useTheme } from './theme';
@@ -11,38 +11,71 @@ export interface Reaction {
   mine: boolean;
 }
 
-const DEFAULT_REACTIONS = ['❤️', '😂', '🔥', '👏', '😮'];
+const TRAY_EMOJI = ['❤️', '😂', '🔥', '👏', '😮', '😭', '🤘', '💀', '🎧', '🙌', '🥹', '👀'];
 
 /**
- * Tap a chip to react or take your reaction back; the box adds any emoji, since the API takes any
- * single one. The defaults are only a head start -- anything already in use gets its own chip.
+ * Chips for the reactions that exist (tap to react or take yours back), then one dashed button that
+ * opens a tray of common emoji plus "Any emoji", since the API takes any single one. Picking closes the tray.
  */
 export function Reactions({ reactions, onToggle }: { reactions: Reaction[]; onToggle: (emoji: string) => void }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [typing, setTyping] = useState(false);
   const [custom, setCustom] = useState('');
-  const emojis = [...new Set([...DEFAULT_REACTIONS, ...reactions.map((r) => r.emoji)])];
+  function pick(emoji: string) {
+    onToggle(emoji);
+    setOpen(false);
+    setTyping(false);
+    setCustom('');
+  }
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-      {emojis.map((emoji) => {
-        const reaction = reactions.find((r) => r.emoji === emoji);
-        return (
-          <Chip
-            key={emoji}
-            label={reaction ? `${emoji} ${reaction.count}${reaction.mine ? ' ✓' : ''}` : emoji}
-            selected={reaction?.mine}
-            onPress={() => onToggle(emoji)}
-          />
-        );
-      })}
-      <TapeInput
-        placeholder="Any emoji"
-        value={custom}
-        onChangeText={setCustom}
-        onSubmitEditing={() => {
-          if (custom.trim()) onToggle(custom.trim());
-          setCustom('');
-        }}
-        style={{ minWidth: 90 }}
-      />
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+        {reactions.map((r) => (
+          <Chip key={r.emoji} label={`${r.emoji} ${r.count}${r.mine ? ' ✓' : ''}`} selected={r.mine} onPress={() => onToggle(r.emoji)} />
+        ))}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add reaction"
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen(!open)}
+          style={({ focused }: WebState) => [
+            {
+              borderColor: t.ink,
+              borderWidth: t.border,
+              borderStyle: open ? 'solid' : 'dashed',
+              borderRadius: 99,
+              backgroundColor: open ? t.bg : t.shell,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+            },
+            focusRing(t, focused),
+          ]}
+        >
+          <Text style={{ color: t.ink, fontFamily: t.font.body, fontSize: 15 }}>☺+</Text>
+        </Pressable>
+      </View>
+      {open ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, borderColor: t.ink, borderWidth: t.border, borderRadius: 16, padding: 6, backgroundColor: t.shell }}>
+          {TRAY_EMOJI.map((emoji) => (
+            <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`React ${emoji}`} onPress={() => pick(emoji)} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 22 }}>{emoji}</Text>
+            </Pressable>
+          ))}
+          {typing ? (
+            <TapeInput
+              placeholder="Any emoji"
+              value={custom}
+              onChangeText={setCustom}
+              onSubmitEditing={() => (custom.trim() ? pick(custom.trim()) : setTyping(false))}
+              autoFocus
+              style={{ minWidth: 120 }}
+            />
+          ) : (
+            <Chip label="Any emoji" onPress={() => setTyping(true)} />
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }

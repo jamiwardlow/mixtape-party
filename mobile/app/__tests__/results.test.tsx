@@ -3,10 +3,11 @@ import { Linking } from 'react-native';
 import RoundResults from '../round/[roundId]/results';
 
 const mockOpenURL = jest.fn();
+let mockFocus: string | undefined;
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
-  useLocalSearchParams: () => ({ roundId: 'round-1' }),
+  useLocalSearchParams: () => ({ roundId: 'round-1', focus: mockFocus }),
 }));
 
 jest.mock('../../lib/session', () => ({
@@ -30,6 +31,7 @@ function stubApi(exportBody: unknown, exportStatus = 200) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFocus = undefined;
 });
 
 describe('exported playlist links', () => {
@@ -115,7 +117,10 @@ describe('comment threads', () => {
     ) as unknown as typeof fetch;
     await render(<RoundResults />);
 
-    expect(await screen.findByText('“so Sam”')).toBeTruthy();
+    // Folded until asked for.
+    await fireEvent.press(await screen.findByText('▸ 1 comment'));
+    expect(screen.getByText('▾ 1 comment')).toBeTruthy();
+    expect(screen.getByText('“so Sam”')).toBeTruthy();
     expect(screen.getByText('🔥 2 ✓')).toBeTruthy();
 
     // Block lives on the profile; the comment only gets a quiet Report.
@@ -152,6 +157,7 @@ describe('comment threads', () => {
     ) as unknown as typeof fetch;
     await render(<RoundResults />);
 
+    await fireEvent.press(await screen.findByText('▸ 1 comment'));
     expect(await screen.findByText('nested')).toBeTruthy();
     expect(screen.getAllByText('Delete')).toHaveLength(1);
     await fireEvent.press(screen.getByText('Delete'));
@@ -225,5 +231,96 @@ describe('favorite heart', () => {
     await waitFor(() => expect(screen.getByLabelText('Favorited')).toBeTruthy());
     const posts = (fetch as jest.Mock).mock.calls.filter(([url]) => String(url).includes('/favorite'));
     expect(posts).toHaveLength(1);
+  });
+});
+
+describe('podium', () => {
+  const p = (accountId: string, displayName: string, score: number) => ({ accountId, displayName, score });
+
+  async function renderWith(scores: ReturnType<typeof p>[], winners: { accountId: string; displayName: string }[]) {
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export') ? ok({ services: [] }) : ok({ tracks: [], scores, winners }),
+    ) as unknown as typeof fetch;
+    await render(<RoundResults />);
+  }
+
+  it('names the winner and lists players past third below the podium', async () => {
+    const scores = [p('a', 'Maya', 7), p('b', 'Sam', 5), p('c', 'Jo', 3), p('d', 'Kim', 1)];
+    await renderWith(scores, [scores[0]]);
+
+    expect(await screen.findByText(/Maya takes the round/)).toBeTruthy();
+    expect(screen.getByText('7 pts')).toBeTruthy();
+    expect(screen.getByText('Kim')).toBeTruthy();
+  });
+
+  it('handles a tie and a lone player', async () => {
+    const scores = [p('a', 'Maya', 7), p('b', 'Sam', 7)];
+    await renderWith(scores, scores);
+    expect(await screen.findByText(/Maya, Sam take the round/)).toBeTruthy();
+  });
+});
+
+describe('reactions and the fold', () => {
+  const track = {
+    submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', comment: null,
+    submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [{ emoji: '🔥', count: 1, mine: false }],
+    yourGuess: null, favorited: false,
+    comments: [{
+      guessId: 'g1', guesser: { accountId: 'u2', displayName: 'Kim' }, mine: false, comment: 'so Sam', reactions: [],
+      replies: [{ replyId: 'r1', parentReplyId: null, mine: false, author: { accountId: 'u9', displayName: 'Pat' }, body: 'deep reply', createdAt: '', reactions: [] }],
+    }],
+  };
+  function stub() {
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export') ? ok({ services: [] }) : ok({ ...results, tracks: [track] }),
+    ) as unknown as typeof fetch;
+  }
+
+  it('adds a reaction from the tray, then closes it', async () => {
+    stub();
+    await render(<RoundResults />);
+
+    expect(screen.queryByPlaceholderText('Any emoji')).toBeNull();
+    await fireEvent.press(await screen.findByLabelText('Add reaction'));
+    await fireEvent.press(screen.getByLabelText('React 🎧'));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/submissions/s1/reactions'),
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ emoji: '🎧' }) }),
+      ),
+    );
+    expect(screen.queryByLabelText('React 🎧')).toBeNull();
+  });
+
+  it('takes any typed emoji', async () => {
+    stub();
+    await render(<RoundResults />);
+
+    await fireEvent.press(await screen.findByLabelText('Add reaction'));
+    await fireEvent.press(screen.getByText('Any emoji'));
+    const input = screen.getByPlaceholderText('Any emoji');
+    await fireEvent.changeText(input, '🦄');
+    await fireEvent(input, 'submitEditing');
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/submissions/s1/reactions'),
+        expect.objectContaining({ body: JSON.stringify({ emoji: '🦄' }) }),
+      ),
+    );
+  });
+
+  it('keeps replies folded until the toggle, and opens on its own for a focus link', async () => {
+    stub();
+    const { unmount } = await render(<RoundResults />);
+    await screen.findByText('▸ 1 comment');
+    expect(screen.queryByText('deep reply')).toBeNull();
+    unmount();
+
+    mockFocus = 'r1';
+    await render(<RoundResults />);
+    expect(await screen.findByText('deep reply')).toBeTruthy();
+    expect(screen.getByText('▾ 1 comment')).toBeTruthy();
   });
 });

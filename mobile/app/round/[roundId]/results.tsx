@@ -1,7 +1,7 @@
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Linking, View } from 'react-native';
+import { Linking, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { ReportBlock } from '../../../lib/Moderation';
@@ -239,9 +239,123 @@ function MyComment({ saved, onSave }: { saved: string | null; onSave: (comment: 
   );
 }
 
+const hasFocus = (t: Track, focus?: string) =>
+  !!focus && (t.submissionId === focus || t.comments.some((c) => c.guessId === focus || c.replies.some((r) => r.replyId === focus)));
+
+/** One track: badge, title row with heart, quotes, reactions, who, then comments folded behind a count. */
+function TrackCard({
+  item,
+  actions,
+  favorite,
+  onSaveComment,
+}: {
+  item: Track;
+  actions: ThreadActions;
+  favorite: ReturnType<typeof useFavorite>;
+  onSaveComment: (comment: string) => Promise<void>;
+}) {
+  const { token } = useSession();
+  const [open, setOpen] = useState(hasFocus(item, actions.focus));
+  const n = item.comments.length;
+  return (
+    <JCard>
+      <ServiceBadge service={item.service} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Thumb url={item.thumbnailUrl} />
+        <BodyText style={{ flex: 1 }}>
+          {item.title} — {item.artist}
+        </BodyText>
+        <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
+      </View>
+      {item.comment && <BodyText>“{item.comment}”</BodyText>}
+      {item.note && <BodyText>“{item.note}”</BodyText>}
+      <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
+      <Sprocket />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Label>Submitted by</Label>
+        <Avatar size={20} label="" url={item.submitter.avatarUrl} token={token} initial={(item.submitter.displayName ?? '?')[0]} />
+        <HandText>{item.submitter.displayName ?? 'a player'}</HandText>
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+        <Label>Guessed by</Label>
+        {item.correctGuessers.length > 0 ? (
+          <HandText>{item.correctGuessers.map((g) => g.displayName ?? 'a player').join(', ')}</HandText>
+        ) : (
+          <Label>Nobody</Label>
+        )}
+      </View>
+      {/* Your own comment is an input, not reading, so it stays above the fold. */}
+      {item.yourGuess ? (
+        <MyComment key={item.yourGuess.comment ?? ''} saved={item.yourGuess.comment} onSave={onSaveComment} />
+      ) : null}
+      {n > 0 ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)}>
+          <HandText style={{ fontSize: 14 }}>
+            {open ? '▾' : '▸'} {n} comment{n > 1 ? 's' : ''}
+          </HandText>
+        </Pressable>
+      ) : null}
+      {open ? item.comments.map((c) => <CommentThread key={c.guessId} comment={c} actions={actions} />) : null}
+    </JCard>
+  );
+}
+
+const PODIUM_HEIGHT = [140, 116, 96];
+const PODIUM_COLOR = ['#5EEAD4', '#FF8A3D', '#FF4F9A'];
+
+/** Top 3 as blocks (1st centred and tallest); ties share a height. Everyone past 3rd gets a row below. */
+function Podium({ results, token }: { results: Results; token: string | null }) {
+  const { scores, winners } = results;
+  const rank = (s: Score) => Math.min(scores.filter((o) => o.score > s.score).length, 2); // ties share
+  // 2nd left, 1st centre, 3rd right; with fewer players the gaps just close up.
+  const order = [scores[1], scores[0], scores[2]].filter((s): s is Score => !!s);
+  const names = winners.map((w) => w.displayName ?? 'A player').join(', ');
+  return (
+    <JCard>
+      {names ? <HandText>{names} {winners.length > 1 ? 'take' : 'takes'} the round 🏆</HandText> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+        {order.map((s) => (
+          <View key={s.accountId} style={{ flex: 1 }}>
+            <PlayerLink accountId={s.accountId}>
+              <View
+                style={{
+                  height: PODIUM_HEIGHT[rank(s)],
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: 6,
+                  borderWidth: 3,
+                  borderBottomWidth: 0,
+                  borderTopLeftRadius: 14,
+                  borderTopRightRadius: 14,
+                  backgroundColor: PODIUM_COLOR[rank(s)],
+                }}
+              >
+                <Avatar size={28} label="" url={s.avatarUrl} token={token} initial={(s.displayName ?? '?')[0]} />
+                <BodyText numberOfLines={1} style={{ fontSize: 13 }}>{s.displayName ?? 'A player'}</BodyText>
+                <BodyText style={{ fontSize: 13 }}>{s.score} pts</BodyText>
+              </View>
+            </PlayerLink>
+          </View>
+        ))}
+      </View>
+      {scores.slice(3).map((s, i) => (
+        <PlayerLink key={s.accountId} accountId={s.accountId}>
+          <LeaderboardRow
+            rank={i + 4}
+            name={s.displayName ?? 'A player'}
+            points={s.score}
+            avatar={<Avatar size={28} label="" url={s.avatarUrl} token={token} initial={(s.displayName ?? '?')[0]} />}
+          />
+        </PlayerLink>
+      ))}
+    </JCard>
+  );
+}
+
 export default function RoundResults() {
   const { roundId, focus } = useLocalSearchParams<{ roundId: string; focus?: string }>();
-  const list = useRef<FlatList<Track>>(null);
+  const scroller = useRef<ScrollView>(null);
   const { token } = useSession();
   const [results, setResults] = useState<Results | null>(null);
   const [exports, setExports] = useState<ServiceExport[]>([]);
@@ -278,17 +392,14 @@ export default function RoundResults() {
     focus,
   };
 
-  // Scroll to the track holding the linked comment/reply once, on first load -- not after each reaction.
+  // Scroll to the track holding the linked comment/reply once, when it first lays out -- not after each reaction.
+  // ponytail: playlists landing later can shift it a little; scroll once is good enough.
   const scrolled = useRef(false);
-  useEffect(() => {
-    if (!focus || !results || scrolled.current) return;
+  const onTrackLayout = (item: Track) => (e: LayoutChangeEvent) => {
+    if (scrolled.current || !hasFocus(item, focus)) return;
     scrolled.current = true;
-    const index = results.tracks.findIndex(
-      (t) =>
-        t.submissionId === focus || t.comments.some((c) => c.guessId === focus || c.replies.some((r) => r.replyId === focus)),
-    );
-    if (index > 0) list.current?.scrollToIndex({ index });
-  }, [focus, results]);
+    scroller.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -315,30 +426,17 @@ export default function RoundResults() {
     return note ? [{ service: e.service, note }] : [];
   });
 
-  const winnerNames = results?.winners.map((w) => w.displayName ?? 'A player').join(', ') ?? '';
-
   return (
     <RoundGate label="Results" error={error} ready={results !== null}>
       <Screen label="Results">
+        <ScrollView
+          ref={scroller}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ gap: 12 }}
+        >
         <PhaseSteps phase="results" />
-        <JCard>
-          {winnerNames ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-              <BodyText>Winners:</BodyText>
-              <HandText>{winnerNames}</HandText>
-            </View>
-          ) : null}
-          {results?.scores.map((score, i) => (
-            <PlayerLink key={score.accountId} accountId={score.accountId}>
-            <LeaderboardRow
-              rank={i + 1}
-              name={score.displayName ?? 'A player'}
-              points={score.score}
-              avatar={<Avatar size={28} label="" url={score.avatarUrl} token={token} initial={(score.displayName ?? '?')[0]} />}
-            />
-            </PlayerLink>
-          ))}
-        </JCard>
+        {results ? <Podium results={results} token={token} /> : null}
         {playlists.length > 0 ? (
           <JCard>
             <Label>Playlists</Label>
@@ -365,53 +463,19 @@ export default function RoundResults() {
           </JCard>
         ) : null}
         {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
-        <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
-          ref={list}
-          // ponytail: rows vary in height, so a miss (not yet laid out) just stays at the top.
-          onScrollToIndexFailed={() => {}}
-          data={results?.tracks ?? []}
-          keyExtractor={(item) => item.submissionId}
-          ItemSeparatorComponent={Sprocket}
-          renderItem={({ item }) => (
-            <JCard>
-              <ServiceBadge service={item.service} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Thumb url={item.thumbnailUrl} />
-                <BodyText style={{ flex: 1 }}>
-                  {item.title} — {item.artist}
-                </BodyText>
-              </View>
-              {item.comment && <BodyText>“{item.comment}”</BodyText>}
-              {item.note && <BodyText>“{item.note}”</BodyText>}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Label>Submitted by</Label>
-                <Avatar size={20} label="" url={item.submitter.avatarUrl} token={token} initial={(item.submitter.displayName ?? '?')[0]} />
-                <HandText>{item.submitter.displayName ?? 'a player'}</HandText>
-              </View>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-                <Label>Correctly guessed by</Label>
-                {item.correctGuessers.length > 0 ? (
-                  <HandText>{item.correctGuessers.map((g) => g.displayName ?? 'a player').join(', ')}</HandText>
-                ) : (
-                  <Label>Nobody</Label>
-                )}
-              </View>
-              <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
-              <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
-              {item.yourGuess ? (
-                <MyComment
-                  key={item.yourGuess.comment ?? ''}
-                  saved={item.yourGuess.comment}
-                  onSave={(comment) => saveComment(item.submissionId, comment)}
-                />
-              ) : null}
-              {item.comments.map((c) => (
-                <CommentThread key={c.guessId} comment={c} actions={actions} />
-              ))}
-            </JCard>
-          )}
-        />
+        {results?.tracks.map((item, i) => (
+          <View key={item.submissionId} onLayout={onTrackLayout(item)} style={{ gap: 12 }}>
+            {i > 0 ? <Sprocket /> : null}
+            <TrackCard
+              item={item}
+              actions={actions}
+              favorite={favorite}
+              onSaveComment={(comment) => saveComment(item.submissionId, comment)}
+            />
+          </View>
+        ))}
         <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
+        </ScrollView>
       </Screen>
     </RoundGate>
   );

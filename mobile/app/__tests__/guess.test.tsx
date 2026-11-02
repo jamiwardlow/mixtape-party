@@ -158,7 +158,8 @@ describe('guess screen reactions and favorites', () => {
     stub();
     await render(<GuessRound />);
 
-    await fireEvent.press(await screen.findByText('🔥'));
+    await fireEvent.press(await screen.findByLabelText('Add reaction'));
+    await fireEvent.press(screen.getByLabelText('React 🔥'));
     expect(await screen.findByText('🔥 1 ✓')).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/submissions/s1/reactions'), expect.objectContaining({ method: 'POST' }));
 
@@ -172,7 +173,7 @@ describe('guess screen reactions and favorites', () => {
     await render(<GuessRound />);
 
     await screen.findByText(/Song/);
-    expect(screen.queryByText('🔥')).toBeNull();
+    expect(screen.queryByLabelText('Add reaction')).toBeNull();
     expect(screen.queryByLabelText('Not favorited')).toBeNull();
   });
 });
