@@ -1352,4 +1352,26 @@ describe('DELETE /leagues/:leagueId', () => {
     const again = await request(app).delete(`/leagues/${leagueId}`).set('Authorization', `Bearer ${host.token}`);
     expect(again.status).toBe(404);
   });
+
+  it('lets the host remove a player (and their track), and refuses anyone else or the host', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, inviteCode } = await createSeason(app, 'remove-host@example.com');
+    const player = await signUp(app, 'remove-member@example.com');
+    const other = await signUp(app, 'remove-other@example.com');
+    for (const p of [player, other]) {
+      await request(app).post(`/leagues/invite/${inviteCode}/join`).set('Authorization', `Bearer ${p.token}`);
+    }
+    const url = (id: string) => `/leagues/${leagueId}/members/${id}`;
+    const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+
+    expect((await request(app).delete(url(other.accountId)).set(auth(player.token))).status).toBe(403);
+    expect((await request(app).delete(url(host.accountId)).set(auth(host.token))).status).toBe(400);
+    expect((await request(app).delete(url(player.accountId)).set(auth(host.token))).status).toBe(204);
+    expect((await request(app).delete(url(player.accountId)).set(auth(host.token))).status).toBe(404);
+
+    const overview = await request(app).get(`/leagues/${leagueId}/overview`).set(auth(host.token));
+    expect(overview.body.members.map((m: { accountId: string }) => m.accountId)).not.toContain(player.accountId);
+    expect((await request(app).get(`/leagues/${leagueId}/overview`).set(auth(player.token))).status).toBe(403);
+    expect((await request(app).post(`/leagues/invite/${inviteCode}/join`).set(auth(player.token))).status).toBe(403);
+  });
 });

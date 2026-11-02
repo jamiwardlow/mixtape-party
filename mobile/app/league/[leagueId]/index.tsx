@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { PlayerLink } from '../../../lib/PlayerLink';
@@ -123,6 +123,24 @@ export default function LeagueOverview() {
     }, [token, leagueId]),
   );
 
+  function confirmRemove(member: Player) {
+    const name = nameOf(member);
+    const remove = async () => {
+      const res = await fetchApi(`/leagues/${leagueId}/members/${member.accountId}`, { method: 'DELETE', token: token! });
+      if (res.ok) load();
+      else setError((await res.json().catch(() => null))?.error ?? 'Could not remove this player');
+    };
+    const msg = `${name}'s track and guesses in this league will be deleted.`;
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Remove ${name}? ${msg}`)) remove();
+    } else {
+      Alert.alert(`Remove ${name}?`, msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: remove },
+      ]);
+    }
+  }
+
   if (!overview) {
     return (
       <RoundGate label="Season" error={error} ready={false}>
@@ -222,6 +240,15 @@ export default function LeagueOverview() {
                       them, and a roster that names the stragglers then is the leak itself. */}
                   {submitters && <Label>{submitted ? 'Submitted' : 'No track yet'}</Label>}
                   {guessed && <Label>Guessed</Label>}
+                  {league.isHost && member.accountId !== overview.host.accountId && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${nameOf(member)}`}
+                      onPress={() => confirmRemove(member)}
+                    >
+                      <Label>Remove</Label>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             );

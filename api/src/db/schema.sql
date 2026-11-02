@@ -66,6 +66,13 @@ CREATE TABLE IF NOT EXISTS league_members (
   UNIQUE (league_id, account_id)
 );
 
+-- Players the host removed; the invite code won't let them back in.
+CREATE TABLE IF NOT EXISTS league_removed (
+  league_id UUID NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  PRIMARY KEY (league_id, account_id)
+);
+
 CREATE TABLE IF NOT EXISTS submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id UUID NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,

@@ -353,6 +353,12 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
+    const removed = await deps.pool.query('SELECT 1 FROM league_removed WHERE league_id = $1 AND account_id = $2', [league.id, accountId]);
+    if (removed.rowCount) {
+      res.status(403).json({ error: 'the host removed you from this league' });
+      return;
+    }
+
     await deps.pool.query(
       'INSERT INTO league_members (league_id, account_id) VALUES ($1, $2) ON CONFLICT (league_id, account_id) DO NOTHING',
       [league.id, accountId],
@@ -766,6 +772,54 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     }
     await deps.pool.query('DELETE FROM leagues WHERE id = $1', [req.params.leagueId]);
     res.status(204).end();
+  });
+
+  // Host removes a player. Their tracks and guesses go with them: leaving a ghost submission in the
+  // current round would keep counting toward "N of M submitted" and still be guessable.
+  router.delete('/leagues/:leagueId/members/:accountId', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const { leagueId, accountId: targetId } = req.params;
+    const league = await loadLeague(deps.pool, leagueId);
+    if (!league) {
+      res.status(404).json({ error: 'league not found' });
+      return;
+    }
+    if (league.hostAccountId !== accountId) {
+      res.status(403).json({ error: 'only the league host can remove players' });
+      return;
+    }
+    if (targetId === league.hostAccountId) {
+      res.status(400).json({ error: 'the host cannot be removed; delete the league instead' });
+      return;
+    }
+    const client = await deps.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `DELETE FROM guesses WHERE guesser_account_id = $2
+           AND submission_id IN (SELECT s.id FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE r.league_id = $1)`,
+        [leagueId, targetId],
+      );
+      await client.query(
+        `DELETE FROM submissions WHERE account_id = $2 AND round_id IN (SELECT id FROM rounds WHERE league_id = $1)`,
+        [leagueId, targetId],
+      );
+      const removed = await client.query('DELETE FROM league_members WHERE league_id = $1 AND account_id = $2', [leagueId, targetId]);
+      if (removed.rowCount) {
+        await client.query('INSERT INTO league_removed (league_id, account_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [leagueId, targetId]);
+      }
+      await client.query('COMMIT');
+      if (removed.rowCount === 0) {
+        res.status(404).json({ error: 'that player is not in this league' });
+        return;
+      }
+      res.status(204).end();
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   });
 
   return router;
