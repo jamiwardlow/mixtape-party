@@ -239,6 +239,7 @@ export default function CreateLeague() {
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
         <TapeButton title={creating ? 'Creating…' : 'Create league'} onPress={submit} disabled={creating} />
+        <TapeButton title="Cancel" onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} variant="secondary" />
       </ScrollView>
     </Screen>
   );

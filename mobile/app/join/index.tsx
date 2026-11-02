@@ -21,6 +21,7 @@ export default function JoinWithCode() {
         onSubmitEditing={submit}
       />
       <TapeButton title="Join" onPress={submit} disabled={!trimmed} />
+      <TapeButton title="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} variant="secondary" />
     </Screen>
   );
 }
