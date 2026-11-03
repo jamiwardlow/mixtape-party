@@ -1,11 +1,12 @@
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { ReportBlock } from '../../../lib/Moderation';
 import { PlayerLink } from '../../../lib/PlayerLink';
+import { usePreview } from '../../../lib/preview';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
@@ -21,7 +22,7 @@ import {
   RoundGate,
   Screen,
   ServiceBadge,
-  Thumb,
+  TrackRow,
   Sprocket,
   TapeButton,
   TapeInput,
@@ -45,12 +46,16 @@ interface Comment {
   replies: Reply[];
 }
 
+// Not round-scoped: results are open to every member, so this skips the guessing-phase gate.
+const previewPath = (id: string) => `/submissions/${id}/preview`;
+
 interface Track {
   submissionId: string;
   service: ServiceName;
   title: string;
   artist: string;
   thumbnailUrl: string | null;
+  playback: { deepLink: string; webUrl?: string };
   comment: string | null;
   note: string | null;
   submitter: Player;
@@ -247,9 +252,13 @@ function TrackCard({
   item,
   actions,
   favorite,
+  playingId,
+  onPlay,
   onSaveComment,
 }: {
   item: Track;
+  playingId: string | null;
+  onPlay: (submissionId: string) => void;
   actions: ThreadActions;
   favorite: ReturnType<typeof useFavorite>;
   onSaveComment: (comment: string) => Promise<void>;
@@ -261,10 +270,14 @@ function TrackCard({
     <JCard>
       <ServiceBadge service={item.service} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Thumb url={item.thumbnailUrl} />
-        <BodyText style={{ flex: 1 }}>
-          {item.title} — {item.artist}
-        </BodyText>
+        <TrackRow
+          thumbnailUrl={item.thumbnailUrl}
+          title={item.title}
+          artist={item.artist}
+          href={item.playback.webUrl ?? item.playback.deepLink}
+          playing={playingId === item.submissionId}
+          onPlay={() => onPlay(item.submissionId)}
+        />
         <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
       </View>
       {item.comment && <BodyText>“{item.comment}”</BodyText>}
@@ -379,6 +392,14 @@ export default function RoundResults() {
     await loadResults();
   }
 
+  const openInService = useCallback(
+    (submissionId: string) => {
+      const track = results?.tracks.find((t) => t.submissionId === submissionId);
+      if (track) Linking.openURL(track.playback.webUrl ?? track.playback.deepLink);
+    },
+    [results],
+  );
+  const { playingId, toggle } = usePreview(previewPath, token, openInService);
   const favorite = useFavorite(token, (submissionId, on) =>
     setResults((r) => r && { ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) }),
   );
@@ -470,6 +491,8 @@ export default function RoundResults() {
               item={item}
               actions={actions}
               favorite={favorite}
+              playingId={playingId}
+              onPlay={toggle}
               onSaveComment={(comment) => saveComment(item.submissionId, comment)}
             />
           </View>

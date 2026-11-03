@@ -86,6 +86,8 @@ describe('listing favorites and previews (#107)', () => {
       title: expect.any(String),
       artist: 'Artist',
       favoritedAt: expect.any(String),
+      thumbnailUrl: expect.anything(),
+      playback: { deepLink: expect.any(String), service: 'youtube_music' },
     });
   });
 

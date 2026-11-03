@@ -1,6 +1,6 @@
 import { FlatList, View } from 'react-native';
 import type { ServiceName } from './rounds';
-import { BodyText, HandText, JCard, Label, ServiceBadge, Sprocket, TapeButton } from './ui';
+import { BodyText, JCard, Label, ServiceBadge, Sprocket, TapeButton, TrackRow } from './ui';
 
 export interface Favorite {
   submissionId: string;
@@ -9,6 +9,9 @@ export interface Favorite {
   service: ServiceName;
   title: string;
   artist: string;
+  thumbnailUrl?: string | null;
+  /** Absent on the public profile, which can't open another player's tracks. */
+  playback?: { deepLink: string; webUrl?: string };
 }
 
 /**
@@ -49,9 +52,14 @@ export function FavoritesList({
               />
             )}
           </View>
-          <HandText>
-            {item.title} — {item.artist}
-          </HandText>
+          <TrackRow
+            thumbnailUrl={item.thumbnailUrl}
+            title={item.title}
+            artist={item.artist}
+            href={item.playback && (item.playback.webUrl ?? item.playback.deepLink)}
+            playing={editing.editable && editing.playingId === item.submissionId}
+            onPlay={editing.editable ? () => editing.onPlay(item.submissionId) : undefined}
+          />
           <Label>
             {item.leagueName} · {item.roundTheme}
           </Label>

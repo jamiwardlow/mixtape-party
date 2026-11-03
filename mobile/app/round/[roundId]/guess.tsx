@@ -7,7 +7,7 @@ import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../l
 import { usePreview } from '../../../lib/preview';
 import type { Player, ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, Chip, ErrorNote, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
@@ -144,12 +144,14 @@ export default function GuessRound() {
                   variant="secondary"
                 />
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Thumb url={item.thumbnailUrl} />
-                <BodyText style={{ flex: 1 }}>
-                  {item.title} — {item.artist}
-                </BodyText>
-              </View>
+              <TrackRow
+                thumbnailUrl={item.thumbnailUrl}
+                title={item.title}
+                artist={item.artist}
+                href={item.playback.webUrl ?? item.playback.deepLink}
+                playing={playingId === item.submissionId}
+                onPlay={() => toggle(item.submissionId)}
+              />
               {item.mine ? null : (
                 <>
                   <Reactions reactions={item.reactions} onToggle={(emoji) => react(item.submissionId, emoji)} />

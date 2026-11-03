@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
+import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { blockedIds, isUuid, maskBlocked } from './blocks.js';
 import { loadFavorites } from './guessing.js';
@@ -14,7 +15,7 @@ import {
   type Player,
 } from './rounds.js';
 
-export type ResultsDeps = AccountsDeps;
+export interface ResultsDeps extends AccountsDeps, AdapterRegistry {}
 
 /**
  * The one scoring rule, shared by a round's results, final standings and the league overview:
@@ -198,12 +199,13 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       service: 'youtube_music' | 'bandcamp';
       external_id: string;
       art_id: string | null;
+      isrc: string | null;
       title: string;
       artist: string;
       comment: string | null;
       guessing_note: string | null;
       account_id: string;
-    }>('SELECT id, service, external_id, art_id, title, artist, comment, guessing_note, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
+    }>('SELECT id, service, external_id, art_id, isrc, title, artist, comment, guessing_note, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
       req.params.roundId,
     ]);
 
@@ -293,12 +295,19 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       guessesResult.rows.filter((g) => g.guesser_account_id === accountId).map((g) => [g.submission_id, { comment: g.comment }]),
     );
 
-    const tracks = submissionsResult.rows.map((row) => ({
+    const tracks = await Promise.all(submissionsResult.rows.map(async (row) => ({
       submissionId: row.id,
       service: row.service,
       title: row.title,
       artist: row.artist,
       thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
+      playback: await playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle({
+        externalId: row.external_id,
+        title: row.title,
+        artist: row.artist,
+        isrc: row.isrc ?? undefined,
+        service: row.service,
+      }),
       comment: row.comment,
       note: row.guessing_note,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
@@ -308,7 +317,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       favorited: favoritedIds.has(row.id),
       comments: commentsBySubmission.get(row.id) ?? [],
       yourGuess: yourGuessBySubmission.get(row.id) ?? null,
-    }));
+    })));
 
     res.json({ tracks, ...scoreboard([...players.values()], scores) });
   });

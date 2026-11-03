@@ -6,6 +6,7 @@ import {
   Easing,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   PressableProps,
@@ -113,6 +114,58 @@ export function Thumb({ url, size = 48 }: { url?: string | null; size?: number }
   const t = useTheme();
   if (!url) return null;
   return <Image source={{ uri: url }} accessibilityIgnoresInvertColors style={{ width: size, height: size, borderRadius: 8, borderWidth: 2, borderColor: t.ink }} />;
+}
+
+/**
+ * Thumb + "title — artist" for a track. `onPlay` makes the thumb a play/stop button; `href` makes the
+ * title a link out to the track on its service. Either is optional (a Bandcamp track has no thumb).
+ */
+export function TrackRow({
+  thumbnailUrl,
+  title,
+  artist,
+  href,
+  playing,
+  onPlay,
+  style,
+}: {
+  thumbnailUrl?: string | null;
+  title: string;
+  artist: string;
+  href?: string;
+  playing?: boolean;
+  onPlay?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTheme();
+  const thumb = (
+    <View>
+      <Thumb url={thumbnailUrl} />
+      {onPlay && thumbnailUrl ? (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 8 }]}>
+          <Text style={{ color: '#fff', fontSize: 20 }}>{playing ? '■' : '▶'}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }, style]}>
+      {onPlay && thumbnailUrl ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`${playing ? 'Stop' : 'Play'} preview of ${title}`} onPress={onPlay}>
+          {thumb}
+        </Pressable>
+      ) : (
+        thumb
+      )}
+      <BodyText
+        style={[{ flex: 1 }, href ? { textDecorationLine: 'underline' } : null]}
+        accessibilityRole={href ? 'link' : undefined}
+        onPress={href ? () => Linking.openURL(href) : undefined}
+      >
+        {title} — {artist}
+      </BodyText>
+    </View>
+  );
 }
 
 export function ServiceBadge({ service }: { service: ServiceName }) {

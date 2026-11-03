@@ -2,6 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { Linking } from 'react-native';
 import RoundResults from '../round/[roundId]/results';
 
+// The native audio module isn't available under jest; lib/__tests__/preview.test.ts covers the player.
+jest.mock('expo-audio', () => ({ createAudioPlayer: jest.fn() }));
+
 const mockOpenURL = jest.fn();
 let mockFocus: string | undefined;
 
@@ -32,6 +35,29 @@ function stubApi(exportBody: unknown, exportStatus = 200) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockFocus = undefined;
+});
+
+describe('track row', () => {
+  it('links the title out to the service and looks the preview up by submission', async () => {
+    const track = {
+      submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', thumbnailUrl: 'https://img/x.jpg',
+      playback: { deepLink: 'ytmusic://x', webUrl: 'https://music.youtube.com/watch?v=x' },
+      comment: null, submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [], yourGuess: null, comments: [],
+    };
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export') ? ok({ services: [] }) : String(url).includes('/preview') ? ok({ url: null }) : ok({ ...results, tracks: [track] }),
+    ) as unknown as typeof fetch;
+    await render(<RoundResults />);
+
+    await fireEvent.press(await screen.findByText('T — A'));
+    expect(mockOpenURL).toHaveBeenCalledWith('https://music.youtube.com/watch?v=x');
+
+    mockOpenURL.mockClear();
+    await fireEvent.press(screen.getByLabelText('Play preview of T'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/submissions/s1/preview'), expect.anything()));
+    // No preview: falls back to opening the service.
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledWith('https://music.youtube.com/watch?v=x'));
+  });
 });
 
 describe('exported playlist links', () => {
@@ -94,6 +120,7 @@ describe('comment threads', () => {
       service: 'youtube_music',
       title: 'T',
       artist: 'A',
+      playback: { deepLink: 'x://t' },
       comment: null,
       submitter: { accountId: 'u1', displayName: 'Sam' },
       correctGuessers: [],
@@ -143,7 +170,7 @@ describe('comment threads', () => {
       replyId, parentReplyId, mine, author: { accountId: 'u9', displayName: 'Pat' }, body, createdAt: '', reactions: [],
     });
     const track = {
-      submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', comment: null,
+      submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', playback: { deepLink: 'x://t' }, comment: null,
       submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [], yourGuess: null,
       comments: [{
         guessId: 'g1', guesser: { accountId: 'u2', displayName: 'Kim' }, mine: false, comment: 'so Sam', reactions: [],
@@ -169,7 +196,7 @@ describe('comment threads', () => {
 
 describe('favorite heart', () => {
   const track = {
-    submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', comment: null,
+    submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', playback: { deepLink: 'x://t' }, comment: null,
     submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [], yourGuess: null,
     comments: [], favorited: false,
   };
@@ -262,7 +289,7 @@ describe('podium', () => {
 
 describe('reactions and the fold', () => {
   const track = {
-    submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', comment: null,
+    submissionId: 's1', service: 'youtube_music', title: 'T', artist: 'A', playback: { deepLink: 'x://t' }, comment: null,
     submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [{ emoji: '🔥', count: 1, mine: false }],
     yourGuess: null, favorited: false,
     comments: [{

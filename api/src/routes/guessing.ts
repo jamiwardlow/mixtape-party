@@ -37,7 +37,8 @@ interface PreviewRow {
 export async function loadFavorites(pool: Pool, accountId: string) {
   const found = await pool.query(
     `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
-            r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt"
+            r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt",
+            s.external_id, s.isrc, s.art_id
      FROM favorites f
      JOIN submissions s ON s.id = f.submission_id
      JOIN rounds r ON r.id = s.round_id
@@ -47,7 +48,12 @@ export async function loadFavorites(pool: Pool, accountId: string) {
      ORDER BY f.created_at DESC`,
     [accountId],
   );
-  return found.rows;
+  // The ids only feed the thumbnail and the playback link; they aren't part of the payload.
+  return found.rows.map(({ external_id, isrc, art_id, ...row }) => ({
+    ...row,
+    thumbnailUrl: thumbnailUrlOf(row.service, external_id, art_id),
+    track: { externalId: external_id, title: row.title, artist: row.artist, isrc: isrc ?? undefined, service: row.service },
+  }));
 }
 
 export function createGuessingRouter(deps: GuessingDeps): Router {
@@ -199,7 +205,12 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
   router.get('/favorites', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const favorites = await loadFavorites(deps.pool, accountId);
+    const favorites = await Promise.all(
+      (await loadFavorites(deps.pool, accountId)).map(async ({ track, ...f }) => ({
+        ...f,
+        playback: await playbackAdapterFor(deps, f.service).getPlaybackLaunchHandle(track),
+      })),
+    );
     const exported = await deps.pool.query<{ playlist_external_id: string }>(
       "SELECT playlist_external_id FROM favorite_exports WHERE account_id = $1 AND service = 'youtube_music'",
       [accountId],
