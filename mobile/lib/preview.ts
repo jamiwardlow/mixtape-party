@@ -1,6 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchApi } from './api';
+import { fetchBandcampPreview } from './bandcamp';
 
 // Bandcamp previews are the full track, so every preview is cut at the length Deezer's are.
 export const PREVIEW_SECONDS = 30;
@@ -38,7 +39,11 @@ export function usePreview(previewPath: (submissionId: string) => string, token:
       let url: string | null = null;
       try {
         const res = await fetchApi(previewPath(submissionId), { token });
-        if (res.ok) url = (await res.json()).url;
+        if (res.ok) {
+          const body = await res.json();
+          // Bandcamp bot-walls our server, so the API hands back the embed id for the device to read.
+          url = body.url ?? (body.bandcampEmbedId ? await fetchBandcampPreview(body.bandcampEmbedId) : null);
+        }
       } catch {
         // Treated as "no preview": the link still works.
       }

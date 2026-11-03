@@ -38,3 +38,17 @@ export async function resolveBandcampUrl(url: string): Promise<ResolvedBandcamp 
     return null;
   }
 }
+
+/** Device-side twin of BandcampAdapter.getPreviewUrl: the signed mp3-128 of the first track. */
+export async function fetchBandcampPreview(embedId: string): Promise<string | null> {
+  try {
+    if (!/^(track|album)=\d{1,20}$/.test(embedId)) return null;
+    const res = await fetch(`https://bandcamp.com/EmbeddedPlayer/${embedId}`);
+    if (!res.ok) return null;
+    const encoded = (await res.text()).match(/data-player-data="([^"]*)"/)?.[1];
+    if (!encoded) return null;
+    return JSON.parse(decodeHtmlEntities(encoded))?.tracks?.[0]?.file?.['mp3-128'] ?? null;
+  } catch {
+    return null;
+  }
+}

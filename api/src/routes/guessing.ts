@@ -75,6 +75,11 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
   const router = Router();
   const previewUrl = (row: PreviewRow) =>
     playbackAdapterFor(deps, row.service).getPreviewUrl(trackOf(row));
+  // Bandcamp bot-walls this server, so when it can't resolve a preview the client may read the embed itself.
+  const previewBody = async (row: PreviewRow) => {
+    const url = await previewUrl(row);
+    return url || row.service !== 'bandcamp' ? { url } : { url, bandcampEmbedId: row.external_id };
+  };
 
   router.get('/rounds/:roundId/guessing', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
@@ -187,8 +192,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(guardError.status).json({ error: guardError.error });
       return;
     }
-    const url = await previewUrl(row);
-    res.json({ url });
+    res.json(await previewBody(row));
   });
 
   // Not round-scoped, so the favorites screen can play any favorite. Same gate as favoriting.
@@ -203,7 +207,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       'SELECT service, external_id, title, artist, isrc FROM submissions WHERE id = $1',
       [req.params.id],
     );
-    res.json({ url: await previewUrl(found.rows[0]) });
+    res.json(await previewBody(found.rows[0]));
   });
 
   router.get('/favorites', requireAuth(deps), async (req, res) => {

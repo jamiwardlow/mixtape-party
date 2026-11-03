@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { fetchApi } from '../api';
+import { fetchBandcampPreview } from '../bandcamp';
 import { PREVIEW_SECONDS, usePreview } from '../preview';
 
 const mockPlayer = { play: jest.fn(), pause: jest.fn(), remove: jest.fn(), addListener: jest.fn() };
@@ -9,6 +10,7 @@ jest.mock('expo-audio', () => ({
   setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../api', () => ({ fetchApi: jest.fn() }));
+jest.mock('../bandcamp', () => ({ fetchBandcampPreview: jest.fn() }));
 
 const path = (id: string) => `/rounds/r1/submissions/${id}/preview`;
 const previewIs = (url: string | null) =>
@@ -65,6 +67,17 @@ it('stops when toggled again, and cuts a full-length track at the preview length
   await act(async () => void jest.advanceTimersByTime(PREVIEW_SECONDS * 1000));
   expect(result.current.playingId).toBeNull();
   expect(mockPlayer.remove).toHaveBeenCalledTimes(2);
+});
+
+it('reads the Bandcamp embed on the device when the server is bot-walled', async () => {
+  (fetchApi as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ url: null, bandcampEmbedId: 'track=9' }) });
+  (fetchBandcampPreview as jest.Mock).mockResolvedValue('https://bc/p.mp3');
+  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
+
+  await act(() => result.current.toggle('s1'));
+
+  expect(fetchBandcampPreview).toHaveBeenCalledWith('track=9');
+  expect(mockCreate).toHaveBeenCalledWith('https://bc/p.mp3');
 });
 
 it('ignores a slow lookup that a later tap has superseded', async () => {
