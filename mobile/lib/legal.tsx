@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { BodyText, HandText, Label, Screen, TapeButton } from './ui';
 
-// Placeholder address; swap for the real one at review.
 export const CONTACT_EMAIL = 'hello@mixtape-party.com';
 
 export const openContactEmail = () => Linking.openURL(`mailto:${CONTACT_EMAIL}`);

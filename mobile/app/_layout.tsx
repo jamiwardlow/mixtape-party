@@ -44,6 +44,7 @@ function RootNavigator() {
       <Stack.Screen name="privacy" />
       <Stack.Screen name="terms" />
       <Stack.Screen name="delete-account" />
+      <Stack.Screen name="support" />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
       </Stack.Protected>

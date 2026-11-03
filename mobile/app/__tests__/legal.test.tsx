@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { LegalLinks } from '../../lib/legal';
 import DeleteAccount from '../delete-account';
 import Privacy from '../privacy';
+import Support from '../support';
 import Terms from '../terms';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn(), canGoBack: () => true, replace: jest.fn() } }));
@@ -30,4 +31,9 @@ test('terms render', async () => {
 test('delete-account page explains the in-app path', async () => {
   await render(<DeleteAccount />);
   expect(screen.getByText('In the app')).toBeTruthy();
+});
+
+test('support page shows the contact email', async () => {
+  await render(<Support />);
+  expect(screen.getByText(/hello@mixtape-party\.com/)).toBeTruthy();
 });
