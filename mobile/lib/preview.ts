@@ -35,33 +35,21 @@ export function usePreview(previewPath: (submissionId: string) => string, token:
       stop();
       if (wasPlaying || !token) return;
       const mine = request.current;
-      const t0 = Date.now();
-      const dbg = (m: string) => console.log(`[DEBUG-179] +${Date.now() - t0}ms ${m}`);
       let url: string | null = null;
       try {
         const res = await fetchApi(previewPath(submissionId), { token });
         if (res.ok) url = (await res.json()).url;
-        else dbg(`fetch status ${res.status}`);
-      } catch (e) {
-        dbg(`fetch threw ${String(e)}`);
+      } catch {
         // Treated as "no preview": the link still works.
       }
       if (mine !== request.current) return;
-      dbg(`fetched, url ${url ? 'present' : 'null'}`);
       if (!url) return fallback(submissionId);
       // iOS mutes expo-audio when the silent switch is on unless this is set.
       await setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
       if (mine !== request.current) return;
-      dbg('audio mode set');
       const p = createAudioPlayer(url);
       player.current = p;
-      let last = '';
-      p.addListener('playbackStatusUpdate', (s) => {
-        const now = `playing=${s.playing} loaded=${s.isLoaded} buffering=${s.isBuffering} ${s.timeControlStatus ?? ''}`;
-        if (now !== last) dbg(`status ${now}`);
-        last = now;
-        if (s.didJustFinish && player.current === p) stop();
-      });
+      p.addListener('playbackStatusUpdate', (s) => s.didJustFinish && player.current === p && stop());
       p.play();
       timer.current = setTimeout(stop, PREVIEW_SECONDS * 1000);
       setPlayingId(submissionId);
