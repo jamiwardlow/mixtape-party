@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BandcampAdapter } from '../bandcampAdapter.js';
 import { runEmbedOnlyAdapterContractTests } from '../contract.js';
+import { ServiceUnavailableError } from '../types.js';
 
 // Exercises a real Bandcamp track page. Requires network access, so this is kept out of the
 // default `npm test` run — run explicitly with `npm run test:integration`. The unit test next door
@@ -18,14 +19,25 @@ import { runEmbedOnlyAdapterContractTests } from '../contract.js';
 // The player page is the path that works from there. Track 148177487 is tycho/awake from #59.
 const DEFAULT_URL = 'https://bandcamp.com/EmbeddedPlayer/track=148177487';
 
-runEmbedOnlyAdapterContractTests(
-  'bandcamp (real API)',
-  () => new BandcampAdapter(),
-  () => process.env.BANDCAMP_TEST_URL || DEFAULT_URL,
-);
+// Bandcamp bot-walls datacenter IPs (CI runners, Cloud Run), so a challenge says nothing about the parse.
+// Skip rather than fail; production exposure is tracked separately (#184 follow-up).
+// ponytail: probes once at load; run the suite from a residential IP to get real coverage.
+const blocked = await new BandcampAdapter()
+  .submit(process.env.BANDCAMP_TEST_URL || DEFAULT_URL)
+  .then(() => false, (err) => err instanceof ServiceUnavailableError);
+if (blocked) console.warn('bandcamp contract tests skipped: bot challenge / unavailable from this network');
+const suite = blocked ? describe.skip : describe;
+
+suite('bandcamp contract (real API)', () => {
+  runEmbedOnlyAdapterContractTests(
+    'bandcamp (real API)',
+    () => new BandcampAdapter(),
+    () => process.env.BANDCAMP_TEST_URL || DEFAULT_URL,
+  );
+});
 
 // #102: the preview reads the `file` shape off the embedded player page, which can change without notice.
-describe('bandcamp preview (real API)', () => {
+suite('bandcamp preview (real API)', () => {
   it('finds a streamable mp3 for a known streamable track', async () => {
     const adapter = new BandcampAdapter();
     const track = await adapter.submit(process.env.BANDCAMP_TEST_URL || DEFAULT_URL);
