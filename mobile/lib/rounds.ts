@@ -33,3 +33,10 @@ export interface SeasonResult {
   standings: Score[];
   winners: Score[];
 }
+
+/** The link out to a track on its service, as the API returns it. */
+export interface Playback {
+  deepLink: string;
+  webUrl?: string;
+}
+export const playbackHref = (playback: Playback) => playback.webUrl ?? playback.deepLink;

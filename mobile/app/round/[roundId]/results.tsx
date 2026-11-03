@@ -8,7 +8,7 @@ import { ReportBlock } from '../../../lib/Moderation';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import { usePreview } from '../../../lib/preview';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
-import type { Player, ServiceName } from '../../../lib/rounds';
+import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { SERVICE_META } from '../../../lib/theme';
 import {
@@ -55,7 +55,7 @@ interface Track {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
-  playback: { deepLink: string; webUrl?: string };
+  playback: Playback;
   comment: string | null;
   note: string | null;
   submitter: Player;
@@ -274,7 +274,7 @@ function TrackCard({
           thumbnailUrl={item.thumbnailUrl}
           title={item.title}
           artist={item.artist}
-          href={item.playback.webUrl ?? item.playback.deepLink}
+          href={playbackHref(item.playback)}
           playing={playingId === item.submissionId}
           onPlay={() => onPlay(item.submissionId)}
         />
@@ -395,7 +395,7 @@ export default function RoundResults() {
   const openInService = useCallback(
     (submissionId: string) => {
       const track = results?.tracks.find((t) => t.submissionId === submissionId);
-      if (track) Linking.openURL(track.playback.webUrl ?? track.playback.deepLink);
+      if (track) Linking.openURL(playbackHref(track.playback));
     },
     [results],
   );

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
+import { type AdapterRegistry } from '../adapters/registry.js';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { blockedIds, isUuid, maskBlocked } from './blocks.js';
-import { loadFavorites } from './guessing.js';
+import { loadFavorites, playbackFor } from './guessing.js';
 import { listLeagues } from './leagues.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
@@ -301,13 +301,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       title: row.title,
       artist: row.artist,
       thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
-      playback: await playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle({
-        externalId: row.external_id,
-        title: row.title,
-        artist: row.artist,
-        isrc: row.isrc ?? undefined,
-        service: row.service,
-      }),
+      playback: await playbackFor(deps, row),
       comment: row.comment,
       note: row.guessing_note,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },

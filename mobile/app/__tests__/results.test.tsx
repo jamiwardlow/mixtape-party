@@ -60,6 +60,21 @@ describe('track row', () => {
   });
 });
 
+describe('track row without art', () => {
+  it('still has a play button (Bandcamp has no thumbnail)', async () => {
+    const track = {
+      submissionId: 's2', service: 'bandcamp', title: 'B', artist: 'A', thumbnailUrl: null, playback: { deepLink: 'x://b' },
+      comment: null, submitter: { accountId: 'u1', displayName: 'Sam' }, correctGuessers: [], reactions: [], yourGuess: null, comments: [],
+    };
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export') ? ok({ services: [] }) : String(url).includes('/preview') ? ok({ url: null }) : ok({ ...results, tracks: [track] }),
+    ) as unknown as typeof fetch;
+    await render(<RoundResults />);
+    await fireEvent.press(await screen.findByLabelText('Play preview of B'));
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledWith('x://b'));
+  });
+});
+
 describe('exported playlist links', () => {
   it('triggers the export and opens the link the API built', async () => {
     stubApi({

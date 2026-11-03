@@ -138,19 +138,21 @@ export function TrackRow({
   style?: StyleProp<ViewStyle>;
 }) {
   const t = useTheme();
+  // A track with no art (Bandcamp) still gets a tappable play square.
+  const art = thumbnailUrl ? <Thumb url={thumbnailUrl} /> : onPlay ? <View style={{ width: 48, height: 48, borderRadius: 8, borderWidth: 2, borderColor: t.ink, backgroundColor: t.shell }} /> : null;
   const thumb = (
     <View>
-      <Thumb url={thumbnailUrl} />
-      {onPlay && thumbnailUrl ? (
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 8 }]}>
-          <Text style={{ color: '#fff', fontSize: 20 }}>{playing ? '■' : '▶'}</Text>
+      {art}
+      {onPlay ? (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: thumbnailUrl ? 'rgba(0,0,0,0.35)' : undefined, borderRadius: 8 }]}>
+          <Text style={{ color: thumbnailUrl ? '#fff' : t.ink, fontSize: 20 }}>{playing ? '■' : '▶'}</Text>
         </View>
       ) : null}
     </View>
   );
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }, style]}>
-      {onPlay && thumbnailUrl ? (
+      {onPlay ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`${playing ? 'Stop' : 'Play'} preview of ${title}`} onPress={onPlay}>
           {thumb}
         </Pressable>

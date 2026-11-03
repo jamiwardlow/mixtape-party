@@ -33,8 +33,20 @@ interface PreviewRow {
   isrc: string | null;
 }
 
+const trackOf = (row: PreviewRow) => ({
+  externalId: row.external_id,
+  title: row.title,
+  artist: row.artist,
+  isrc: row.isrc ?? undefined,
+  service: row.service,
+});
+
+/** The link out to a track on its service. */
+export const playbackFor = (deps: AdapterRegistry, row: PreviewRow) =>
+  playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle(trackOf(row));
+
 /** The account's favorites, newest first. The submitter is deliberately not selected: favorites never reveal who submitted a track. */
-export async function loadFavorites(pool: Pool, accountId: string) {
+export async function loadFavorites(pool: Pool, accountId: string, deps?: AdapterRegistry) {
   const found = await pool.query(
     `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
             r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt",
@@ -49,23 +61,20 @@ export async function loadFavorites(pool: Pool, accountId: string) {
     [accountId],
   );
   // The ids only feed the thumbnail and the playback link; they aren't part of the payload.
-  return found.rows.map(({ external_id, isrc, art_id, ...row }) => ({
-    ...row,
-    thumbnailUrl: thumbnailUrlOf(row.service, external_id, art_id),
-    track: { externalId: external_id, title: row.title, artist: row.artist, isrc: isrc ?? undefined, service: row.service },
-  }));
+  // `deps` is passed only where playback is wanted (not the public profile).
+  return Promise.all(
+    found.rows.map(async ({ external_id, isrc, art_id, ...row }) => ({
+      ...row,
+      thumbnailUrl: thumbnailUrlOf(row.service, external_id, art_id),
+      ...(deps && { playback: await playbackFor(deps, { ...row, external_id, isrc }) }),
+    })),
+  );
 }
 
 export function createGuessingRouter(deps: GuessingDeps): Router {
   const router = Router();
   const previewUrl = (row: PreviewRow) =>
-    playbackAdapterFor(deps, row.service).getPreviewUrl({
-      externalId: row.external_id,
-      title: row.title,
-      artist: row.artist,
-      isrc: row.isrc ?? undefined,
-      service: row.service,
-    });
+    playbackAdapterFor(deps, row.service).getPreviewUrl(trackOf(row));
 
   router.get('/rounds/:roundId/guessing', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
@@ -126,13 +135,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const tracks = await Promise.all(
       submissions.rows.map(async (row) => {
-        const playback = await playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle({
-          externalId: row.external_id,
-          title: row.title,
-          artist: row.artist,
-          isrc: row.isrc ?? undefined,
-          service: row.service,
-        });
+        const playback = await playbackFor(deps, row);
         return {
           submissionId: row.id,
           service: row.service,
@@ -205,12 +208,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
   router.get('/favorites', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const favorites = await Promise.all(
-      (await loadFavorites(deps.pool, accountId)).map(async ({ track, ...f }) => ({
-        ...f,
-        playback: await playbackAdapterFor(deps, f.service).getPlaybackLaunchHandle(track),
-      })),
-    );
+    const favorites = await loadFavorites(deps.pool, accountId, deps);
     const exported = await deps.pool.query<{ playlist_external_id: string }>(
       "SELECT playlist_external_id FROM favorite_exports WHERE account_id = $1 AND service = 'youtube_music'",
       [accountId],

@@ -1,5 +1,5 @@
 import { FlatList, View } from 'react-native';
-import type { ServiceName } from './rounds';
+import { playbackHref, type Playback, type ServiceName } from './rounds';
 import { BodyText, JCard, Label, ServiceBadge, Sprocket, TapeButton, TrackRow } from './ui';
 
 export interface Favorite {
@@ -11,7 +11,7 @@ export interface Favorite {
   artist: string;
   thumbnailUrl?: string | null;
   /** Absent on the public profile, which can't open another player's tracks. */
-  playback?: { deepLink: string; webUrl?: string };
+  playback?: Playback;
 }
 
 /**
@@ -56,7 +56,7 @@ export function FavoritesList({
             thumbnailUrl={item.thumbnailUrl}
             title={item.title}
             artist={item.artist}
-            href={item.playback && (item.playback.webUrl ?? item.playback.deepLink)}
+            href={item.playback && (playbackHref(item.playback))}
             playing={editing.editable && editing.playingId === item.submissionId}
             onPlay={editing.editable ? () => editing.onPlay(item.submissionId) : undefined}
           />

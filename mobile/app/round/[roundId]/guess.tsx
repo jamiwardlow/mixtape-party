@@ -5,7 +5,7 @@ import { FlatList, Linking, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import { usePreview } from '../../../lib/preview';
-import type { Player, ServiceName } from '../../../lib/rounds';
+import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, Chip, ErrorNote, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 
@@ -15,7 +15,7 @@ interface Track {
   title: string;
   artist: string;
   thumbnailUrl: string | null;
-  playback: { deepLink: string; webUrl?: string };
+  playback: Playback;
   guessedAccountId: string | null;
   comment: string | null;
   /** Only your own reactions come back; the counts are for the results. */
@@ -117,7 +117,7 @@ export default function GuessRound() {
   const openInService = useCallback(
     (submissionId: string) => {
       const track = tracks?.find((t) => t.submissionId === submissionId);
-      if (track) Linking.openURL(track.playback.webUrl ?? track.playback.deepLink);
+      if (track) Linking.openURL(playbackHref(track.playback));
     },
     [tracks],
   );
@@ -148,7 +148,7 @@ export default function GuessRound() {
                 thumbnailUrl={item.thumbnailUrl}
                 title={item.title}
                 artist={item.artist}
-                href={item.playback.webUrl ?? item.playback.deepLink}
+                href={playbackHref(item.playback)}
                 playing={playingId === item.submissionId}
                 onPlay={() => toggle(item.submissionId)}
               />

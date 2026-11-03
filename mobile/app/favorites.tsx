@@ -5,6 +5,7 @@ import { Linking, View } from 'react-native';
 import { fetchApi } from '../lib/api';
 import { FavoritesList, type Favorite } from '../lib/FavoritesList';
 import { usePreview } from '../lib/preview';
+import { playbackHref } from '../lib/rounds';
 import { useSession } from '../lib/session';
 import { BodyText, ErrorNote, JCard, Label, ReelSpinner, Screen, TapeButton } from '../lib/ui';
 
@@ -106,7 +107,7 @@ export default function Favorites() {
               <BodyText>
                 {s.title} — {s.artist}
               </BodyText>
-              <TapeButton title="Open track" onPress={() => Linking.openURL(s.playback.webUrl ?? s.playback.deepLink)} variant="secondary" />
+              <TapeButton title="Open track" onPress={() => Linking.openURL(playbackHref(s.playback))} variant="secondary" />
             </View>
           ))}
         </JCard>
