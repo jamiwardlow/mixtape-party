@@ -160,7 +160,9 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     try {
       const res = await fetch(`https://bandcamp.com/EmbeddedPlayer/${kind}=${id}`, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return null;
-      const encoded = (await res.text()).match(PLAYER_DATA_PATTERN)?.[1];
+      const html = await res.text();
+      if (html.includes('<title>Client Challenge</title>')) console.error('bandcamp preview bot challenge', kind, id);
+      const encoded = html.match(PLAYER_DATA_PATTERN)?.[1];
       const data = encoded ? (safeParse(decodeHtmlEntities(encoded)) as PlayerData | null) : null;
       return data?.tracks?.[0]?.file?.['mp3-128'] ?? null;
     } catch {
