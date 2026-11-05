@@ -11,7 +11,8 @@
     "migrate": "tsx src/db/migrate.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "prepare": "cd .. && git config core.hooksPath .githooks || true"
+    "prepare": "cd .. && git config core.hooksPath .githooks || true",
+    "seed:demo": "tsx src/scripts/seedDemoLeague.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",
