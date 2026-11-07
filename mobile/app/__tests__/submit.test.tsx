@@ -53,13 +53,12 @@ describe('service chips', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  // PRODUCT.md principle 3: the app picks no side between services.
-  it('preselects nothing, so neither input is on screen at mount', async () => {
+  // Both services stay offered; YouTube Music's search just opens first.
+  it('opens the YouTube Music search at mount', async () => {
     await render(<SubmitTrack />);
 
-    expect(screen.queryByPlaceholderText('Search for a track')).toBeNull();
+    expect(screen.getByPlaceholderText('Search for a track')).toBeTruthy();
     expect(screen.queryByPlaceholderText('Bandcamp track/album URL')).toBeNull();
-    expect(screen.getByText('Pick a service to submit from.')).toBeTruthy();
   });
 });
 

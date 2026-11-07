@@ -31,7 +31,7 @@ export default function SubmitTrack() {
   const t = useTheme();
   // "Change" on the Your pick card brings the search back.
   const [changing, setChanging] = useState(false);
-  const [service, setServiceRaw] = useState<ServiceName | null>(null);
+  const [service, setServiceRaw] = useState<ServiceName | null>('youtube_music');
   function setService(s: ServiceName) {
     setServiceRaw(s);
     setQuery('');
