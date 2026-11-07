@@ -1,3 +1,4 @@
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import SubmitTrack from '../round/[roundId]/submit';
 
@@ -74,7 +75,8 @@ describe('search and submit', () => {
       expect.stringContaining('/search?q=nina%20simone&service=youtube_music'),
       expect.anything(),
     );
-    await waitFor(() => expect(screen.getByText('Feeling Good — Nina Simone')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Feeling Good')).toBeTruthy());
+    expect(screen.getByText('Nina Simone')).toBeTruthy();
   });
 
   it('submits a search result under the service it came from', async () => {
@@ -106,7 +108,8 @@ describe('search and submit', () => {
     await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
 
     await waitFor(() => expect(screen.getByTestId('current-track')).toBeTruthy());
-    expect(screen.getByText('Track submitted — your current track')).toBeTruthy();
+    expect(screen.getByText('Your pick')).toBeTruthy();
+    expect(screen.getByText('Preview', { exact: false })).toBeTruthy();
     expect(screen.getByText('Edit your track')).toBeTruthy();
   });
 
@@ -166,6 +169,56 @@ describe('search and submit', () => {
   });
 });
 
+describe('result rows', () => {
+  // iPhone Safari pushed Submit off-screen: a flex child won't shrink below its longest word without minWidth: 0.
+  it('lets a long title shrink and keeps Submit on screen', async () => {
+    const long = 'Everything In Its Right Place — Radiohead (Remastered 2009) [Official Video]' + 'x'.repeat(80);
+    (fetch as jest.Mock).mockImplementation(async () => ok({ results: [{ externalId: 'v', title: long, artist: 'Radiohead' }] }));
+    await render(<SubmitTrack />);
+
+    await fireEvent.press(screen.getByText('Search YouTube Music'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'radiohead');
+    await fireEvent.press(screen.getByText('Search'));
+
+    await waitFor(() => expect(screen.getByTestId('result-text')).toBeTruthy());
+    expect(StyleSheet.flatten(screen.getByTestId('result-text').props.style)).toMatchObject({ flex: 1, minWidth: 0 });
+    expect(screen.getAllByText('Submit').length).toBeGreaterThan(0);
+    expect(screen.queryByText('YouTube Music')).toBeNull();
+  });
+});
+
+describe('Your pick', () => {
+  it('Change brings the search back and a new submit posts again', async () => {
+    mockParams = { roundId: 'round-1', edit: '1' };
+    await render(<SubmitTrack />);
+    await waitFor(() => expect(screen.getByText('Your pick')).toBeTruthy());
+    expect(screen.queryByPlaceholderText('Search for a track')).toBeNull();
+
+    await fireEvent.press(screen.getByText('Change'));
+    await fireEvent.press(screen.getByText('Search YouTube Music'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Search for a track'), 'nina');
+    await fireEvent.press(screen.getByText('Search'));
+    await waitFor(() => expect(screen.getAllByText('Submit').at(-1)!).toBeTruthy());
+    await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
+
+    expect(lastPost()).toMatchObject({ service: 'youtube_music', externalId: 'vid-1' });
+  });
+});
+
+describe('Your pick, backing out', () => {
+  it('Keep my pick returns to the card without submitting', async () => {
+    mockParams = { roundId: 'round-1', edit: '1' };
+    await render(<SubmitTrack />);
+    await waitFor(() => expect(screen.getByText('Your pick')).toBeTruthy());
+
+    await fireEvent.press(screen.getByText('Change'));
+    await fireEvent.press(screen.getByText('Keep my pick'));
+
+    expect(screen.getByText('Your pick')).toBeTruthy();
+    expect(screen.queryByPlaceholderText('Search for a track')).toBeNull();
+  });
+});
+
 describe('editing', () => {
   it('shows the current track and saves just the comment', async () => {
     mockParams = { roundId: 'round-1', edit: '1' };
@@ -175,7 +228,7 @@ describe('editing', () => {
     ) as unknown as typeof fetch;
     await render(<SubmitTrack />);
 
-    await waitFor(() => expect(screen.getByText('Old Song — Old Band')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Old Song')).toBeTruthy());
     const box = screen.getByPlaceholderText(/Add a comment/);
     expect(box.props.value).toBe('first take');
     await fireEvent.changeText(box, 'second take');

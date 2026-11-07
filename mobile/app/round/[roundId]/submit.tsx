@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { ScrollView, Linking, Platform, View } from 'react-native';
+import { ScrollView, Linking, Platform, Text, View } from 'react-native';
 import { usePreview } from '../../../lib/preview';
 import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
+import { useTheme } from '../../../lib/theme';
 import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
-import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb, TrackRow } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -26,6 +27,9 @@ interface TrackResult {
 export default function SubmitTrack() {
   const { roundId, edit } = useLocalSearchParams<{ roundId: string; edit?: string }>();
   const { token } = useSession();
+  const t = useTheme();
+  // "Change" on the Your pick card brings the search back.
+  const [changing, setChanging] = useState(false);
   const [service, setServiceRaw] = useState<ServiceName | null>(null);
   function setService(s: ServiceName) {
     setServiceRaw(s);
@@ -120,6 +124,7 @@ export default function SubmitTrack() {
         return;
       }
       setSubmitted(true);
+      setChanging(false);
       setResults([]);
       setCommentSaved(false);
       await loadCurrent();
@@ -149,23 +154,29 @@ export default function SubmitTrack() {
   return (
     <Screen label={title}>
       <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
-      {current && (
-        <JCard>
-          <Label>{submitted ? 'Track submitted — your current track' : 'Your current track'}</Label>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <ServiceBadge service={current.service} />
-            <TrackRow
-              testID="current-track"
-              thumbnailUrl={current.thumbnailUrl}
-              title={current.title}
-              artist={current.artist}
-              href={playbackHref(current.playback)}
-              playing={playingId === current.submissionId}
-              onPlay={() => toggle(current.submissionId)}
-            />
-          </View>
-        </JCard>
+      {current && !changing && (
+        <>
+          <Text accessibilityRole="header" style={{ color: t.ink, fontFamily: t.font.display, fontSize: 24, transform: [{ rotate: '-2deg' }] }}>Your pick</Text>
+          <JCard>
+            <View testID="current-track" style={{ flexDirection: 'row', gap: 12 }}>
+              <Thumb url={current.thumbnailUrl} size={56} />
+              <View style={{ flex: 1, minWidth: 0, gap: 4, alignItems: 'flex-start' }}>
+                <BodyText>{current.title}</BodyText>
+                <Label>{current.artist}</Label>
+                <ServiceBadge service={current.service} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <TapeButton title={playingId === current.submissionId ? '■ Stop' : '▶ Preview'} onPress={() => toggle(current.submissionId)} variant="secondary" />
+              <TapeButton title="Change" onPress={() => setChanging(true)} variant="secondary" />
+            </View>
+          </JCard>
+          {commentField}
+        </>
       )}
+      {(!current || changing) && (
+        <>
+      {changing && <TapeButton title="Keep my pick" onPress={() => setChanging(false)} variant="secondary" />}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {SERVICES.map((s) => (
           <Chip key={s} label={BUTTON_LABEL[s] ?? s} selected={s === service} onPress={() => setService(s)} />
@@ -192,20 +203,26 @@ export default function SubmitTrack() {
           {results.map((item, i) => (
             <Fragment key={item.externalId}>
               {i > 0 && <Sprocket />}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
-                <Thumb url={item.thumbnailUrl} />
-                {service && <ServiceBadge service={service} />}
-                <BodyText style={{ flex: 1 }}>
-                  {item.title} — {item.artist}
-                </BodyText>
-                <TapeButton
-                  title={submitting ? '…' : 'Submit'}
-                  disabled={submitting}
-                  onPress={() => submitTrack({ externalId: item.externalId, title: item.title, artist: item.artist, isrc: item.isrc })}
-                />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                <View style={{ flexShrink: 0 }}>
+                  <Thumb url={item.thumbnailUrl} />
+                </View>
+                <View testID="result-text" style={{ flex: 1, minWidth: 0 }}>
+                  <BodyText numberOfLines={2}>{item.title}</BodyText>
+                  <Label numberOfLines={2}>{item.artist}</Label>
+                </View>
+                <View style={{ flexShrink: 0 }}>
+                  <TapeButton
+                    title={submitting ? '…' : 'Submit'}
+                    disabled={submitting}
+                    onPress={() => submitTrack({ externalId: item.externalId, title: item.title, artist: item.artist, isrc: item.isrc })}
+                  />
+                </View>
               </View>
             </Fragment>
           ))}
+        </>
+      )}
         </>
       )}
       {error && <ErrorNote>{error}</ErrorNote>}
