@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { ServiceName } from '../adapters/types.js';
+import type { PlaybackLaunchHandle, ServiceName } from '../adapters/types.js';
 
 /**
  * How to pick a league's current round now that every round of the season exists from creation
@@ -127,7 +127,7 @@ export interface RoundActivity {
   /** Guesses made in this round, keyed by guesser. */
   guessCounts: Map<string, number>;
   /** The viewer's own track, or null. Never anyone else's -- see the note in describeRound. */
-  yourSubmission: { service: ServiceName; title: string; artist: string; thumbnailUrl: string | null; comment?: string | null } | null;
+  yourSubmission: { service: ServiceName; title: string; artist: string; thumbnailUrl: string | null; comment?: string | null; submissionId: string; playback: PlaybackLaunchHandle } | null;
 }
 
 export function emptyRoundActivity(): RoundActivity {

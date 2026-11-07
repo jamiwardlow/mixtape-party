@@ -1,17 +1,20 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { fetchApi } from '../../../lib/api';
+import { usePreview } from '../../../lib/preview';
 import {
   PHASE_META,
   phaseLabel,
   nameOf,
+  playbackHref,
+  type Playback,
   type Player,
   type RoundPhase,
   type ServiceName,
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, DeadlineRows, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, TapeButton, Thumb } from '../../../lib/ui';
+import { BodyText, DeadlineRows, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
 
 /** The one round, as `GET /rounds/:roundId/overview` describes it — the season page's entry. */
 interface RoundDetail {
@@ -37,7 +40,7 @@ interface RoundDetail {
     submitted: boolean;
     guessesRemaining: number;
     /** Your own track, in every phase. Yours only: the server never sends anyone else's. */
-    submission: { service: ServiceName; title: string; artist: string; thumbnailUrl: string | null } | null;
+    submission: { submissionId: string; playback: Playback; service: ServiceName; title: string; artist: string; thumbnailUrl: string | null } | null;
   };
 }
 
@@ -65,6 +68,9 @@ export default function RoundOverview() {
   const { token } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mine = overview?.round.you.submission;
+  const openInService = useCallback(() => mine && Linking.openURL(playbackHref(mine.playback)), [mine]);
+  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
 
   useEffect(() => {
     if (!token) return;
@@ -130,9 +136,16 @@ export default function RoundOverview() {
           <HandText>You</HandText>
           {round.you.submission ? (
             <View style={styles.row}>
-              <Thumb url={round.you.submission.thumbnailUrl} />
               <ServiceBadge service={round.you.submission.service} />
-              <BodyText testID="your-submission">{`${round.you.submission.title} — ${round.you.submission.artist}`}</BodyText>
+              <TrackRow
+                testID="your-submission"
+                thumbnailUrl={round.you.submission.thumbnailUrl}
+                title={round.you.submission.title}
+                artist={round.you.submission.artist}
+                href={playbackHref(round.you.submission.playback)}
+                playing={playingId === round.you.submission.submissionId}
+                onPlay={() => toggle(round.you.submission!.submissionId)}
+              />
             </View>
           ) : (
             <BodyText testID="your-submission">You have not submitted a track</BodyText>

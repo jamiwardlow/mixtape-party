@@ -128,6 +128,7 @@ export function TrackRow({
   playing,
   onPlay,
   style,
+  testID,
 }: {
   thumbnailUrl?: string | null;
   title: string;
@@ -136,6 +137,7 @@ export function TrackRow({
   playing?: boolean;
   onPlay?: () => void;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
   const t = useTheme();
   // A track with no art (Bandcamp) still gets a tappable play square.
@@ -160,11 +162,12 @@ export function TrackRow({
         thumb
       )}
       <BodyText
+        testID={testID}
         style={[{ flex: 1 }, href ? { textDecorationLine: 'underline' } : null]}
         accessibilityRole={href ? 'link' : undefined}
         onPress={href ? () => Linking.openURL(href) : undefined}
       >
-        {title} — {artist}
+        {`${title} — ${artist}`}
       </BodyText>
     </View>
   );

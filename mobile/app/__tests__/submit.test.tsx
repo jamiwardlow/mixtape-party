@@ -4,6 +4,7 @@ import SubmitTrack from '../round/[roundId]/submit';
 const mockReplace = jest.fn();
 let mockParams: Record<string, string> = { roundId: 'round-1' };
 
+jest.mock('expo-audio', () => ({ createAudioPlayer: jest.fn() }));
 jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockReplace(...args) },
   useLocalSearchParams: () => mockParams,
@@ -29,7 +30,7 @@ beforeEach(() => {
       String(url).includes('/search')
         ? searchResults
         : String(url).includes('/overview')
-          ? { round: { you: { submission: { service: 'youtube_music', title: 'Feeling Good', artist: 'Nina Simone' } } } }
+          ? { round: { you: { submission: { submissionId: 's1', playback: { deepLink: 'https://music.youtube.com/watch?v=x' }, service: 'youtube_music', title: 'Feeling Good', artist: 'Nina Simone' } } } }
           : { submissionId: 'sub-1' },
     ),
   ) as unknown as typeof fetch;
@@ -168,7 +169,7 @@ describe('search and submit', () => {
 describe('editing', () => {
   it('shows the current track and saves just the comment', async () => {
     mockParams = { roundId: 'round-1', edit: '1' };
-    const mine = { service: 'bandcamp', title: 'Old Song', artist: 'Old Band', comment: 'first take' };
+    const mine = { submissionId: 's2', playback: { deepLink: 'https://old.bandcamp.com/track/old' }, service: 'bandcamp', title: 'Old Song', artist: 'Old Band', comment: 'first take' };
     globalThis.fetch = jest.fn(async (_url: string, init?: { method?: string }) =>
       ok(init?.method === 'PATCH' ? {} : { round: { you: { submission: mine } } }),
     ) as unknown as typeof fetch;

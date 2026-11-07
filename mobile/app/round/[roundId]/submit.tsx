@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { FlatList, Platform, View } from 'react-native';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import { ScrollView, Linking, Platform, View } from 'react-native';
+import { usePreview } from '../../../lib/preview';
 import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
-import type { ServiceName } from '../../../lib/rounds';
-import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
+import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb, TrackRow } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -40,7 +41,7 @@ export default function SubmitTrack() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [current, setCurrent] = useState<{ service: ServiceName; title: string; artist: string; thumbnailUrl?: string | null } | null>(null);
+  const [current, setCurrent] = useState<{ submissionId: string; playback: Playback; service: ServiceName; title: string; artist: string; thumbnailUrl?: string | null } | null>(null);
   const [commentSaved, setCommentSaved] = useState(false);
 
   // Editing: show the track already in, and start the comment box from what is saved.
@@ -57,6 +58,9 @@ export default function SubmitTrack() {
     if (edit && token) loadCurrent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit, token, roundId]);
+  // Your own track previews before guessing opens; with no preview it opens in its service.
+  const openInService = useCallback(() => current && Linking.openURL(playbackHref(current.playback)), [current]);
+  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
 
@@ -144,13 +148,21 @@ export default function SubmitTrack() {
 
   return (
     <Screen label={title}>
+      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
       {current && (
         <JCard>
           <Label>{submitted ? 'Track submitted — your current track' : 'Your current track'}</Label>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Thumb url={current.thumbnailUrl} />
             <ServiceBadge service={current.service} />
-            <BodyText testID="current-track" style={{ flex: 1 }}>{`${current.title} — ${current.artist}`}</BodyText>
+            <TrackRow
+              testID="current-track"
+              thumbnailUrl={current.thumbnailUrl}
+              title={current.title}
+              artist={current.artist}
+              href={playbackHref(current.playback)}
+              playing={playingId === current.submissionId}
+              onPlay={() => toggle(current.submissionId)}
+            />
           </View>
         </JCard>
       )}
@@ -177,11 +189,9 @@ export default function SubmitTrack() {
           <TapeButton title={searching ? 'Searching…' : 'Search'} onPress={search} disabled={searching || !query.trim()} variant="secondary" />
           {commentField}
           {searching && <ReelSpinner />}
-          <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
-            data={results}
-            keyExtractor={(item) => item.externalId}
-            ItemSeparatorComponent={Sprocket}
-            renderItem={({ item }) => (
+          {results.map((item, i) => (
+            <Fragment key={item.externalId}>
+              {i > 0 && <Sprocket />}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
                 <Thumb url={item.thumbnailUrl} />
                 {service && <ServiceBadge service={service} />}
@@ -194,12 +204,13 @@ export default function SubmitTrack() {
                   onPress={() => submitTrack({ externalId: item.externalId, title: item.title, artist: item.artist, isrc: item.isrc })}
                 />
               </View>
-            )}
-          />
+            </Fragment>
+          ))}
         </>
       )}
       {error && <ErrorNote>{error}</ErrorNote>}
       <TapeButton title="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/round/[roundId]', params: { roundId } }))} variant="secondary" />
+      </ScrollView>
     </Screen>
   );
 }

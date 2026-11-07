@@ -3,6 +3,8 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
 import { thumbnailUrlOf } from '../adapters/thumbnail.js';
+import type { AdapterRegistry } from '../adapters/registry.js';
+import { playbackFor } from './guessing.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   CURRENT_ROUND_CLAUSE,
@@ -20,7 +22,7 @@ import {
 import { blockedIds, maskBlocked } from './blocks.js';
 import { correctGuessCounts, scoreboard } from './results.js';
 
-export type LeaguesDeps = AccountsDeps;
+export type LeaguesDeps = AccountsDeps & AdapterRegistry;
 
 /** The shelf's view of a league's current round: what phase it is in, and whether that phase is live. */
 function summarizeRound(
@@ -88,6 +90,13 @@ interface SubmissionRow {
  * from shipping the whole playlist with names attached (PRODUCT.md Principle 1).
  */
 const trackOf = (row: SubmissionRow) => ({ service: row.service, title: row.title, artist: row.artist, thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id), comment: row.comment ?? null });
+
+/** The viewer's own track, plus what they need to preview it: its id and the link out. */
+const ownTrackOf = async (deps: AdapterRegistry, row: SubmissionRow & { id: string; isrc: string | null }) => ({
+  ...trackOf(row),
+  submissionId: row.id,
+  playback: await playbackFor(deps, row),
+});
 
 async function findLeagueByInviteCode(pool: Pool, inviteCode: string): Promise<LeagueRow | null> {
   const result = await pool.query<LeagueRow>(
@@ -432,8 +441,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
          FROM rounds WHERE league_id = $1 ORDER BY round_number`,
         [leagueId],
       ),
-      deps.pool.query<SubmissionRow & { round_id: string }>(
-        `SELECT s.round_id, s.account_id, s.service, s.external_id, s.art_id, s.title, s.artist, s.comment FROM submissions s
+      deps.pool.query<SubmissionRow & { id: string; isrc: string | null; round_id: string }>(
+        `SELECT s.id, s.isrc, s.round_id, s.account_id, s.service, s.external_id, s.art_id, s.title, s.artist, s.comment FROM submissions s
          JOIN rounds r ON r.id = s.round_id
          WHERE r.league_id = $1
          ORDER BY s.created_at, s.id`,
@@ -463,7 +472,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const round = activity.get(row.round_id);
       if (!round) continue;
       round.submitterIds.push(row.account_id);
-      if (row.account_id === accountId) round.yourSubmission = trackOf(row);
+      if (row.account_id === accountId) round.yourSubmission = await ownTrackOf(deps, row);
     }
     for (const row of guessesResult.rows) {
       activity.get(row.round_id)?.guessCounts.set(row.guesser_account_id, Number(row.guess_count));
@@ -532,8 +541,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         [round.leagueId],
       ),
       // Same order as the league overview's, so the submitter list is the same list.
-      deps.pool.query<SubmissionRow>(
-        'SELECT account_id, service, external_id, art_id, title, artist, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
+      deps.pool.query<SubmissionRow & { id: string; isrc: string | null }>(
+        'SELECT id, account_id, service, external_id, art_id, title, artist, isrc, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
         [roundId],
       ),
       deps.pool.query<{ guesser_account_id: string; guess_count: string }>(
@@ -554,7 +563,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     const activity: RoundActivity = {
       submitterIds: submissionsResult.rows.map((row) => row.account_id),
       guessCounts: new Map(guessesResult.rows.map((row) => [row.guesser_account_id, Number(row.guess_count)])),
-      yourSubmission: mine ? trackOf(mine) : null,
+      yourSubmission: mine ? await ownTrackOf(deps, mine) : null,
     };
 
     // leagueId and leagueName ride along so the page can offer the way back up to the season hub

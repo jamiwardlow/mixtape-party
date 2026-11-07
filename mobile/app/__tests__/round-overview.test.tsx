@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { router } from 'expo-router';
 import RoundOverview from '../round/[roundId]/index';
 
+jest.mock('expo-audio', () => ({ createAudioPlayer: jest.fn() }));
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
   useLocalSearchParams: () => ({ roundId: 'r2' }),
@@ -20,7 +21,7 @@ const cy = { accountId: 'c', displayName: 'Cy' };
 const di = { accountId: 'd', displayName: 'Di' };
 const roster = [ada, bo, cy, di];
 
-const mine = { service: 'bandcamp', title: 'Rain Song', artist: 'The Drips' };
+const mine = { submissionId: 'sub-1', playback: { deepLink: 'https://drips.bandcamp.com/track/rain' }, service: 'bandcamp', title: 'Rain Song', artist: 'The Drips' };
 
 /** Mid-submission: three of four are in, and the server names them. */
 const submissionRound = {

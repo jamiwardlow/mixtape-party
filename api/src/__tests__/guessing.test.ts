@@ -386,6 +386,18 @@ describe('GET /rounds/:roundId/submissions/:submissionId/preview', () => {
     expect(res.status).toBe(403);
   });
 
+  it('lets the submitter preview their own track before guessing opens, but nobody else', async () => {
+    const { app } = buildApp();
+    const { members } = await createLeagueWithPlayers(app, 3);
+    const mine = await testDb.pool.query('SELECT id FROM submissions WHERE account_id = $1', [members[0].accountId]);
+
+    const own = await request(app).get(`/submissions/${mine.rows[0].id}/preview`).set('Authorization', `Bearer ${members[0].token}`);
+    const other = await request(app).get(`/submissions/${mine.rows[0].id}/preview`).set('Authorization', `Bearer ${members[1].token}`);
+
+    expect(own.status).toBe(200);
+    expect(other.status).toBe(403);
+  });
+
   it('404s for a submission that is not in the round', async () => {
     const { app, roundId, members } = await setup();
 

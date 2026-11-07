@@ -195,10 +195,12 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     res.json(await previewBody(row));
   });
 
-  // Not round-scoped, so the favorites screen can play any favorite. Same gate as favoriting.
+  // Not round-scoped, so the favorites screen can play any favorite. Same gate as favoriting, except your own track is always open to you.
   router.get('/submissions/:id/preview', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const error = await resultsGuardError(deps.pool, REACTION_TARGETS.submission_id, req.params.id, accountId);
+    // Your own track is previewable before guessing opens; everyone else's waits for the guard.
+    const mine = await deps.pool.query('SELECT 1 FROM submissions WHERE id = $1 AND account_id = $2', [req.params.id, accountId]);
+    const error = mine.rowCount ? null : await resultsGuardError(deps.pool, REACTION_TARGETS.submission_id, req.params.id, accountId);
     if (error) {
       res.status(error.status).json({ error: error.error });
       return;
