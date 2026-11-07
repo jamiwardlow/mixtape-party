@@ -11,7 +11,7 @@ export interface Reaction {
   mine: boolean;
 }
 
-const TRAY_EMOJI = ['❤️', '😂', '🔥', '👏', '😮', '😭', '🤘', '💀', '🎧', '🙌', '🥹', '👀'];
+const TRAY_EMOJI = ['❤️', '😂', '🔥', '👏', '🔊', '😭', '🤘', '💀', '🎧', '🙌', '🥹', '🎉'];
 
 /**
  * Chips for the reactions that exist (tap to react or take yours back), then one dashed button that
