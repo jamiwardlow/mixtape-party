@@ -6,7 +6,7 @@ import { useLastNotificationResponse } from 'expo-notifications';
 /**
  * Routes a tapped push to its round. The hook also yields the response that
  * cold-started the app, so one call covers cold start and foreground/background taps.
- * Pushes carrying a roundId open its guess screen, or its results when `screen` says so (a reply
+ * Pushes carrying a roundId open its guess screen, or its submit/results screen when `screen` says so (a reminder, a reply
  * to your comment, or a reaction), scrolled to `focus`. A leagueId with `screen: 'final'` opens the
  * season wrap-up; others just open the app.
  */
@@ -19,7 +19,7 @@ export function useOpenTappedNotification(enabled: boolean) {
   const roundId = data?.roundId;
   const finalLeagueId = data?.screen === 'final' ? data.leagueId : undefined;
   const focus = typeof data?.focus === 'string' ? data.focus : undefined;
-  const screen = data?.screen === 'results' ? 'results' : 'guess';
+  const screen = data?.screen === 'results' || data?.screen === 'submit' ? data.screen : 'guess';
   // Keyed on the response object, not roundId: a second tap on the same round is a new response,
   // while a sign-out/in re-render must not replay one already handled.
   // On cold start the index route's <Redirect> is still replacing '/' with '/home'; a push issued

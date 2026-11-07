@@ -116,6 +116,7 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
         title: `Submission deadline approaching: Round ${round.round_number}`,
         body: `Submit your track for "${round.theme}" before the deadline.`,
         appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/submit` : undefined,
+        data: { roundId: round.id, screen: 'submit' },
       },
       { roundId: round.id, leagueId: round.league_id },
     );
@@ -162,6 +163,7 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
         title: `Guessing deadline approaching: Round ${round.round_number}`,
         body: `Finish guessing who submitted each track for "${round.theme}" before the deadline.`,
         appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/guess` : undefined,
+        data: { roundId: round.id, screen: 'guess' },
       },
       { roundId: round.id, leagueId: round.league_id },
     );
@@ -194,6 +196,7 @@ async function sweepResultsReady(deps: NotificationSweepDeps, now: Date): Promis
         title: `Round ${round.round_number} results are ready`,
         body: `Submitters have been revealed for “${round.theme}”!\n\nSee who guessed correctly:`,
         appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/results` : undefined,
+        data: { roundId: round.id, screen: 'results' },
       },
       { roundId: round.id, leagueId: round.league_id },
     );
