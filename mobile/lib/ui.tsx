@@ -367,6 +367,9 @@ export function TapeDateField({
             color: t.ink,
             backgroundColor: t.shell,
             fontFamily: t.font.body,
+            // Tints the browser's calendar popup; there's no way to restyle it beyond that.
+            accentColor: t.accent,
+            colorScheme: 'light',
           }}
         />
       );
@@ -401,16 +404,21 @@ export function TapeDateField({
       );
     }
 
+    // iOS: the system pills can't take our font, but the box, tint and light theme can match.
     return (
-      <DateTimePicker
-        testID={testID}
-        value={value}
-        mode="datetime"
-        display="compact"
-        minimumDate={minimumDate}
-        maximumDate={maximumDate}
-        onValueChange={(_event, date) => onChange(date)}
-      />
+      <View style={[styles.input, styles.iosDate, { borderColor: t.ink, borderWidth: t.border, backgroundColor: t.shell }]}>
+        <DateTimePicker
+          testID={testID}
+          value={value}
+          mode="datetime"
+          display="compact"
+          accentColor={t.accent}
+          themeVariant="light"
+          minimumDate={minimumDate}
+          maximumDate={maximumDate}
+          onValueChange={(_event, date) => onChange(date)}
+        />
+      </View>
     );
   }
 
@@ -675,6 +683,7 @@ const styles = StyleSheet.create({
   input: { ...INPUT_SHAPE },
   dateField: { gap: 4 },
   dateValue: { lineHeight: 20 },
+  iosDate: { alignItems: 'flex-start', paddingVertical: 4 },
   deadlineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   sprocket: { borderTopWidth: 3, borderStyle: 'dashed', marginVertical: 4 },
   button: { paddingVertical: 10, paddingHorizontal: 22, borderRadius: 999, minHeight: 44, justifyContent: 'center' },
