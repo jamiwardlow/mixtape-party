@@ -231,6 +231,7 @@ export default function SubmitTrack() {
                   href={playbackHref(item.playback)}
                   playing={resultPreview.playingId === item.externalId}
                   onPlay={() => resultPreview.toggle(item.externalId)}
+                  stacked
                   style={{ minWidth: 0 }}
                 />
                 <View style={{ flexShrink: 0 }}>

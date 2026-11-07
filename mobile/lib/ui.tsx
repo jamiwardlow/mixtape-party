@@ -127,6 +127,7 @@ export function TrackRow({
   href,
   playing,
   onPlay,
+  stacked,
   style,
   testID,
 }: {
@@ -136,6 +137,8 @@ export function TrackRow({
   href?: string;
   playing?: boolean;
   onPlay?: () => void;
+  /** Artist on its own line under the title, with only the title linked. */
+  stacked?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
@@ -161,14 +164,18 @@ export function TrackRow({
       ) : (
         thumb
       )}
-      <BodyText
-        testID={testID}
-        style={[{ flex: 1, minWidth: 0 }, href ? { textDecorationLine: 'underline' } : null]}
-        accessibilityRole={href ? 'link' : undefined}
-        onPress={href ? () => Linking.openURL(href) : undefined}
-      >
-        {`${title} — ${artist}`}
-      </BodyText>
+      <View testID={stacked ? testID : undefined} style={{ flex: 1, minWidth: 0 }}>
+        <BodyText
+          testID={stacked ? undefined : testID}
+          numberOfLines={stacked ? 2 : undefined}
+          style={href ? { textDecorationLine: 'underline' } : undefined}
+          accessibilityRole={href ? 'link' : undefined}
+          onPress={href ? () => Linking.openURL(href) : undefined}
+        >
+          {stacked ? title : `${title} — ${artist}`}
+        </BodyText>
+        {stacked ? <Label numberOfLines={2}>{artist}</Label> : null}
+      </View>
     </View>
   );
 }

@@ -75,7 +75,8 @@ describe('search and submit', () => {
       expect.stringContaining('/search?q=nina%20simone&service=youtube_music'),
       expect.anything(),
     );
-    await waitFor(() => expect(screen.getByText('Feeling Good — Nina Simone')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Feeling Good')).toBeTruthy());
+    expect(screen.getByText('Nina Simone')).toBeTruthy();
   });
 
   it('submits a search result under the service it came from', async () => {
