@@ -20,7 +20,7 @@ function ok(body: unknown) {
 }
 
 const searchResults = {
-  results: [{ externalId: 'vid-1', title: 'Feeling Good', artist: 'Nina Simone' }],
+  results: [{ externalId: 'vid-1', title: 'Feeling Good', artist: 'Nina Simone', playback: { service: 'youtube_music', deepLink: 'https://music.youtube.com/watch?v=vid-1' } }],
 };
 
 beforeEach(() => {
@@ -75,8 +75,7 @@ describe('search and submit', () => {
       expect.stringContaining('/search?q=nina%20simone&service=youtube_music'),
       expect.anything(),
     );
-    await waitFor(() => expect(screen.getByText('Feeling Good')).toBeTruthy());
-    expect(screen.getByText('Nina Simone')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Feeling Good — Nina Simone')).toBeTruthy());
   });
 
   it('submits a search result under the service it came from', async () => {
@@ -173,7 +172,7 @@ describe('result rows', () => {
   // iPhone Safari pushed Submit off-screen: a flex child won't shrink below its longest word without minWidth: 0.
   it('lets a long title shrink and keeps Submit on screen', async () => {
     const long = 'Everything In Its Right Place — Radiohead (Remastered 2009) [Official Video]' + 'x'.repeat(80);
-    (fetch as jest.Mock).mockImplementation(async () => ok({ results: [{ externalId: 'v', title: long, artist: 'Radiohead' }] }));
+    (fetch as jest.Mock).mockImplementation(async () => ok({ results: [{ externalId: 'v', title: long, artist: 'Radiohead', playback: { service: 'youtube_music', deepLink: 'https://music.youtube.com/watch?v=v' } }] }));
     await render(<SubmitTrack />);
 
     await fireEvent.press(screen.getByText('Search YouTube Music'));

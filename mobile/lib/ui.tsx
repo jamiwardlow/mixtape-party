@@ -163,7 +163,7 @@ export function TrackRow({
       )}
       <BodyText
         testID={testID}
-        style={[{ flex: 1 }, href ? { textDecorationLine: 'underline' } : null]}
+        style={[{ flex: 1, minWidth: 0 }, href ? { textDecorationLine: 'underline' } : null]}
         accessibilityRole={href ? 'link' : undefined}
         onPress={href ? () => Linking.openURL(href) : undefined}
       >

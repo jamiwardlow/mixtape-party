@@ -7,7 +7,7 @@ import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
 import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
-import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb, TrackRow } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -22,6 +22,7 @@ interface TrackResult {
   artist: string;
   isrc?: string;
   thumbnailUrl?: string | null;
+  playback: Playback;
 }
 
 export default function SubmitTrack() {
@@ -67,6 +68,24 @@ export default function SubmitTrack() {
   const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
+
+  // Search results have no submission id yet: previews are keyed by externalId and resolved from the result itself.
+  const resultPreviewPath = useCallback(
+    (externalId: string) => {
+      const r = results.find((x) => x.externalId === externalId);
+      const q = new URLSearchParams({ externalId, title: r?.title ?? '', artist: r?.artist ?? '', ...(r?.isrc ? { isrc: r.isrc } : {}) });
+      return `/search/preview?${q}`;
+    },
+    [results],
+  );
+  const openResult = useCallback(
+    (externalId: string) => {
+      const r = results.find((x) => x.externalId === externalId);
+      if (r) Linking.openURL(playbackHref(r.playback));
+    },
+    [results],
+  );
+  const resultPreview = usePreview(resultPreviewPath, token, openResult);
 
   async function search() {
     if (!token || !service || service === 'bandcamp' || !query.trim()) return;
@@ -204,13 +223,16 @@ export default function SubmitTrack() {
             <Fragment key={item.externalId}>
               {i > 0 && <Sprocket />}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
-                <View style={{ flexShrink: 0 }}>
-                  <Thumb url={item.thumbnailUrl} />
-                </View>
-                <View testID="result-text" style={{ flex: 1, minWidth: 0 }}>
-                  <BodyText numberOfLines={2}>{item.title}</BodyText>
-                  <Label numberOfLines={2}>{item.artist}</Label>
-                </View>
+                <TrackRow
+                  testID="result-text"
+                  thumbnailUrl={item.thumbnailUrl}
+                  title={item.title}
+                  artist={item.artist}
+                  href={playbackHref(item.playback)}
+                  playing={resultPreview.playingId === item.externalId}
+                  onPlay={() => resultPreview.toggle(item.externalId)}
+                  style={{ minWidth: 0 }}
+                />
                 <View style={{ flexShrink: 0 }}>
                   <TapeButton
                     title={submitting ? '…' : 'Submit'}

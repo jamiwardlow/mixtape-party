@@ -43,8 +43,17 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     }
 
     try {
-      const results = await adapterFor(deps, service).search(query);
-      res.json({ results: results.map((r) => ({ ...r, thumbnailUrl: thumbnailUrlOf(r.service, r.externalId, r.artId) })) });
+      const adapter = adapterFor(deps, service);
+      const results = await adapter.search(query);
+      res.json({
+        results: await Promise.all(
+          results.map(async (r) => ({
+            ...r,
+            thumbnailUrl: thumbnailUrlOf(r.service, r.externalId, r.artId),
+            playback: await adapter.getPlaybackLaunchHandle(r),
+          })),
+        ),
+      });
     } catch (err) {
       if (err instanceof ServiceUnavailableError) {
         res.status(503).json({ error: 'search unavailable' });
@@ -52,6 +61,23 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       }
       throw err;
     }
+  });
+
+  // Preview of a search result before it's submitted (YouTube Music only; Bandcamp has no search).
+  router.get('/search/preview', requireAuth(deps), async (req, res) => {
+    const { externalId, title, artist, isrc } = req.query;
+    if (typeof externalId !== 'string' || typeof title !== 'string' || typeof artist !== 'string') {
+      res.status(400).json({ error: 'externalId, title and artist are required' });
+      return;
+    }
+    const url = await adapterFor(deps, 'youtube_music').getPreviewUrl({
+      externalId,
+      title,
+      artist,
+      isrc: typeof isrc === 'string' ? isrc : undefined,
+      service: 'youtube_music',
+    });
+    res.json({ url });
   });
 
   router.post('/rounds/:roundId/submissions', requireAuth(deps), async (req, res) => {
