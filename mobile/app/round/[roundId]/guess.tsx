@@ -151,6 +151,7 @@ export default function GuessRound() {
                 href={playbackHref(item.playback)}
                 playing={playingId === item.submissionId}
                 onPlay={() => toggle(item.submissionId)}
+                stacked
               />
               {item.mine ? null : (
                 <>
