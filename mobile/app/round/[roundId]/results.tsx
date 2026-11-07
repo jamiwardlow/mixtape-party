@@ -278,11 +278,15 @@ function TrackCard({
           playing={playingId === item.submissionId}
           onPlay={() => onPlay(item.submissionId)}
         />
-        <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
       </View>
       {item.comment && <BodyText>“{item.comment}”</BodyText>}
       {item.note && <BodyText>“{item.note}”</BodyText>}
-      <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+  <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
+        </View>
+        <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
+      </View>
       <Sprocket />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Label>Submitted by</Label>
