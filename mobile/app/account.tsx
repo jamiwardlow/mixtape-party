@@ -349,7 +349,7 @@ export default function Account() {
 
   return (
     <Screen label="My Account">
-      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
       <Label>Signed in as {profile?.email}</Label>
       <JCard>
         <Avatar

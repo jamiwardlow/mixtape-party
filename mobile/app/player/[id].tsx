@@ -59,7 +59,7 @@ export default function Player() {
 
   return (
     <Screen label="Player">
-      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
         {error ? <ErrorNote>{error}</ErrorNote> : !player ? <ReelSpinner /> : (
           <>
             <JCard>

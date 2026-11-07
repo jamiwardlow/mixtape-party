@@ -112,7 +112,7 @@ export default function LeagueSchedule() {
     <RoundGate label="Season schedule" error={rounds === null ? error : null} ready={rounds !== null}>
       <Screen label="Season schedule">
         {error && <ErrorNote>{error}</ErrorNote>}
-        <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
           {season.map((round, index) => {
             const submissionAt = new Date(round.submissionDeadline);
             const guessingAt = new Date(round.guessingDeadline);

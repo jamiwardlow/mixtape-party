@@ -172,7 +172,7 @@ export default function SubmitTrack() {
 
   return (
     <Screen label={title}>
-      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
       {current && !changing && (
         <>
           <Text accessibilityRole="header" style={{ color: t.ink, fontFamily: t.font.display, fontSize: 24, transform: [{ rotate: '-2deg' }] }}>Your pick</Text>

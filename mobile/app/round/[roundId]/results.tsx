@@ -452,9 +452,10 @@ export default function RoundResults() {
       <Screen label="Results">
         <ScrollView
           ref={scroller}
+          style={{ margin: -6 }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: 12 }}
+          contentContainerStyle={{ gap: 12, padding: 6 }}
         >
         <PhaseSteps phase="results" />
         {results ? <Podium results={results} token={token} /> : null}

@@ -176,7 +176,7 @@ export default function CreateLeague() {
 
   return (
     <Screen label="Create a league">
-      <ScrollView keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
         <TapeInput placeholder="League name" value={name} onChangeText={setName} />
         <TapeInput
           placeholder="Season length (rounds)"
