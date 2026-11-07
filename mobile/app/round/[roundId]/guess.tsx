@@ -154,10 +154,12 @@ export default function GuessRound() {
                 stacked
               />
               {item.mine ? null : (
-                <>
-                  <Reactions reactions={item.reactions} onToggle={(emoji) => react(item.submissionId, emoji)} />
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Reactions reactions={item.reactions} onToggle={(emoji) => react(item.submissionId, emoji)} />
+                  </View>
                   <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
-                </>
+                </View>
               )}
               <TapeInput
                 placeholder={item.mine ? 'Your track — add a note (optional), shown with the results' : 'Add a comment (optional) — shown with the results'}
