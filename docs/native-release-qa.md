@@ -64,6 +64,6 @@ Mark each item pass/fail; file a failure as its own issue and link it here.
 - [ ] Invalid join code / deleted league shows a not-found state
 
 ## Tablet layout
-`supportsTablet` is currently `true` in `mobile/app.json`; if it changes to `false`, skip this section.
-- [ ] iPad (and an Android tablet if available): every screen above is usable, nothing clipped or stretched
+`supportsTablet` is `false` in `mobile/app.json` (#135), so iPad isn't a supported device; skip iPad checks.
+- [ ] Android tablet, if available: every screen above is usable, nothing clipped or stretched
 - [ ] Rotation doesn't break layout or lose state
