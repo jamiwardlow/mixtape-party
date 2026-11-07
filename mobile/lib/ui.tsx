@@ -150,7 +150,7 @@ export function TrackRow({
       {art}
       {onPlay ? (
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: thumbnailUrl ? 'rgba(0,0,0,0.35)' : undefined, borderRadius: 8 }]}>
-          <Text style={{ color: thumbnailUrl ? '#fff' : t.ink, fontSize: 20 }}>{playing ? '■' : '▶'}</Text>
+          <Text style={{ color: thumbnailUrl ? '#fff' : t.ink, fontSize: 20 }}>{playing ? '■' : '▶︎'}</Text>
         </View>
       ) : null}
     </View>

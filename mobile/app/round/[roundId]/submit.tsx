@@ -186,7 +186,7 @@ export default function SubmitTrack() {
               </View>
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <TapeButton title={playingId === current.submissionId ? '■ Stop' : '▶ Preview'} onPress={() => toggle(current.submissionId)} variant="secondary" />
+              <TapeButton title={playingId === current.submissionId ? '■ Stop' : '▶︎ Preview'} onPress={() => toggle(current.submissionId)} variant="secondary" />
               <TapeButton title="Change" onPress={() => setChanging(true)} variant="secondary" />
             </View>
           </JCard>
