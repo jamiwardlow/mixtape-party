@@ -9,6 +9,7 @@ let mockPathname = '/home';
 
 jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) }, usePathname: () => mockPathname }));
 jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
   useLastNotificationResponse: () => {
     if (mockThrows) throw new Error('ExpoNotifications.getLastNotificationResponse is not available on web');
     return mockResponse;
@@ -16,6 +17,11 @@ jest.mock('expo-notifications', () => ({
 }));
 
 const tapped = (data: object) => ({ notification: { request: { content: { data } } } });
+
+it('shows a push that arrives while the app is foregrounded', async () => {
+  const { handleNotification } = jest.requireMock('expo-notifications').setNotificationHandler.mock.calls[0][0];
+  expect(await handleNotification()).toMatchObject({ shouldShowBanner: true, shouldShowList: true });
+});
 
 beforeEach(() => {
   mockPush.mockClear();

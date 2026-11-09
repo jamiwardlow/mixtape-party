@@ -1,7 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { router, usePathname } from 'expo-router';
-import { useLastNotificationResponse } from 'expo-notifications';
+import { setNotificationHandler, useLastNotificationResponse } from 'expo-notifications';
+
+// iOS drops a push that arrives while the app is foregrounded unless a handler says to show it.
+if (Platform.OS !== 'web') {
+  setNotificationHandler({
+    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+  });
+}
 
 /**
  * Routes a tapped push to its round. The hook also yields the response that
