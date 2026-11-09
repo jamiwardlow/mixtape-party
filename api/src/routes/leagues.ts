@@ -368,6 +368,21 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
+    if (await isLeagueMember(deps.pool, league.id, accountId)) {
+      res.status(409).json({ error: "You're already in this league" });
+      return;
+    }
+
+    // No current round = every round is finished: the season is over.
+    const current = await deps.pool.query(
+      `SELECT 1 FROM rounds WHERE league_id = $1 ${CURRENT_ROUND_CLAUSE}`,
+      [league.id],
+    );
+    if (!current.rowCount) {
+      res.status(410).json({ error: 'This league is over' });
+      return;
+    }
+
     await deps.pool.query(
       'INSERT INTO league_members (league_id, account_id) VALUES ($1, $2) ON CONFLICT (league_id, account_id) DO NOTHING',
       [league.id, accountId],

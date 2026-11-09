@@ -33,7 +33,7 @@ export default function JoinLeague() {
           // 404 is the API's only answer for "no such code" — an invite has no expiry to hit
           // (schema.sql has no expires_at/used_at/revoked), so every other status is us failing,
           // not the invite. One message for both is how a routing bug looked like an invite bug.
-          setError(res.status === 404 ? 'This invite is no longer valid' : "Couldn't load this invite. Try again.");
+          setError(res.status === 404 ? 'This invite is not valid' : "Couldn't load this invite. Try again.");
           return;
         }
         setPreview(await res.json());
@@ -44,6 +44,7 @@ export default function JoinLeague() {
   }, [code]);
 
   const canJoin = token !== null;
+  const over = preview !== null && preview.currentRound === null;
 
   async function join() {
     if (!token) return;
@@ -75,10 +76,13 @@ export default function JoinLeague() {
     );
   }
 
+  const back = <TapeButton title="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />;
+
   if (!preview) {
     return (
       <Page>
         {error ? <ErrorNote>{error}</ErrorNote> : <ReelSpinner />}
+        {error && back}
       </Page>
     );
   }
@@ -94,12 +98,13 @@ export default function JoinLeague() {
           • {player.displayName ?? 'A player'}
         </BodyText>
       ))}
-      {error && <ErrorNote>{error}</ErrorNote>}
-      {canJoin ? (
+      {(error || over) && <ErrorNote>{error ?? 'This league is over'}</ErrorNote>}
+      {over ? null : canJoin ? (
         <TapeButton title={joining ? 'Joining…' : 'Join league'} onPress={join} disabled={joining} />
       ) : (
         <TapeButton title="Sign up to join" onPress={continueToJoin} />
       )}
+      {back}
     </Page>
   );
 }
