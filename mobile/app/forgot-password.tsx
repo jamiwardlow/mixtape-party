@@ -31,7 +31,7 @@ export default function ForgotPassword() {
     return (
       <Screen label="Check your inbox">
         <BodyText>If {email} has an account, a reset link is on its way.</BodyText>
-        <Label>The link expires in an hour.</Label>
+        <Label>The link expires in 30 minutes.</Label>
         <TapeButton title="Back to sign in" onPress={() => router.replace('/sign-in')} variant="secondary" />
       </Screen>
     );

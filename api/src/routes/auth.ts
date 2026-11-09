@@ -6,6 +6,7 @@ import {
   consumeAuthToken,
   isAuthTokenRateLimited,
   issueAuthToken,
+  isAuthTokenLive,
   PASSWORD_RESET_TTL_MS,
   SIGN_IN_TTL_MS,
 } from '../authTokens.js';
@@ -70,6 +71,16 @@ export function createAuthRouter(deps: AuthDeps): Router {
     );
     if (rows[0]) await emailAuthLink(deps, rows[0], 'password_reset');
     res.status(204).end();
+  });
+
+  // POST rather than GET so the token stays out of URLs and request logs.
+  router.post('/password-resets/check', async (req, res) => {
+    const { token } = req.body ?? {};
+    if (typeof token !== 'string') {
+      res.status(400).json({ error: 'token is required' });
+      return;
+    }
+    res.status((await isAuthTokenLive(deps.pool, token, 'password_reset')) ? 204 : 401).end();
   });
 
   router.post('/password-resets/confirm', async (req, res) => {

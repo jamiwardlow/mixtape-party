@@ -4,9 +4,8 @@ import { SESSION_TTL_MS } from './auth.js';
 
 export type AuthTokenPurpose = 'password_reset' | 'sign_in';
 
-// Deliberately generous: Cloud Run cold-starts take seconds, and
-// the web client blocks on two @expo-google-fonts packages before it renders. Single use, enforced
-// atomically in consumeAuthToken, is the actual protection here — not the clock.
+// Short on purpose: single use, enforced atomically in consumeAuthToken, is the main protection,
+// but the clock still counts. The password-reset copy in mobile/app/forgot-password.tsx must match.
 export const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 export const SIGN_IN_TTL_MS = 15 * 60 * 1000;
 export const GOOGLE_HANDOFF_TTL_MS = 10 * 60 * 1000;
@@ -58,6 +57,15 @@ export async function consumeAuthToken(
     [hashToken(token), purpose, codeVerifier === undefined ? null : createHash('sha256').update(codeVerifier).digest('base64url')],
   );
   return rows[0]?.account_id ?? null;
+}
+
+/** Non-consuming look at a token: true if consumeAuthToken would accept it (ignoring PKCE). */
+export async function isAuthTokenLive(pool: Pool, token: string, purpose: AuthTokenPurpose): Promise<boolean> {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM auth_tokens WHERE token_hash = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > now()',
+    [hashToken(token), purpose],
+  );
+  return rows.length > 0;
 }
 
 export const PER_ACCOUNT_TOKEN_LIMIT = 3;

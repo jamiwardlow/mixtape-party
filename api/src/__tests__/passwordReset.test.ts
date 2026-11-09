@@ -18,6 +18,23 @@ afterAll(async () => {
   await testDb.teardown();
 });
 
+describe('POST /password-resets/check', () => {
+  it('reports a live token as valid without burning it, and an expired, used or unknown one as 401', async () => {
+    const { app, emailChannel } = buildApp(testDb.pool);
+    await signUp(app, 'check@example.com');
+    await request(app).post('/password-resets').send({ email: 'check@example.com' });
+    const token = resetTokenFrom(emailChannel.sent[0].payload.body);
+
+    expect((await request(app).post('/password-resets/check').send({ token })).status).toBe(204);
+    expect((await request(app).post('/password-resets/check').send({ token })).status).toBe(204);
+    expect((await request(app).post('/password-resets/check').send({ token: 'nope' })).status).toBe(401);
+    expect((await request(app).post('/password-resets/check').send({})).status).toBe(400);
+
+    await testDb.pool.query("UPDATE auth_tokens SET expires_at = now() - interval '1 minute'");
+    expect((await request(app).post('/password-resets/check').send({ token })).status).toBe(401);
+  });
+});
+
 describe('POST /password-resets', () => {
   it('returns 204 and sends nothing for an unknown email', async () => {
     const { app, emailChannel } = buildApp(testDb.pool);

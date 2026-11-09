@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchApi } from '../lib/api';
 import { useSession } from '../lib/session';
 import { BodyText, ErrorNote, Label, Screen, TapeButton, TapeInput } from '../lib/ui';
@@ -11,6 +11,15 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [linkExpired, setLinkExpired] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Learn about a dead link on open, not after the user has typed a password. Any non-401 outcome
+  // (offline, 5xx) falls through to the form; submit still handles the real answer.
+  useEffect(() => {
+    if (!resetToken) return;
+    fetchApi('/password-resets/check', { method: 'POST', body: { token: resetToken } })
+      .then((res) => res.status === 401 && setLinkExpired(true))
+      .catch(() => {});
+  }, [resetToken]);
 
   async function submit() {
     // Checked at submit rather than seeded into state at mount: the param is not guaranteed to
