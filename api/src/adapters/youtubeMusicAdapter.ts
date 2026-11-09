@@ -161,8 +161,7 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
-    // Embed page, not /watch: /watch autoplays on open and has no off switch; /embed waits for a tap.
-    return { service: this.service, deepLink: `https://www.youtube.com/embed/${track.externalId}` };
+    return { service: this.service, deepLink: `${ORIGIN}/watch?v=${track.externalId}` };
   }
 
   getPreviewUrl(track: TrackResult): Promise<string | null> {
