@@ -74,6 +74,53 @@ it('opens the season wrap-up for a concluded league', async () => {
   expect(router.push).toHaveBeenCalledWith({ pathname: '/league/[leagueId]/final', params: { leagueId: 'league-1' } });
 });
 
+describe('sections', () => {
+  const mixed = [
+    { ...leagues[0], concluded: false },
+    { id: 'league-2', name: 'Old Crew', concluded: true, round: null },
+  ];
+  const serve = (ls: unknown[]) => {
+    globalThis.fetch = jest.fn(
+      async () => new Response(JSON.stringify({ leagues: ls }), { status: 200 }),
+    ) as unknown as typeof fetch;
+  };
+
+  it('splits leagues, expands In progress and collapses Finished by default', async () => {
+    serve(mixed);
+    await render(<Home />);
+    expect(await screen.findByText(/Office League/)).toBeTruthy();
+    expect(screen.queryByText(/Old Crew/)).toBeNull();
+    expect(screen.getByText(/In progress/)).toBeTruthy();
+    expect(screen.getByText(/Finished/)).toBeTruthy();
+  });
+
+  it('toggles a section from its header', async () => {
+    serve(mixed);
+    await render(<Home />);
+    await screen.findByText(/Office League/);
+    const header = screen.getByText(/Finished/);
+    await fireEvent.press(header);
+    expect(screen.getByText(/Old Crew/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Finished/, expanded: true })).toBeTruthy();
+    await fireEvent.press(header);
+    expect(screen.queryByText(/Old Crew/)).toBeNull();
+  });
+
+  it('expands Finished and hides In progress when nothing is in progress', async () => {
+    serve([mixed[1]]);
+    await render(<Home />);
+    expect(await screen.findByText(/Old Crew/)).toBeTruthy();
+    expect(screen.queryByText(/In progress/)).toBeNull();
+  });
+
+  it('keeps the empty state when there are no leagues', async () => {
+    serve([]);
+    await render(<Home />);
+    expect(await screen.findByText('No leagues yet.')).toBeTruthy();
+    expect(screen.queryByText(/Finished/)).toBeNull();
+  });
+});
+
 describe('name prompt', () => {
   it('asks a nameless account for a name and saves it', async () => {
     mockProfile = { email: 'ada@example.com', displayName: null };

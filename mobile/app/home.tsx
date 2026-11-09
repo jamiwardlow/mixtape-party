@@ -50,6 +50,16 @@ export default function Home() {
   const [nameSkipped, setNameSkipped] = useState(true);
   const [nameError, setNameError] = useState<string | null>(null);
 
+  // Session-only collapse state; undefined means "use the default".
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const inProgress = leagues.filter((l) => !l.concluded);
+  const finished = leagues.filter((l) => l.concluded);
+  const sections = [
+    { key: "progress", title: "In progress", items: inProgress, finished: false },
+    { key: "finished", title: "Finished", items: finished, finished: true },
+  ];
+  const isOpen = (key: string) => open[key] ?? (key === "progress" || inProgress.length === 0);
+
   useEffect(() => {
     deviceStorage.get(NAME_SKIPPED_KEY).then((v) => setNameSkipped(!!v), () => {});
   }, []);
@@ -137,30 +147,67 @@ export default function Home() {
         )}
         {/* One tap, into the season page — it owns the phase CTA and links on to the schedule
             editor. The phase stays here as text so the shelf still reads at a glance. */}
-        {leagues.map((league) => (
-          <View key={league.id} style={{ flexGrow: 1, flexBasis: 280 }}>
-            <PressScale
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: league.concluded
-                    ? "/league/[leagueId]/final"
-                    : "/league/[leagueId]",
-                  params: { leagueId: league.id },
-                })
-              }
-            >
-              <JCard>
-                <HandText>{league.name}</HandText>
-                {league.round && (
-                  <Label>
-                    {`${league.round.theme ?? `Round ${league.round.number}`}: ${phaseLabel(league.round.phase, league.round.submitted)}`}
-                  </Label>
-                )}
-              </JCard>
-            </PressScale>
-          </View>
-        ))}
+        {sections.map(({ key, title, items, finished }) =>
+          items.length === 0 ? null : (
+            <View key={key} style={{ width: "100%", gap: 12 }}>
+              <Pressable
+                onPress={() => setOpen((o) => ({ ...o, [key]: !isOpen(key) }))}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isOpen(key) }}
+                style={({ focused }: WebState) => [
+                  { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+                  focusRing(t, focused),
+                ]}
+              >
+                <Label style={{ textTransform: "uppercase" }}>{`${isOpen(key) ? "▾" : "▸"} ${title}`}</Label>
+                <Label>{items.length}</Label>
+              </Pressable>
+              {isOpen(key) && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+                  {items.map((league) => (
+                    <View key={league.id} style={{ flexGrow: 1, flexBasis: 280 }}>
+                      <PressScale
+                        accessibilityRole="button"
+                        onPress={() =>
+                          router.push({
+                            pathname: league.concluded ? "/league/[leagueId]/final" : "/league/[leagueId]",
+                            params: { leagueId: league.id },
+                          })
+                        }
+                      >
+                        {finished ? (
+                          <View
+                            style={{
+                              backgroundColor: t.shellPressed,
+                              borderColor: t.ink,
+                              borderWidth: t.border,
+                              borderStyle: "dashed",
+                              borderRadius: t.radius,
+                              padding: 16,
+                              gap: 6,
+                            }}
+                          >
+                            <HandText style={{ color: t.inkMuted }}>{league.name}</HandText>
+                            <Label>Finished</Label>
+                          </View>
+                        ) : (
+                          <JCard>
+                            <HandText>{league.name}</HandText>
+                            {league.round && (
+                              <Label>
+                                {`${league.round.theme ?? `Round ${league.round.number}`}: ${phaseLabel(league.round.phase, league.round.submitted)}`}
+                              </Label>
+                            )}
+                          </JCard>
+                        )}
+                      </PressScale>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ),
+        )}
       </ScrollView>
       <TapeButton
         title="Create a league"
