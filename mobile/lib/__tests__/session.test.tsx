@@ -137,3 +137,17 @@ describe('useSession', () => {
     expect(await storage.get('session_token')).toBeNull();
   });
 });
+
+describe('offline launch', () => {
+  it('finishes loading and keeps the stored token when the profile fetch rejects', async () => {
+    await storage.set('session_token', 'tok-stored');
+    globalThis.fetch = jest.fn(async () => {
+      throw new TypeError('Network request failed');
+    }) as unknown as typeof fetch;
+
+    const result = await mountSession();
+
+    expect(result.current.token).toBe('tok-stored');
+    expect(result.current.profile).toBeNull();
+  });
+});

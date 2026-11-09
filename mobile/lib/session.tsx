@@ -63,7 +63,10 @@ export function SessionProvider({ children, storage = deviceStorage }: PropsWith
       const stored = await storage.get(TOKEN_KEY);
       if (stored) {
         setToken(stored);
-        await loadProfile(stored);
+        // Offline launch: fetch rejects. Keep the stored token and go on with no profile; the
+        // offline banner explains, and refreshProfile fills it in later. Never leave isLoading
+        // true, since the root layout renders nothing until it clears (the blank white screen).
+        await loadProfile(stored).catch(() => {});
       }
       setIsLoading(false);
     })();

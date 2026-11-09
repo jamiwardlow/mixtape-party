@@ -2,7 +2,11 @@ import { BagelFatOne_400Regular } from '@expo-google-fonts/bagel-fat-one';
 import { CourierPrime_400Regular, CourierPrime_700Bold } from '@expo-google-fonts/courier-prime';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { onOfflineChange } from '../lib/api';
+import { ErrorNote } from '../lib/ui';
 import { useOpenTappedNotification } from '../lib/notificationTap';
 import { useRegisterPushToken } from '../lib/pushToken';
 import { SessionProvider, useSession } from '../lib/session';
@@ -30,6 +34,8 @@ function RootNavigator() {
   if (isLoading || (!fontsLoaded && !fontError)) return null;
 
   return (
+    <>
+    <OfflineBanner />
     <Stack screenOptions={{ headerShown: false }}>
       {/* Anchor: an emptied stack falls back to routeNames[0] (StackRouter.getStateForRouteNamesChange).
           index is the one screen that is never guarded and redirects correctly in both directions, so
@@ -62,5 +68,19 @@ function RootNavigator() {
         <Stack.Screen name="round/[roundId]/results" />
       </Stack.Protected>
     </Stack>
+    </>
+  );
+}
+
+/** Any failed API request shows this until the next one succeeds; screens still show their own errors. */
+function OfflineBanner() {
+  const [offline, setOffline] = useState(false);
+  const { top } = useSafeAreaInsets();
+  useEffect(() => onOfflineChange(setOffline), []);
+  if (!offline) return null;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', top: top + 4, left: 16, right: 16, zIndex: 10, alignItems: 'center' }}>
+      <ErrorNote>{"You're offline. Check your connection."}</ErrorNote>
+    </View>
   );
 }
