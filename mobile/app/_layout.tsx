@@ -53,6 +53,10 @@ function RootNavigator() {
       <Stack.Screen name="support" />
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
+        {/* Signed-out-only: reset-password signs the user in, so it must leave the stack on the flip
+            or it resurfaces beneath home and shows again after sign-out (#192). */}
+        <Stack.Screen name="reset-password" />
+        <Stack.Screen name="forgot-password" />
       </Stack.Protected>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="home" />

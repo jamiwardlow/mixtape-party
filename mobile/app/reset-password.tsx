@@ -35,7 +35,7 @@ export default function ResetPassword() {
         return;
       }
       await signIn((await res.json()).token);
-      router.replace('/home');
+      // No navigation: signing in drops this screen from the stack and index routes to /home.
     } catch {
       setError("Couldn't reach the server. Try again.");
     } finally {
