@@ -5,6 +5,7 @@ import {
   Animated,
   Easing,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -17,6 +18,7 @@ import {
   TextInput,
   TextInputProps,
   TextProps,
+  TouchableWithoutFeedback,
   View,
   ViewStyle,
 } from 'react-native';
@@ -43,13 +45,25 @@ function Sticker({ style, radius, children }: { style?: StyleProp<ViewStyle>; ra
   );
 }
 
+/** Tapping anywhere that isn't a control puts the keyboard away; iOS has no way to otherwise. No-op on web. */
+function TapAwayDismiss({ children }: { children: React.ReactNode }) {
+  if (Platform.OS === 'web') return <>{children}</>;
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={{ flex: 1 }}>{children}</View>
+    </TouchableWithoutFeedback>
+  );
+}
+
 /** Full-bleed centered page for screens that sit outside Screen (sign-in, join). */
 export function Page({ children }: { children: React.ReactNode }) {
   const t = useTheme();
   return (
-    <View style={[styles.page, { backgroundColor: t.bg }]}>
-      <View style={styles.pageInner}>{children}</View>
-    </View>
+    <TapAwayDismiss>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.page, { backgroundColor: t.bg }]}>
+        <View style={styles.pageInner}>{children}</View>
+      </KeyboardAvoidingView>
+    </TapAwayDismiss>
   );
 }
 
@@ -58,12 +72,14 @@ export function Screen({ label, wide, children }: { label: string; wide?: boolea
   const t = useTheme();
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.wrap, { maxWidth: wide ? 1120 : 640 }]}>
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
-        </View>
-        <View style={styles.body}>{children}</View>
-      </KeyboardAvoidingView>
+      <TapAwayDismiss>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.wrap, { maxWidth: wide ? 1120 : 640 }]}>
+          <View style={styles.header}>
+            <Text accessibilityRole="header" style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
+          </View>
+          <View style={styles.body}>{children}</View>
+        </KeyboardAvoidingView>
+      </TapAwayDismiss>
     </SafeAreaView>
   );
 }

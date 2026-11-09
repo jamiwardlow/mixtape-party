@@ -31,7 +31,7 @@ export default function AuthComplete() {
       // A native deep link can open this route with no token while sign-in.tsx is still handing
       // the real one over; bounce to sign-in rather than flashing an error.
       if (Platform.OS !== 'web') {
-        router.replace('/sign-in');
+        router.replace('/'); // index routes by session; /sign-in is unmatched while signed in
         return;
       }
       setError('This sign-in link is missing its token.');
