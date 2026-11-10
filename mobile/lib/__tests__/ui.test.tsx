@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Platform } from 'react-native';
-import { TapeDateField } from '../ui';
+import { TapeDateField, Thumb } from '../ui';
 
 // mobile/ serves the web client, and @react-native-community/datetimepicker has no
 // react-native-web build -- web gets a DOM <input type="datetime-local"> instead. The jest
@@ -63,5 +63,21 @@ describe('TapeDateField on web', () => {
     await fireEvent(screen.getByLabelText('Submission deadline'), 'change', { target: { value: '' } });
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Thumb', () => {
+  it('shows the cover until it fails to load, then a note tile', async () => {
+    await render(<Thumb url="https://i.ytimg.com/vi/x/mqdefault.jpg" title="Song" />);
+    expect(screen.queryByText('♪', { includeHiddenElements: true })).toBeNull();
+
+    await fireEvent(screen.getByTestId('thumb-image'), 'error');
+
+    expect(screen.getByText('♪', { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  it('shows a note tile when there is no url', async () => {
+    await render(<Thumb url={null} title="Song" />);
+    expect(screen.getByText('♪', { includeHiddenElements: true })).toBeTruthy();
   });
 });

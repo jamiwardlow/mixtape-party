@@ -127,11 +127,23 @@ export function BodyText({ style, children, ...props }: TextProps) {
   );
 }
 
-/** Cover art for a submitted track; renders nothing when the service has none (Bandcamp). */
-export function Thumb({ url, size = 48 }: { url?: string | null; size?: number }) {
+/**
+ * Cover art for a submitted track. When the service has none (Bandcamp without an art id) or the image
+ * fails to load, shows a sticker tile with a note instead, its color picked from the title so a list
+ * of them isn't one flat color.
+ */
+export function Thumb({ url, title = '', size = 48 }: { url?: string | null; title?: string; size?: number }) {
   const t = useTheme();
-  if (!url) return null;
-  return <Image source={{ uri: url }} accessibilityIgnoresInvertColors style={{ width: size, height: size, borderRadius: 8, borderWidth: 2, borderColor: t.ink }} />;
+  const [failed, setFailed] = useState(false);
+  const box = { width: size, height: size, borderRadius: 8, borderWidth: 2, borderColor: t.ink };
+  if (url && !failed) return <Image testID="thumb-image" source={{ uri: url }} onError={() => setFailed(true)} accessibilityIgnoresInvertColors style={box} />;
+  const colors = [t.mint, t.accent, t.tangerine];
+  const color = colors[[...title].reduce((n, c) => n + c.charCodeAt(0), 0) % colors.length];
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[box, { backgroundColor: color, alignItems: 'center', justifyContent: 'center' }]}>
+      <Text style={{ color: t.ink, fontSize: size * 0.5 }}>♪</Text>
+    </View>
+  );
 }
 
 /**
@@ -161,14 +173,12 @@ export function TrackRow({
   testID?: string;
 }) {
   const t = useTheme();
-  // A track with no art (Bandcamp) still gets a tappable play square.
-  const art = thumbnailUrl ? <Thumb url={thumbnailUrl} /> : onPlay ? <View style={{ width: 48, height: 48, borderRadius: 8, borderWidth: 2, borderColor: t.ink, backgroundColor: t.shell }} /> : null;
   const thumb = (
     <View>
-      {art}
+      <Thumb url={thumbnailUrl} title={title} />
       {onPlay ? (
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: thumbnailUrl ? 'rgba(0,0,0,0.35)' : undefined, borderRadius: 8 }]}>
-          <Text style={{ color: thumbnailUrl ? '#fff' : t.ink, fontSize: 20 }}>{playing ? '■' : '▶︎'}</Text>
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 8 }]}>
+          <Text style={{ color: '#fff', fontSize: 20 }}>{playing ? '■' : '▶︎'}</Text>
         </View>
       ) : null}
     </View>

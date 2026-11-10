@@ -5,7 +5,7 @@ import { createPool } from '../db/pool.js';
 
 /**
  * Seeds the demo accounts and leagues for App Store review and screenshots (#135 section 5).
- * Every player and song is invented. Re-running wipes and rebuilds the demo data, and only the
+ * Every player is invented. Songs are invented unless listed in REAL below. Re-running wipes and rebuilds the demo data, and only the
  * demo data: it deletes exactly the accounts and invite codes named below, nothing else.
  *
  *   DEMO_PASSWORD='...' DATABASE_URL=... npx tsx src/scripts/seedDemoLeague.ts
@@ -28,7 +28,7 @@ type Pick = [string, string, Service?, string?];
 
 const PEOPLE: Record<string, { name: string; about?: string; pronouns?: string }> = {
   demo: { name: 'Demo Player', about: 'App Store review account. Everyone in these leagues is made up.' },
-  maya: { name: 'Maya Okafor', about: 'Will defend a bad pop song to the death.' },
+  maya: { name: 'Maya Okafor', about: 'Will defend a bubblegum pop song to the death.' },
   theo: { name: 'Theo Lindqvist' },
   priya: { name: 'Priya Raman', pronouns: 'she/her' },
   jonah: { name: 'Jonah Beck' },
@@ -53,6 +53,29 @@ interface LeagueSpec {
   members: string[];
   rounds: RoundSpec[];
 }
+
+/**
+ * Real tracks (#190), used only when DEMO_TRACKS=real (the App Review demo). Store screenshots are
+ * captured with the default invented songs. Keyed by `<league code>-<round number>-<who>` in lower case, e.g. 'demofri-3-maya'.
+ * An entry replaces that pick's title, artist and ID, so the player, art and deep link all work. Picks
+ * with no entry keep their invented song. Look IDs up by hand and paste them in; the seed never calls a
+ * music service, so it stays offline and re-runnable. Only use tracks you have the right to show
+ * (Creative Commons, royalty-free, or an artist who said yes), and re-check they still play before a screenshot session.
+ *   youtube_music: externalId is the videoId from watch?v=<id>.
+ *   bandcamp:      externalId is `track=<id>`; pageUrl is the track page; artId is the cover art id.
+ */
+interface RealTrack {
+  title: string;
+  artist: string;
+  externalId: string;
+  service?: Service;
+  artId?: number;
+  pageUrl?: string;
+}
+const REAL: Record<string, RealTrack> = {
+  // 'demofri-3-maya': { title: 'REAL TITLE', artist: 'REAL ARTIST', externalId: 'VIDEO_ID' },
+  // 'demojoin-1-jonah': { title: '...', artist: '...', service: 'bandcamp', externalId: 'track=123', artId: 456, pageUrl: 'https://artist.bandcamp.com/track/slug' },
+};
 
 const L = LIVE_DAYS;
 const LEAGUES: LeagueSpec[] = [
@@ -208,7 +231,7 @@ const EMOJI = ['🔥', '😂', '❤️', '👏', '🎧'];
 
 const DAY = 86_400_000;
 
-export async function seedDemo(pool: Pool, password: string, now = new Date()): Promise<{ email: string; inviteCodes: string[] }> {
+export async function seedDemo(pool: Pool, password: string, now = new Date(), useReal = false): Promise<{ email: string; inviteCodes: string[] }> {
   if (password.length < 8) throw new Error('DEMO_PASSWORD must be at least 8 characters');
   const at = (days: number) => new Date(now.getTime() + days * DAY);
   const client = await pool.connect();
@@ -259,12 +282,16 @@ export async function seedDemo(pool: Pool, password: string, now = new Date()): 
 
         const submitters = league.members.filter((k) => round.picks[k]);
         for (const [n, who] of submitters.entries()) {
-          const [title, artist, service = 'youtube_music', comment] = round.picks[who];
+          const [pickTitle, pickArtist, pickService = 'youtube_music', comment] = round.picks[who];
           const slug = `${league.code}-${i + 1}-${who}`.toLowerCase();
+          const real = useReal ? REAL[slug] : undefined;
+          const title = real?.title ?? pickTitle;
+          const artist = real?.artist ?? pickArtist;
+          const service = real ? real.service ?? 'youtube_music' : pickService;
           const s = await client.query<{ id: string }>(
-            `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist, comment, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-            [roundId, ids[who], service, `demo-${slug}`, title, artist, comment ?? null, at(Math.min(opens + 0.1 * (n + 1), -0.01))],
+            `INSERT INTO submissions (round_id, account_id, service, external_id, art_id, page_url, title, artist, comment, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+            [roundId, ids[who], service, real?.externalId ?? `demo-${slug}`, real?.artId ?? null, real?.pageUrl ?? null, title, artist, comment ?? null, at(Math.min(opens + 0.1 * (n + 1), -0.01))],
           );
           subIds.set(`${league.code}:${i + 1}:${who}`, s.rows[0].id);
         }
@@ -343,7 +370,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const pool = createPool();
   console.log(`Seeding demo data into ${new URL(process.env.DATABASE_URL!).host}`);
   migrate(pool)
-    .then(() => seedDemo(pool, password))
+    .then(() => seedDemo(pool, password, new Date(), process.env.DEMO_TRACKS === 'real'))
     .then((r) => console.log(`Seeded. Sign in as ${r.email}. Invite codes: ${r.inviteCodes.join(', ')}`))
     .finally(() => pool.end());
 }
