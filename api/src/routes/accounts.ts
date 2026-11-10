@@ -174,7 +174,8 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
   // other players' scores. What stays, unlinked from any person: their submitted tracks, guesses,
   // comments, replies and reactions, and their league membership (shown as "A player"). What goes:
   // email, password, Google link, name, avatar, push tokens, notification settings and inbox,
-  // favorites and exports, and any pending sign-in/reset tokens. Every session dies via deleted_at.
+  // favorites and exports, their removed-from-league marks, the reporter link on reports they filed,
+  // and any pending sign-in/reset tokens. round_exports rows stay: the first player's row is the round's shared playlist. Every session dies via deleted_at.
   router.delete('/accounts/me', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const { password, confirmEmail } = (req.body ?? {}) as Record<string, unknown>;
@@ -219,9 +220,11 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
         res.status(409).json({ error: "You're hosting a league that's still playing. Wait until its season ends, then delete your account." });
         return;
       }
-      for (const table of ['push_tokens', 'notification_settings', 'notifications', 'favorites', 'favorite_exports', 'auth_tokens']) {
+      for (const table of ['push_tokens', 'notification_settings', 'notifications', 'favorites', 'favorite_exports', 'auth_tokens', 'league_removed']) {
         await client.query(`DELETE FROM ${table} WHERE account_id = $1`, [accountId]);
       }
+      // Reports they filed stay for moderation, minus the link back to them.
+      await client.query('UPDATE reports SET reporter_id = NULL WHERE reporter_id = $1', [accountId]);
       await client.query(
         `UPDATE accounts SET email = 'deleted-' || id || '@deleted.invalid', password_hash = NULL, google_sub = NULL, apple_sub = NULL,
                 display_name = NULL, pronouns = NULL, about_me = NULL, avatar = NULL, avatar_content_type = NULL, avatar_updated_at = NULL, deleted_at = now()

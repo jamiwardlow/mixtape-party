@@ -86,6 +86,29 @@ describe('DELETE /accounts/me', () => {
     expect(overview.status).toBe(200);
   });
 
+  it('unlinks reports they filed and clears removed-from-league marks, but keeps the shared playlist record', async () => {
+    const { app } = buildApp(testDb.pool);
+    const league = await createLeagueWithPlayers(app, 3);
+    const leaver = league.members[1];
+    const other = league.members[2];
+    await testDb.pool.query("INSERT INTO league_removed (league_id, account_id) VALUES ($1, $2)", [league.leagueId, leaver.accountId]);
+    await testDb.pool.query(
+      "INSERT INTO reports (reporter_id, reported_account_id, target_type, target_id, reason) VALUES ($1, $2, 'avatar', $2, 'spam')",
+      [leaver.accountId, other.accountId],
+    );
+    await testDb.pool.query(
+      "INSERT INTO round_exports (round_id, account_id, service, playlist_external_id) VALUES ($1, $2, 'youtube_music', 'pl-1')",
+      [league.roundId, leaver.accountId],
+    );
+
+    expect((await del(app, leaver.token)).status).toBe(204);
+
+    expect(await count('SELECT count(*) n FROM league_removed WHERE account_id = $1', [leaver.accountId])).toBe(0);
+    expect(await count('SELECT count(*) n FROM reports WHERE reporter_id = $1', [leaver.accountId])).toBe(0);
+    expect(await count('SELECT count(*) n FROM reports WHERE reporter_id IS NULL AND reported_account_id = $1', [other.accountId])).toBe(1);
+    expect(await count('SELECT count(*) n FROM round_exports WHERE round_id = $1', [league.roundId])).toBe(1);
+  });
+
   it('blocks the host of a season still in progress, naming the problem', async () => {
     const { app } = buildApp(testDb.pool);
     const league = await createLeagueWithPlayers(app, 2);
