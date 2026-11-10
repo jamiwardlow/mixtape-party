@@ -782,6 +782,51 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     res.json({ rounds: updated.rows.map(serializeRound) });
   });
 
+  // Host drops a round from the season. Later rounds renumber to close the gap and keep their
+  // deadlines (ponytail: no slide back in time -- the host can pull the next round forward with
+  // PATCH). Same freeze as PATCH: a finished round's results are published, so it stays.
+  router.delete('/rounds/:roundId', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const round = await loadRound(deps.pool, req.params.roundId);
+    if (!round) {
+      res.status(404).json({ error: 'round not found' });
+      return;
+    }
+    const league = await loadLeague(deps.pool, round.leagueId);
+    if (league?.hostAccountId !== accountId) {
+      res.status(403).json({ error: 'only the league host can delete a round' });
+      return;
+    }
+    if (new Date(round.guessingDeadline) <= new Date()) {
+      res.status(409).json({ error: 'this round is over and can no longer be deleted' });
+      return;
+    }
+    const client = await deps.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const left = await client.query('SELECT count(*)::int AS n FROM rounds WHERE league_id = $1', [round.leagueId]);
+      if (left.rows[0].n <= 1) {
+        await client.query('ROLLBACK');
+        res.status(409).json({ error: 'a season needs at least one round; delete the league instead' });
+        return;
+      }
+      // Submissions, guesses and exports cascade off the round.
+      await client.query('DELETE FROM rounds WHERE id = $1', [req.params.roundId]);
+      // UNIQUE (league_id, round_number) is checked per row, so a straight decrement can collide
+      // mid-statement; park the renumbered rounds on negatives first.
+      await client.query('UPDATE rounds SET round_number = -round_number WHERE league_id = $1 AND round_number > $2', [round.leagueId, round.roundNumber]);
+      await client.query('UPDATE rounds SET round_number = -round_number - 1 WHERE league_id = $1 AND round_number < 0', [round.leagueId]);
+      await client.query('UPDATE leagues SET season_length = season_length - 1 WHERE id = $1', [round.leagueId]);
+      await client.query('COMMIT');
+      res.status(204).end();
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
   // Rounds, memberships, submissions, guesses and notifications all hang off the league with
   // ON DELETE CASCADE, so one DELETE removes the whole season.
   router.delete('/leagues/:leagueId', requireAuth(deps), async (req, res) => {

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView } from 'react-native';
+import { Alert, Platform, ScrollView } from 'react-native';
 import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import { ThemeIdeas } from '../../../lib/ThemeIdeas';
@@ -105,6 +105,35 @@ export default function LeagueSchedule() {
     }
   }
 
+  function confirmDelete(round: Round) {
+    const remove = async () => {
+      if (!token) return;
+      setSaving(true);
+      try {
+        const res = await fetchApi(`/rounds/${round.id}`, { method: 'DELETE', token });
+        if (!res.ok) {
+          setError((await res.json().catch(() => null))?.error ?? 'Could not delete this round');
+          return;
+        }
+        // The API renumbers the rounds after it; mirror that rather than refetching.
+        setRounds((prev) => prev && prev.filter((r) => r.id !== round.id).map((r, i) => ({ ...r, number: i + 1 })));
+        setError(null);
+        setDraft(null);
+      } finally {
+        setSaving(false);
+      }
+    };
+    const msg = 'Its tracks and guesses will be deleted, and later rounds move up a number.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Delete round ${round.number}? ${msg}`)) remove();
+    } else {
+      Alert.alert(`Delete round ${round.number}?`, msg, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: remove },
+      ]);
+    }
+  }
+
   // Read once per render rather than per round, so the whole list agrees on where "now" falls.
   const now = new Date();
   // RoundGate below never renders the list until this is non-null; the fallback is for the types.
@@ -158,6 +187,9 @@ export default function LeagueSchedule() {
                     />
                     <TapeButton title={saving ? 'Saving…' : 'Save'} onPress={save} disabled={saving} />
                     <TapeButton title="Cancel" onPress={() => setDraft(null)} variant="secondary" disabled={saving} />
+                    {season.length > 1 && (
+                      <TapeButton title="Delete round" onPress={() => confirmDelete(round)} variant="danger" disabled={saving} />
+                    )}
                   </>
                 ) : (
                   <>

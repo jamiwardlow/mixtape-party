@@ -453,6 +453,34 @@ describe('GET /leagues/mine', () => {
   });
 });
 
+describe('DELETE /rounds/:roundId', () => {
+  it('lets the host drop a future round and renumbers the rest', async () => {
+    const { app } = buildApp();
+    const { host, leagueId, rounds } = await createSeason(app, 'delete-round@example.com');
+    const res = await request(app).delete(`/rounds/${rounds[2].id}`).set('Authorization', `Bearer ${host.token}`);
+    expect(res.status).toBe(204);
+    const after = await scheduleOf(leagueId);
+    expect(after.map((r) => [r.id, r.round_number])).toEqual([
+      [rounds[0].id, 1],
+      [rounds[1].id, 2],
+      [rounds[3].id, 3],
+    ]);
+    const len = await testDb.pool.query('SELECT season_length FROM leagues WHERE id = $1', [leagueId]);
+    expect(len.rows[0].season_length).toBe(3);
+  });
+
+  it('refuses a non-host and a finished round', async () => {
+    const { app } = buildApp();
+    const { host, rounds } = await createSeason(app, 'delete-round-403@example.com');
+    const other = await signUp(app, 'delete-round-other@example.com');
+    const forbidden = await request(app).delete(`/rounds/${rounds[2].id}`).set('Authorization', `Bearer ${other.token}`);
+    expect(forbidden.status).toBe(403);
+    await closeGuessingWindow(rounds[0].id);
+    const over = await request(app).delete(`/rounds/${rounds[0].id}`).set('Authorization', `Bearer ${host.token}`);
+    expect(over.status).toBe(409);
+  });
+});
+
 describe('PATCH /rounds/:roundId', () => {
   const DAY = 24 * 60 * 60 * 1000;
 
