@@ -208,7 +208,7 @@ export default function SignIn() {
         <BodyText>
           We sent a sign-in link to <BodyText style={styles.bold}>{email}</BodyText>. Tap it on this device and you're in.
         </BodyText>
-        <TapeButton title="Open mail app" variant="secondary" onPress={() => Linking.openURL('mailto:')} />
+        <TapeButton title="Open Mail" variant="secondary" onPress={() => Linking.openURL(Platform.OS === 'ios' ? 'message://' : 'mailto:')} />
         {errorNote}
         <Label style={styles.link} onPress={emailSignInLink}>
           {busy === 'link' ? 'Sending link…' : 'Resend link'}

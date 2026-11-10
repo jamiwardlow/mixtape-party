@@ -68,8 +68,8 @@ describe('inbox extras', () => {
     expect(screen.getByText('Contact')).toBeTruthy();
     await typeEmail();
     await fireEvent.press(screen.getByText('Email me a link'));
-    await fireEvent.press(await screen.findByText('Open mail app'));
-    expect(open).toHaveBeenCalledWith('mailto:');
+    await fireEvent.press(await screen.findByText('Open Mail'));
+    expect(open).toHaveBeenCalledWith('message://');
   });
 });
 
