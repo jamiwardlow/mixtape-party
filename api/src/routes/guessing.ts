@@ -5,6 +5,7 @@ import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.j
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
 import { PLAYLIST_URL } from './export.js';
+import { blockedIds, maskBlocked } from './blocks.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { parseComment } from './submissions.js';
 
@@ -102,6 +103,8 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       [round.leagueId, accountId],
     );
 
+    const blocked = await blockedIds(deps.pool, accountId);
+
     const submissions = await deps.pool.query<{
       id: string;
       service: 'youtube_music' | 'bandcamp';
@@ -160,7 +163,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     res.json({
       tracks,
-      players: playersResult.rows.map((row) => ({ accountId: row.account_id, displayName: row.display_name })),
+      players: playersResult.rows.map((row) => maskBlocked({ accountId: row.account_id, displayName: row.display_name }, blocked)),
     });
   });
 

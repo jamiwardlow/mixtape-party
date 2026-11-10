@@ -65,6 +65,21 @@ describe('GET /rounds/:roundId/guessing', () => {
     expect(res.body.players.map((p: { accountId: string }) => p.accountId)).not.toContain(members[0].accountId);
   });
 
+  it('shows a player the requester blocked as "Blocked player"', async () => {
+    const { app } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
+    await closeSubmissionWindow(roundId);
+    await request(app).put(`/blocks/${members[1].accountId}`).set('Authorization', `Bearer ${members[0].token}`).expect(204);
+
+    const res = await request(app)
+      .get(`/rounds/${roundId}/guessing`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    const names = Object.fromEntries(res.body.players.map((p: { accountId: string; displayName: string }) => [p.accountId, p.displayName]));
+    expect(names[members[1].accountId]).toBe('Blocked player');
+    expect(names[members[2].accountId]).not.toBe('Blocked player');
+  });
+
   it('includes the requester own submission, flagged as theirs and nobody else\'s', async () => {
     const { app } = buildApp();
     const { roundId, members, submissions } = await createLeagueWithPlayers(app, 4);
