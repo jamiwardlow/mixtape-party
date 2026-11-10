@@ -4,6 +4,7 @@ import Home from '../home';
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
 }));
 
 let mockProfile: { email: string; displayName?: string | null } = { email: 'ada@example.com' };

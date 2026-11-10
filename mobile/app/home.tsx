@@ -1,7 +1,7 @@
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { fetchApi } from "../lib/api";
+import { fetchApi, onOfflineChange } from "../lib/api";
 import { useSession } from "../lib/session";
 import { deviceStorage } from "../lib/storage";
 import { phaseLabel, type RoundPhase } from "../lib/rounds";
@@ -84,12 +84,30 @@ export default function Home() {
 
   async function loadLeagues() {
     if (!token) return;
-    const res = await fetchApi("/leagues/mine", { token });
-    if (res.ok) setLeagues((await res.json()).leagues);
+    try {
+      const res = await fetchApi("/leagues/mine", { token });
+      if (res.ok) setLeagues((await res.json()).leagues);
+    } catch {
+      // offline: the banner explains; the next focus retries
+    }
   }
 
+  // Refetch on every focus: home stays mounted under pushed screens, so a one-shot load on token
+  // change never retries after a failed (offline) first load.
+  useFocusEffect(
+    useCallback(() => {
+      loadLeagues();
+    }, [token]),
+  );
+
+  // Reload when connectivity returns while staying on home (focus won't fire). Only the
+  // offline -> online edge, since every successful request notifies false.
   useEffect(() => {
-    loadLeagues();
+    let wasOffline = false;
+    return onOfflineChange((offline) => {
+      if (wasOffline && !offline) loadLeagues();
+      wasOffline = offline;
+    });
   }, [token]);
 
   useEffect(() => {
