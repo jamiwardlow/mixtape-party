@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { fetchApi } from '../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { BodyText, ErrorNote, HandText, Page, ReelSpinner, TapeButton } from '../../lib/ui';
 
@@ -21,11 +21,13 @@ export default function JoinLeague() {
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     // The param is not guaranteed to be populated on a pre-rendered route's first render, and
     // fetching `/invite/undefined` would 404 and call a perfectly good invite invalid. Hold the
     // spinner instead of latching an error: the effect re-runs when `code` arrives.
     if (!code) return;
+    setError(null);
     (async () => {
       try {
         const res = await fetchApi(`/leagues/invite/${code}`);
@@ -41,7 +43,7 @@ export default function JoinLeague() {
         setError("Couldn't reach the server. Try again.");
       }
     })();
-  }, [code]);
+  }, [code, epoch]);
 
   const canJoin = token !== null;
   const over = preview !== null && preview.currentRound === null;

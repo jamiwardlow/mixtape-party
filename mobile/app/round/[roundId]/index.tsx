@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { usePreview } from '../../../lib/preview';
 import {
   PHASE_META,
@@ -72,8 +72,10 @@ export default function RoundOverview() {
   const openInService = useCallback(() => mine && Linking.openURL(playbackHref(mine.playback)), [mine]);
   const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token) return;
+    setError(null);
     (async () => {
       const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
       if (!res.ok) {
@@ -82,7 +84,7 @@ export default function RoundOverview() {
       }
       setOverview(await res.json());
     })();
-  }, [token, roundId]);
+  }, [token, roundId, epoch]);
 
   if (!overview) {
     return (

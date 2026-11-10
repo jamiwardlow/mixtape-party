@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { FlatList, Linking, View } from 'react-native';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import { usePreview } from '../../../lib/preview';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
@@ -35,8 +35,10 @@ export default function GuessRound() {
   // Per-track comment drafts, sent with the guess and editable (saved separately) after it.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token) return;
+    setError(null);
     (async () => {
       const res = await fetchApi(`/rounds/${roundId}/guessing`, { token });
       if (!res.ok) {
@@ -59,7 +61,7 @@ export default function GuessRound() {
         // The link is a convenience; the guessing screen already works without it.
       }
     })();
-  }, [token, roundId]);
+  }, [token, roundId, epoch]);
 
   async function guess(submissionId: string, guessedAccountId: string) {
     if (!token) return;

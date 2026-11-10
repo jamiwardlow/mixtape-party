@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
-import { fetchApi } from '../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../lib/api';
 import { Avatar } from '../../lib/Avatar';
 import { BestieGroup, type Bestie } from '../../lib/BestieGroup';
 import { FavoritesList, type Favorite } from '../../lib/FavoritesList';
@@ -47,15 +47,17 @@ export default function Player() {
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token || !id) return;
+    setError(null);
     fetchApi(`/players/${id}`, { token })
       .then(async (res) => {
         if (res.ok) setPlayer(await res.json());
         else setError(res.status === 404 ? "Couldn't find that player." : "Couldn't load this profile.");
       })
       .catch(() => setError("Couldn't reach the server. Try again."));
-  }, [token, id]);
+  }, [token, id, epoch]);
 
   return (
     <Screen label="Player">

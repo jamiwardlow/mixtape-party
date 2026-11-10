@@ -5,7 +5,7 @@ import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { onOfflineChange } from '../lib/api';
+import { fetchApi, onOfflineChange } from '../lib/api';
 import { ErrorNote } from '../lib/ui';
 import { useOpenTappedNotification } from '../lib/notificationTap';
 import { useRegisterPushToken } from '../lib/pushToken';
@@ -81,6 +81,12 @@ function OfflineBanner() {
   const [offline, setOffline] = useState(false);
   const { top } = useSafeAreaInsets();
   useEffect(() => onOfflineChange(setOffline), []);
+  // iOS fires nothing when airplane mode ends and screens only fetch once, so probe until the API answers.
+  useEffect(() => {
+    if (!offline) return;
+    const t = setInterval(() => fetchApi('/health').catch(() => {}), 3000);
+    return () => clearInterval(t);
+  }, [offline]);
   if (!offline) return null;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', top: top + 4, left: 16, right: 16, zIndex: 10, alignItems: 'center' }}>

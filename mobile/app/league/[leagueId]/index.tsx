@@ -2,7 +2,7 @@ import * as Linking from 'expo-linking';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import {
@@ -117,10 +117,11 @@ export default function LeagueOverview() {
     setOverview(await res.json());
   }
   // Refetch on every focus: coming back from submit leaves this screen mounted, so it'd show stale state.
+  const epoch = useReconnectEpoch();
   useFocusEffect(
     useCallback(() => {
       if (token) load();
-    }, [token, leagueId]),
+    }, [token, leagueId, epoch]),
   );
 
   function confirmRemove(member: Player) {

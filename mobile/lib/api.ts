@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 type OfflineListener = (offline: boolean) => void;
@@ -9,7 +11,21 @@ export function onOfflineChange(cb: OfflineListener): () => void {
   return () => void offlineListeners.delete(cb);
 }
 
-const notify = (offline: boolean) => offlineListeners.forEach((cb) => cb(offline));
+let wasOffline = false;
+let reconnects = 0;
+
+const notify = (offline: boolean) => {
+  if (wasOffline && !offline) reconnects++;
+  wasOffline = offline;
+  offlineListeners.forEach((cb) => cb(offline));
+};
+
+/** Bumps on every offline -> online edge. Put it in a load effect's deps so the screen refetches. */
+export function useReconnectEpoch(): number {
+  const [, force] = useState(0);
+  useEffect(() => onOfflineChange(() => force((n) => n + 1)), []);
+  return reconnects;
+}
 
 export function fetchApi(
   path: string,

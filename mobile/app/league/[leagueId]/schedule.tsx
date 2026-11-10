@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import { ThemeIdeas } from '../../../lib/ThemeIdeas';
 import {
@@ -48,8 +48,10 @@ export default function LeagueSchedule() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token) return;
+    setError(null);
     (async () => {
       const res = await fetchApi(`/leagues/${leagueId}/rounds`, { token });
       if (!res.ok) {
@@ -60,7 +62,7 @@ export default function LeagueSchedule() {
       setRounds(body.rounds);
       setIsHost(body.isHost);
     })();
-  }, [token, leagueId]);
+  }, [token, leagueId, epoch]);
 
   async function save() {
     if (!draft || !token) return;

@@ -1,7 +1,7 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { BestieGroup, type Bestie } from '../../../lib/BestieGroup';
 import { type SeasonResult as Overview } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
@@ -16,8 +16,10 @@ export default function SeasonWrapUp() {
   const [besties, setBesties] = useState<{ guessedMe: Bestie[]; iGuessed: Bestie[] } | null>(null);
   const [bestiesError, setBestiesError] = useState<string | null>(null);
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token) return;
+    setError(null);
     let live = true;
     (async () => {
       const res = await fetchApi(`/leagues/${leagueId}/overview`, { token });
@@ -37,7 +39,7 @@ export default function SeasonWrapUp() {
     return () => {
       live = false;
     };
-  }, [token, leagueId]);
+  }, [token, leagueId, epoch]);
 
   if (!overview) {
     return (

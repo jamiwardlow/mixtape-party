@@ -2,7 +2,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { ReportBlock } from '../../../lib/Moderation';
 import { PlayerLink } from '../../../lib/PlayerLink';
@@ -426,6 +426,7 @@ export default function RoundResults() {
     scroller.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
   };
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token) return;
     (async () => {
@@ -443,7 +444,7 @@ export default function RoundResults() {
       const { services } = (await exported.json()) as { services: ServiceExport[] };
       setExports(services);
     })();
-  }, [token, roundId]);
+  }, [token, roundId, epoch]);
 
   const playlists = exports.flatMap((e) => (e.playlistUrl ? [{ ...e, playlistUrl: e.playlistUrl }] : []));
   const problems = exports.flatMap((e) => {

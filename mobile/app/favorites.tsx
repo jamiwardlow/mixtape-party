@@ -2,7 +2,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
-import { fetchApi } from '../lib/api';
+import { fetchApi, useReconnectEpoch } from '../lib/api';
 import { FavoritesList, type Favorite } from '../lib/FavoritesList';
 import { usePreview } from '../lib/preview';
 import { playbackHref } from '../lib/rounds';
@@ -35,8 +35,10 @@ export default function Favorites() {
   // /favorites carries no playback link, so a track with no preview just says so.
   const { playingId, toggle } = usePreview(previewPath, token, setNoPreview);
 
+  const epoch = useReconnectEpoch();
   useEffect(() => {
     if (!token) return;
+    setError(null);
     fetchApi('/favorites', { token })
       .then(async (res) => {
         if (!res.ok) return setError("Couldn't load your favorites.");
@@ -45,7 +47,7 @@ export default function Favorites() {
         setPlaylistUrl(body.playlistUrl);
       })
       .catch(() => setError("Couldn't reach the server. Try again."));
-  }, [token]);
+  }, [token, epoch]);
 
   async function unfavorite(submissionId: string) {
     if (!token) return;
