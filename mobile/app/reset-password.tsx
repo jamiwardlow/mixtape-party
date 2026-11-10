@@ -62,7 +62,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <Screen label="New password">
+    <Screen label="New password" tapAway>
       <BodyText>Pick a new password for your account.</BodyText>
       <TapeInput placeholder="New password" secureTextEntry value={password} onChangeText={setPassword} />
       <Label>At least 8 characters.</Label>

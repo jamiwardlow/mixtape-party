@@ -1,4 +1,4 @@
-import { type Ref, useEffect, useRef, useState } from 'react';
+import { Fragment, type Ref, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -68,18 +68,20 @@ export function Page({ children }: { children: React.ReactNode }) {
 }
 
 /** `wide` screens (lists, standings) get the design's 1120px wrap; forms stay a readable column. */
-export function Screen({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
+export function Screen({ label, wide, tapAway, children }: { label: string; wide?: boolean; tapAway?: boolean; children: React.ReactNode }) {
   const t = useTheme();
+  // TapAwayDismiss claims the touch responder and kills ScrollView scrolling on iOS, so only non-scrolling form screens opt in.
+  const Wrap = tapAway ? TapAwayDismiss : Fragment;
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: t.bg }]} edges={['top', 'bottom']}>
-      <TapAwayDismiss>
+      <Wrap>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.wrap, { maxWidth: wide ? 1120 : 640 }]}>
           <View style={styles.header}>
             <Text accessibilityRole="header" style={[styles.headerText, { color: t.ink, fontFamily: t.font.display }]}>{label}</Text>
           </View>
           <View style={styles.body}>{children}</View>
         </KeyboardAvoidingView>
-      </TapAwayDismiss>
+      </Wrap>
     </SafeAreaView>
   );
 }

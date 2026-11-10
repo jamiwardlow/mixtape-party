@@ -38,7 +38,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <Screen label="Forgot password">
+    <Screen label="Forgot password" tapAway>
       <BodyText>Enter your email and we'll send you a link to set a new password.</BodyText>
       <TapeInput
         placeholder="Email"

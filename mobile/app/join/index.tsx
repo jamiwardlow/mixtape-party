@@ -10,7 +10,7 @@ export default function JoinWithCode() {
   const submit = () => trimmed && router.push(`/join/${encodeURIComponent(trimmed)}`);
 
   return (
-    <Screen label="Got a code?">
+    <Screen label="Got a code?" tapAway>
       <BodyText>Type the invite code a friend sent you.</BodyText>
       <TapeInput
         placeholder="Invite code"
