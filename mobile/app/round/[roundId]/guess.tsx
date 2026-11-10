@@ -8,6 +8,7 @@ import { usePreview } from '../../../lib/preview';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, Chip, ErrorNote, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
+import { openPlaybackLink } from '../../../lib/bandcamp';
 
 interface Track {
   submissionId: string;
@@ -119,7 +120,7 @@ export default function GuessRound() {
   const openInService = useCallback(
     (submissionId: string) => {
       const track = tracks?.find((t) => t.submissionId === submissionId);
-      if (track) Linking.openURL(playbackHref(track.playback));
+      if (track) openPlaybackLink(playbackHref(track.playback));
     },
     [tracks],
   );

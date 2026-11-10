@@ -1,5 +1,7 @@
 // Mirrors the data-tralbum parse in api/src/adapters/bandcampAdapter.ts. Bandcamp bot-walls our
 // server, so on a device (residential IP) we read the page ourselves and send the result.
+import { Linking, Platform } from 'react-native';
+
 const ENTITIES: Record<string, string> = { quot: '"', amp: '&', apos: "'", lt: '<', gt: '>' };
 
 function decodeHtmlEntities(value: string): string {
@@ -39,16 +41,32 @@ export async function resolveBandcampUrl(url: string): Promise<ResolvedBandcamp 
   }
 }
 
-/** Device-side twin of BandcampAdapter.getPreviewUrl: the signed mp3-128 of the first track. */
-export async function fetchBandcampPreview(embedId: string): Promise<string | null> {
+async function fetchPlayerData(embedId: string): Promise<any | null> {
   try {
     if (!/^(track|album)=\d{1,20}$/.test(embedId)) return null;
     const res = await fetch(`https://bandcamp.com/EmbeddedPlayer/${embedId}`);
     if (!res.ok) return null;
     const encoded = (await res.text()).match(/data-player-data="([^"]*)"/)?.[1];
-    if (!encoded) return null;
-    return JSON.parse(decodeHtmlEntities(encoded))?.tracks?.[0]?.file?.['mp3-128'] ?? null;
+    return encoded ? JSON.parse(decodeHtmlEntities(encoded)) : null;
   } catch {
     return null;
   }
+}
+
+/** Device-side twin of BandcampAdapter.getPreviewUrl: the signed mp3-128 of the first track. */
+export async function fetchBandcampPreview(embedId: string): Promise<string | null> {
+  return (await fetchPlayerData(embedId))?.tracks?.[0]?.file?.['mp3-128'] ?? null;
+}
+
+const EMBED_HREF = /^https:\/\/player\.bandcamp\.com\/EmbeddedPlayer\/((?:track|album)=\d{1,20})\//;
+
+/**
+ * Opens a playback link. Bandcamp's is the bare embedded player, so on a device (where Bandcamp
+ * doesn't bot-wall us) swap it for the track's real page, which the OS can hand to the Bandcamp app
+ * or a browser. Web can't (CORS, and an await would lose the popup allowance), so it keeps the player.
+ */
+export async function openPlaybackLink(href: string): Promise<void> {
+  const id = Platform.OS === 'web' ? undefined : href.match(EMBED_HREF)?.[1];
+  const linkback = id ? (await fetchPlayerData(id))?.linkback : undefined;
+  await Linking.openURL(typeof linkback === 'string' && linkback.startsWith('https://') ? linkback : href);
 }

@@ -27,6 +27,7 @@ import {
   TapeButton,
   TapeInput,
 } from '../../../lib/ui';
+import { openPlaybackLink } from '../../../lib/bandcamp';
 
 interface Reply {
   replyId: string;
@@ -399,7 +400,7 @@ export default function RoundResults() {
   const openInService = useCallback(
     (submissionId: string) => {
       const track = results?.tracks.find((t) => t.submissionId === submissionId);
-      if (track) Linking.openURL(playbackHref(track.playback));
+      if (track) openPlaybackLink(playbackHref(track.playback));
     },
     [results],
   );

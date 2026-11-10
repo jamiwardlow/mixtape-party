@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { ScrollView, Linking, Platform, Text, View } from 'react-native';
+import { ScrollView, Platform, Text, View } from 'react-native';
 import { usePreview } from '../../../lib/preview';
 import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { fetchApi } from '../../../lib/api';
@@ -8,6 +8,7 @@ import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
 import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
 import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
+import { openPlaybackLink } from '../../../lib/bandcamp';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -64,7 +65,7 @@ export default function SubmitTrack() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit, token, roundId]);
   // Your own track previews before guessing opens; with no preview it opens in its service.
-  const openInService = useCallback(() => current && Linking.openURL(playbackHref(current.playback)), [current]);
+  const openInService = useCallback(() => current && openPlaybackLink(playbackHref(current.playback)), [current]);
   const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
@@ -81,7 +82,7 @@ export default function SubmitTrack() {
   const openResult = useCallback(
     (externalId: string) => {
       const r = results.find((x) => x.externalId === externalId);
-      if (r) Linking.openURL(playbackHref(r.playback));
+      if (r) openPlaybackLink(playbackHref(r.playback));
     },
     [results],
   );

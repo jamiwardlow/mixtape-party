@@ -7,7 +7,6 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   PressableProps,
@@ -28,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import type { RoundPhase, ServiceName } from './rounds';
 import { SERVICE_META, useTheme } from './theme';
+import { openPlaybackLink } from './bandcamp';
 
 // Sticker Pop primitives. Component names predate the design; screens import them as-is.
 
@@ -188,7 +188,7 @@ export function TrackRow({
           numberOfLines={stacked ? 2 : undefined}
           style={href ? { textDecorationLine: 'underline' } : undefined}
           accessibilityRole={href ? 'link' : undefined}
-          onPress={href ? () => Linking.openURL(href) : undefined}
+          onPress={href ? () => openPlaybackLink(href) : undefined}
         >
           {stacked ? title : `${title} — ${artist}`}
         </BodyText>

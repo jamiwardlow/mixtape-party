@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { usePreview } from '../../../lib/preview';
 import {
@@ -15,6 +15,7 @@ import {
 } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { BodyText, DeadlineRows, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
+import { openPlaybackLink } from '../../../lib/bandcamp';
 
 /** The one round, as `GET /rounds/:roundId/overview` describes it — the season page's entry. */
 interface RoundDetail {
@@ -69,7 +70,7 @@ export default function RoundOverview() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mine = overview?.round.you.submission;
-  const openInService = useCallback(() => mine && Linking.openURL(playbackHref(mine.playback)), [mine]);
+  const openInService = useCallback(() => mine && openPlaybackLink(playbackHref(mine.playback)), [mine]);
   const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
 
   const epoch = useReconnectEpoch();
