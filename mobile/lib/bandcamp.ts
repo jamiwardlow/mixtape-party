@@ -1,6 +1,6 @@
 // Mirrors the data-tralbum parse in api/src/adapters/bandcampAdapter.ts. Bandcamp bot-walls our
 // server, so on a device (residential IP) we read the page ourselves and send the result.
-import { Linking, Platform } from 'react-native';
+import { Linking } from 'react-native';
 
 const ENTITIES: Record<string, string> = { quot: '"', amp: '&', apos: "'", lt: '<', gt: '>' };
 
@@ -60,15 +60,5 @@ export async function fetchBandcampPreview(embedId: string): Promise<string | nu
   return (await fetchPlayerData(embedId))?.tracks?.[0]?.file?.['mp3-128'] ?? null;
 }
 
-const EMBED_HREF = /^https:\/\/player\.bandcamp\.com\/EmbeddedPlayer\/((?:track|album)=\d{1,20})\//;
-
-/**
- * Opens a playback link. Bandcamp's is the bare embedded player, so on a device (where Bandcamp
- * doesn't bot-wall us) swap it for the track's real page, which the OS can hand to the Bandcamp app
- * or a browser. Web can't (CORS, and an await would lose the popup allowance), so it keeps the player.
- */
-export async function openPlaybackLink(href: string): Promise<void> {
-  const id = Platform.OS === 'web' ? undefined : href.match(EMBED_HREF)?.[1];
-  const linkback = id ? (await fetchPlayerData(id))?.linkback : undefined;
-  await Linking.openURL(typeof linkback === 'string' && linkback.startsWith('https://') ? linkback : href);
-}
+/** Opens a playback link. For Bandcamp the API now returns the track's real page (#197). */
+export const openPlaybackLink = (href: string) => Linking.openURL(href);
