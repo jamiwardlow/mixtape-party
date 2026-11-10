@@ -40,6 +40,7 @@ interface TralbumData {
   art_id?: number;
   artist?: string;
   current?: { title?: string };
+  trackinfo?: { track_id?: number; track_num?: number; title?: string }[];
 }
 
 /**
@@ -106,13 +107,17 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
       return null;
     }
 
-    return {
-      externalId: `${itemType}=${id}`,
-      title,
-      artist,
-      service: this.service,
-      artId: typeof data?.art_id === 'number' ? data.art_id : undefined,
-    };
+    const artId = typeof data?.art_id === 'number' ? data.art_id : undefined;
+
+    // An album URL with `?t=N` points at one track; the album id alone would play track 1. N is the
+    // track number, so pick that entry and use its track id.
+    const wanted = itemType === 'album' ? Number(parsed.searchParams.get('t')) : NaN;
+    const picked = data?.trackinfo?.find((t) => t.track_num === wanted);
+    if (picked && typeof picked.track_id === 'number' && picked.title) {
+      return { externalId: `track=${picked.track_id}`, title: picked.title, artist, service: this.service, artId };
+    }
+
+    return { externalId: `${itemType}=${id}`, title, artist, service: this.service, artId };
   }
 
   private async submitEmbed(kind: string, id: string): Promise<TrackResult | null> {

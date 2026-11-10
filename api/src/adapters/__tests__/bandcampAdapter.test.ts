@@ -55,6 +55,25 @@ describe('BandcampAdapter.submit', () => {
     });
   });
 
+  it('resolves an album URL with ?t=N to that track, not the album', async () => {
+    const blob = JSON.stringify({
+      id: 9,
+      item_type: 'album',
+      artist: 'A',
+      art_id: 5,
+      current: { title: 'Album' },
+      trackinfo: [
+        { track_num: 1, track_id: 11, title: 'One' },
+        { track_num: 2, track_id: 22, title: 'Two' },
+      ],
+    }).replace(/"/g, '&quot;');
+    stubFetch(`<div data-tralbum="${blob}"></div>`);
+
+    const result = await new BandcampAdapter().submit('https://a.bandcamp.com/album/x?t=2');
+
+    expect(result).toMatchObject({ externalId: 'track=22', title: 'Two', artist: 'A', artId: 5 });
+  });
+
   // The whole blob arrives HTML-escaped, so a title with an apostrophe or an ampersand only
   // survives if every entity Bandcamp emits decodes. `&amp;` must not decode twice, or the `&quot;`
   // it precedes turns into a quote that breaks the JSON parse.
