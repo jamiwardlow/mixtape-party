@@ -5,6 +5,7 @@ import RoundOverview from '../round/[roundId]/index';
 jest.mock('expo-audio', () => ({ createAudioPlayer: jest.fn() }));
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
   useLocalSearchParams: () => ({ roundId: 'r2' }),
 }));
 

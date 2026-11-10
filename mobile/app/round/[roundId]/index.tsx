@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { usePreview } from '../../../lib/preview';
@@ -73,18 +73,22 @@ export default function RoundOverview() {
   const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
 
   const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!token) return;
-    setError(null);
-    (async () => {
-      const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not load this round');
-        return;
-      }
-      setOverview(await res.json());
-    })();
-  }, [token, roundId, epoch]);
+  // Refetch on every focus: this screen stays mounted under submit/guess, so a track just sent
+  // would otherwise show as missing until a remount.
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      setError(null);
+      (async () => {
+        const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
+        if (!res.ok) {
+          setError((await res.json().catch(() => null))?.error ?? 'Could not load this round');
+          return;
+        }
+        setOverview(await res.json());
+      })();
+    }, [token, roundId, epoch]),
+  );
 
   if (!overview) {
     return (
