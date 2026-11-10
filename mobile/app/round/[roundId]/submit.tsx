@@ -7,7 +7,7 @@ import { fetchApi } from '../../../lib/api';
 import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
 import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
-import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, Thumb, TrackRow } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -177,18 +177,20 @@ export default function SubmitTrack() {
         <>
           <Text accessibilityRole="header" style={{ color: t.ink, fontFamily: t.font.display, fontSize: 24, transform: [{ rotate: '-2deg' }] }}>Your pick</Text>
           <JCard>
-            <View testID="current-track" style={{ flexDirection: 'row', gap: 12 }}>
-              <Thumb url={current.thumbnailUrl} size={56} />
-              <View style={{ flex: 1, minWidth: 0, gap: 4, alignItems: 'flex-start' }}>
-                <BodyText>{current.title}</BodyText>
-                <Label>{current.artist}</Label>
-                <ServiceBadge service={current.service} />
-              </View>
-            </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <TapeButton title={playingId === current.submissionId ? '■ Stop' : '▶︎ Preview'} onPress={() => toggle(current.submissionId)} variant="secondary" />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <ServiceBadge service={current.service} />
               <TapeButton title="Change" onPress={() => setChanging(true)} variant="secondary" />
             </View>
+            <TrackRow
+              testID="current-track"
+              stacked
+              thumbnailUrl={current.thumbnailUrl}
+              title={current.title}
+              artist={current.artist}
+              href={playbackHref(current.playback)}
+              playing={playingId === current.submissionId}
+              onPlay={() => toggle(current.submissionId)}
+            />
           </JCard>
           {commentField}
         </>

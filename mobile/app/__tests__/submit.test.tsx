@@ -108,7 +108,7 @@ describe('search and submit', () => {
 
     await waitFor(() => expect(screen.getByTestId('current-track')).toBeTruthy());
     expect(screen.getByText('Your pick')).toBeTruthy();
-    expect(screen.getByText('Preview', { exact: false })).toBeTruthy();
+    expect(screen.getByLabelText('Play preview of Feeling Good')).toBeTruthy();
     expect(screen.getByText('Edit your track')).toBeTruthy();
   });
 
