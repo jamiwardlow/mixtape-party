@@ -467,6 +467,8 @@ describe('DELETE /rounds/:roundId', () => {
     ]);
     const len = await testDb.pool.query('SELECT season_length FROM leagues WHERE id = $1', [leagueId]);
     expect(len.rows[0].season_length).toBe(3);
+    // The round after the gap opens where the deleted one did, so submissions are never closed.
+    expect(after[2].submission_opens_at).toEqual(rounds[2].submission_opens_at);
   });
 
   it('refuses a non-host and a finished round', async () => {

@@ -812,6 +812,12 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       }
       // Submissions, guesses and exports cascade off the round.
       await client.query('DELETE FROM rounds WHERE id = $1', [req.params.roundId]);
+      // Round N+1 opens as round N's guessing closes, so with N gone it would sit closed until
+      // N's old deadline while N-1 is long over. Inherit N's open time; deadlines stay put.
+      await client.query(
+        'UPDATE rounds SET submission_opens_at = $1 WHERE league_id = $2 AND round_number = $3',
+        [round.submissionOpensAt, round.leagueId, round.roundNumber + 1],
+      );
       // UNIQUE (league_id, round_number) is checked per row, so a straight decrement can collide
       // mid-statement; park the renumbered rounds on negatives first.
       await client.query('UPDATE rounds SET round_number = -round_number WHERE league_id = $1 AND round_number > $2', [round.leagueId, round.roundNumber]);
