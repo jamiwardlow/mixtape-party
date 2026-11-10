@@ -199,13 +199,14 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       service: 'youtube_music' | 'bandcamp';
       external_id: string;
       art_id: string | null;
+      page_url: string | null;
       isrc: string | null;
       title: string;
       artist: string;
       comment: string | null;
       guessing_note: string | null;
       account_id: string;
-    }>('SELECT id, service, external_id, art_id, isrc, title, artist, comment, guessing_note, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
+    }>('SELECT id, service, external_id, art_id, page_url, isrc, title, artist, comment, guessing_note, account_id FROM submissions WHERE round_id = $1 ORDER BY id', [
       req.params.roundId,
     ]);
 

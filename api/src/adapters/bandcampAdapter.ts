@@ -114,10 +114,10 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
     const wanted = itemType === 'album' ? Number(parsed.searchParams.get('t')) : NaN;
     const picked = data?.trackinfo?.find((t) => t.track_num === wanted);
     if (picked && typeof picked.track_id === 'number' && picked.title) {
-      return { externalId: `track=${picked.track_id}`, title: picked.title, artist, service: this.service, artId };
+      return { externalId: `track=${picked.track_id}`, title: picked.title, artist, service: this.service, artId, pageUrl: parsed.toString() };
     }
 
-    return { externalId: `${itemType}=${id}`, title, artist, service: this.service, artId };
+    return { externalId: `${itemType}=${id}`, title, artist, service: this.service, artId, pageUrl: parsed.toString() };
   }
 
   private async submitEmbed(kind: string, id: string): Promise<TrackResult | null> {
@@ -149,12 +149,14 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
       artist: data.artist,
       service: this.service,
       artId: typeof artId === 'number' ? artId : undefined,
+      pageUrl: validPageUrl(data.linkback),
     };
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     const [, kind, id] = track.externalId.match(/^(track|album)=(\d+)$/) ?? [];
     if (!kind || !id) throw new Error(`invalid bandcamp externalId: ${track.externalId}`);
+    if (track.pageUrl) return { service: this.service, deepLink: track.pageUrl, webUrl: track.pageUrl };
     const webUrl = `https://player.bandcamp.com/EmbeddedPlayer/${kind}=${id}/size=large/bgcol=333333/linkcol=0f91ff/tracklist=false/artwork=small/transparent=true/`;
     return { service: this.service, deepLink: webUrl, webUrl };
   }
@@ -176,9 +178,24 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
   }
 }
 
+/**
+ * A page URL other players will be sent to, so only an https bandcamp.com address is kept.
+ * ponytail: artists on a custom domain fall back to the bare player; allow-list more if it matters.
+ */
+export function validPageUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 500) return undefined;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && /(^|\.)bandcamp\.com$/.test(u.hostname) ? u.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const EMBED_PATTERN = /bandcamp\.com\/EmbeddedPlayer\/(track|album)=(\d{1,20})/;
 
 interface EmbedData {
+  linkback?: string;
   artist?: string;
   album_title?: string;
   album_art_id?: number | null;

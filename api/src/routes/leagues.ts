@@ -78,6 +78,7 @@ interface SubmissionRow {
   service: ServiceName;
   external_id: string;
   art_id: string | null;
+  page_url?: string | null;
   title: string;
   artist: string;
   comment?: string | null;
@@ -457,7 +458,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         [leagueId],
       ),
       deps.pool.query<SubmissionRow & { id: string; isrc: string | null; round_id: string }>(
-        `SELECT s.id, s.isrc, s.round_id, s.account_id, s.service, s.external_id, s.art_id, s.title, s.artist, s.comment FROM submissions s
+        `SELECT s.id, s.isrc, s.round_id, s.account_id, s.service, s.external_id, s.art_id, s.page_url, s.title, s.artist, s.comment FROM submissions s
          JOIN rounds r ON r.id = s.round_id
          WHERE r.league_id = $1
          ORDER BY s.created_at, s.id`,
@@ -557,7 +558,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       ),
       // Same order as the league overview's, so the submitter list is the same list.
       deps.pool.query<SubmissionRow & { id: string; isrc: string | null }>(
-        'SELECT id, account_id, service, external_id, art_id, title, artist, isrc, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
+        'SELECT id, account_id, service, external_id, art_id, page_url, title, artist, isrc, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
         [roundId],
       ),
       deps.pool.query<{ guesser_account_id: string; guess_count: string }>(

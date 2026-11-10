@@ -32,6 +32,7 @@ interface PreviewRow {
   title: string;
   artist: string;
   isrc: string | null;
+  page_url?: string | null;
 }
 
 const trackOf = (row: PreviewRow) => ({
@@ -40,6 +41,7 @@ const trackOf = (row: PreviewRow) => ({
   artist: row.artist,
   isrc: row.isrc ?? undefined,
   service: row.service,
+  pageUrl: row.page_url ?? undefined,
 });
 
 /** The link out to a track on its service. */
@@ -51,7 +53,7 @@ export async function loadFavorites(pool: Pool, accountId: string, deps?: Adapte
   const found = await pool.query(
     `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
             r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt",
-            s.external_id, s.isrc, s.art_id
+            s.external_id, s.isrc, s.art_id, s.page_url
      FROM favorites f
      JOIN submissions s ON s.id = f.submission_id
      JOIN rounds r ON r.id = s.round_id
@@ -64,10 +66,10 @@ export async function loadFavorites(pool: Pool, accountId: string, deps?: Adapte
   // The ids only feed the thumbnail and the playback link; they aren't part of the payload.
   // `deps` is passed only where playback is wanted (not the public profile).
   return Promise.all(
-    found.rows.map(async ({ external_id, isrc, art_id, ...row }) => ({
+    found.rows.map(async ({ external_id, isrc, art_id, page_url, ...row }) => ({
       ...row,
       thumbnailUrl: thumbnailUrlOf(row.service, external_id, art_id),
-      ...(deps && { playback: await playbackFor(deps, { ...row, external_id, isrc }) }),
+      ...(deps && { playback: await playbackFor(deps, { ...row, external_id, isrc, page_url }) }),
     })),
   );
 }
@@ -113,6 +115,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       artist: string;
       isrc: string | null;
       art_id: string | null;
+      page_url: string | null;
       guessed_account_id: string | null;
       comment: string | null;
       mine: boolean;
@@ -120,7 +123,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     }>(
       // Your own track comes back too, flagged `mine`, with your note in `comment`. The flag is
       // computed per requester, so nothing here tells anyone else whose track is whose.
-      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, s.art_id, g.guessed_account_id,
+      `SELECT s.id, s.service, s.external_id, s.title, s.artist, s.isrc, s.art_id, s.page_url, g.guessed_account_id,
               CASE WHEN s.account_id = $1 THEN s.guessing_note ELSE g.comment END AS comment,
               (s.account_id = $1) AS mine,
               EXISTS (SELECT 1 FROM favorites f WHERE f.submission_id = s.id AND f.account_id = $1) AS favorited
@@ -209,7 +212,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       return;
     }
     const found = await deps.pool.query<PreviewRow>(
-      'SELECT service, external_id, title, artist, isrc FROM submissions WHERE id = $1',
+      'SELECT service, external_id, title, artist, isrc, page_url FROM submissions WHERE id = $1',
       [req.params.id],
     );
     res.json(await previewBody(found.rows[0]));

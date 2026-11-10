@@ -38,6 +38,7 @@ describe('BandcampAdapter.submit', () => {
       artist: 'Tycho',
       service: 'bandcamp',
       artId: 3370493783,
+      pageUrl: 'https://tycho.bandcamp.com/track/awake',
     });
   });
 
@@ -52,6 +53,7 @@ describe('BandcampAdapter.submit', () => {
       artist: 'Tycho',
       service: 'bandcamp',
       artId: 3370493783,
+      pageUrl: 'https://tycho.bandcamp.com/album/awake',
     });
   });
 
@@ -140,7 +142,7 @@ describe('BandcampAdapter.submit with embed code', () => {
   const playerData = (d: object) => `<div data-player-data="${JSON.stringify(d).replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"></div>`;
 
   it('reads a track off the iframe snippet via the player page', async () => {
-    stubFetch(playerData({ artist: 'Cirith Ungol', tracks: [{ title: "Witch's Game", art_id: 2438750692 }] }));
+    stubFetch(playerData({ artist: 'Cirith Ungol', linkback: 'https://cirithungol.bandcamp.com/track/witchs-game', tracks: [{ title: "Witch's Game", art_id: 2438750692 }] }));
 
     const result = await new BandcampAdapter().submit(
       '<iframe src="https://bandcamp.com/EmbeddedPlayer/track=2784557145/size=large/"></iframe>',
@@ -152,6 +154,7 @@ describe('BandcampAdapter.submit with embed code', () => {
       artist: 'Cirith Ungol',
       service: 'bandcamp',
       artId: 2438750692,
+      pageUrl: 'https://cirithungol.bandcamp.com/track/witchs-game',
     });
     expect(fetch).toHaveBeenCalledWith('https://bandcamp.com/EmbeddedPlayer/track=2784557145', expect.anything());
   });
@@ -191,5 +194,14 @@ describe('BandcampAdapter.getPreviewUrl', () => {
   it('is null when Bandcamp errors', async () => {
     stubFetch('', 503);
     expect(await new BandcampAdapter().getPreviewUrl(track)).toBeNull();
+  });
+});
+
+describe('BandcampAdapter.getPlaybackLaunchHandle', () => {
+  it('opens the real page when the track has one, else the bare player', async () => {
+    const a = new BandcampAdapter();
+    const page = 'https://x.bandcamp.com/track/y';
+    expect(await a.getPlaybackLaunchHandle({ externalId: 'track=1', title: 't', artist: 'a', service: 'bandcamp', pageUrl: page })).toMatchObject({ webUrl: page });
+    expect((await a.getPlaybackLaunchHandle({ externalId: 'track=1', title: 't', artist: 'a', service: 'bandcamp' })).webUrl).toContain('player.bandcamp.com');
   });
 });

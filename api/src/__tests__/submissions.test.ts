@@ -442,6 +442,21 @@ describe('POST /rounds/:roundId/submissions', () => {
     expect(row.rows[0]).toMatchObject({ external_id: 'track=123', title: 'Song', art_id: '456' });
   });
 
+  it('keeps a bandcamp pageUrl from the device, and drops one that is not bandcamp.com', async () => {
+    const { app } = buildApp();
+    const { roundId, player } = await createLeagueWithPlayer(app);
+    const send = (pageUrl: string) =>
+      request(app)
+        .post(`/rounds/${roundId}/submissions`)
+        .set('Authorization', `Bearer ${player.token}`)
+        .send({ service: 'bandcamp', externalId: 'track=123', title: 'Song', artist: 'Band', pageUrl });
+    const stored = async (id: string) =>
+      (await testDb.pool.query('SELECT page_url FROM submissions WHERE id = $1', [id])).rows[0].page_url;
+
+    expect(await stored((await send('https://band.bandcamp.com/track/song')).body.submissionId)).toBe('https://band.bandcamp.com/track/song');
+    expect(await stored((await send('https://evil.example/track/song')).body.submissionId)).toBeNull();
+  });
+
   it('rejects device-resolved bandcamp metadata with a malformed externalId', async () => {
     const { app } = buildApp();
     const { roundId, player } = await createLeagueWithPlayer(app);

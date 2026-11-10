@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   comment TEXT,
   guessing_note TEXT,
   art_id BIGINT,
+  page_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (round_id, account_id)
 );

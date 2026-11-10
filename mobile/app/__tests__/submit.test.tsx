@@ -163,7 +163,7 @@ describe('search and submit', () => {
     await fireEvent.press(screen.getAllByText('Submit').at(-1)!);
 
     await waitFor(() =>
-      expect(lastPost()).toEqual({ service: 'bandcamp', comment: '', externalId: 'track=7', title: 'Song', artist: 'Band & Co', artId: 9 }),
+      expect(lastPost()).toEqual({ service: 'bandcamp', comment: '', externalId: 'track=7', title: 'Song', artist: 'Band & Co', artId: 9, pageUrl: 'https://band.bandcamp.com/track/song' }),
     );
   });
 });

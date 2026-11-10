@@ -15,6 +15,7 @@ export interface ResolvedBandcamp {
   title: string;
   artist: string;
   artId?: number;
+  pageUrl: string;
 }
 
 export async function resolveBandcampUrl(url: string): Promise<ResolvedBandcamp | null> {
@@ -35,6 +36,7 @@ export async function resolveBandcampUrl(url: string): Promise<ResolvedBandcamp 
       title,
       artist: data.artist,
       artId: typeof data.art_id === 'number' ? data.art_id : undefined,
+      pageUrl: url,
     };
   } catch {
     return null;

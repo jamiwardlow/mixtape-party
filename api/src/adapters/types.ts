@@ -11,6 +11,8 @@ export interface TrackResult extends TrackRef {
   service: ServiceName;
   /** Bandcamp cover art id, for building the thumbnail URL. */
   artId?: number;
+  /** Bandcamp's real track/album page, for the playback link. */
+  pageUrl?: string;
 }
 
 export interface PlaylistRef {
