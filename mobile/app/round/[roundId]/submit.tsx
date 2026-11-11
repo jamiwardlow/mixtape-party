@@ -49,19 +49,22 @@ export default function SubmitTrack() {
   const [submitted, setSubmitted] = useState(false);
   const [current, setCurrent] = useState<{ submissionId: string; playback: Playback; service: ServiceName; title: string; artist: string; thumbnailUrl?: string | null } | null>(null);
   const [commentSaved, setCommentSaved] = useState(false);
+  const [theme, setTheme] = useState<string | null>(null);
 
   // Editing: show the track already in, and start the comment box from what is saved.
-  async function loadCurrent() {
+  async function loadCurrent(withTrack = true) {
     if (!token) return;
     const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
     if (!res.ok) return;
-    const mine = (await res.json()).round.you.submission;
-    if (!mine) return;
+    const { round } = await res.json();
+    setTheme(round.theme ?? null);
+    const mine = round.you.submission;
+    if (!withTrack || !mine) return;
     setCurrent(mine);
     setComment(mine.comment ?? '');
   }
   useEffect(() => {
-    if (edit && token) loadCurrent();
+    if (token) loadCurrent(!!edit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit, token, roundId]);
   // Your own track previews before guessing opens; with no preview it opens in its service.
@@ -174,6 +177,12 @@ export default function SubmitTrack() {
   return (
     <Screen label={title}>
       <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
+      {theme && (
+        <JCard>
+          <Label>Theme</Label>
+          <BodyText testID="round-theme">{theme}</BodyText>
+        </JCard>
+      )}
       {current && !changing && (
         <>
           <Text accessibilityRole="header" style={{ color: t.ink, fontFamily: t.font.display, fontSize: 24, transform: [{ rotate: '-2deg' }] }}>Your pick</Text>

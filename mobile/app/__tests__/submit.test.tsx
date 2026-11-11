@@ -31,7 +31,7 @@ beforeEach(() => {
       String(url).includes('/search')
         ? searchResults
         : String(url).includes('/overview')
-          ? { round: { you: { submission: { submissionId: 's1', playback: { deepLink: 'https://music.youtube.com/watch?v=x' }, service: 'youtube_music', title: 'Feeling Good', artist: 'Nina Simone' } } } }
+          ? { round: { theme: 'Songs about rain', you: { submission: { submissionId: 's1', playback: { deepLink: 'https://music.youtube.com/watch?v=x' }, service: 'youtube_music', title: 'Feeling Good', artist: 'Nina Simone' } } } }
           : { submissionId: 'sub-1' },
     ),
   ) as unknown as typeof fetch;
@@ -50,7 +50,7 @@ describe('service chips', () => {
 
     expect(screen.getByText('Search YouTube Music')).toBeTruthy();
     expect(screen.getByText('Paste a link from Bandcamp')).toBeTruthy();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/search'), expect.anything());
   });
 
   // Both services stay offered; YouTube Music's search just opens first.
@@ -148,11 +148,16 @@ describe('search and submit', () => {
     await waitFor(() => expect(screen.getByText(/paste the embed code/)).toBeTruthy());
   });
 
+  it('shows the round theme', async () => {
+    await render(<SubmitTrack />);
+    expect(await screen.findByText('Songs about rain')).toBeTruthy();
+  });
+
   it('reads the Bandcamp page on the device when the server is bot-walled (503)', async () => {
     const tralbum = JSON.stringify({ id: 7, item_type: 'track', art_id: 9, artist: 'Band &amp; Co', current: { title: 'Song' } }).replace(/"/g, '&quot;');
     globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
       if (String(url).startsWith('https://band.bandcamp.com')) return new Response(`<div data-tralbum="${tralbum}"></div>`);
-      if (String(url).includes('/overview')) return ok({ round: { you: { submission: null } } });
+      if (String(url).includes('/overview')) return ok({ round: { theme: 'Songs about rain', you: { submission: null } } });
       const sent = JSON.parse(String(init?.body ?? '{}'));
       return sent.url ? new Response('{"error":"bandcamp unavailable"}', { status: 503 }) : ok({ submissionId: 's' });
     }) as unknown as typeof fetch;
@@ -172,7 +177,7 @@ describe('result rows', () => {
   // iPhone Safari pushed Submit off-screen: a flex child won't shrink below its longest word without minWidth: 0.
   it('lets a long title shrink and keeps Submit on screen', async () => {
     const long = 'Everything In Its Right Place — Radiohead (Remastered 2009) [Official Video]' + 'x'.repeat(80);
-    (fetch as jest.Mock).mockImplementation(async () => ok({ results: [{ externalId: 'v', title: long, artist: 'Radiohead', playback: { service: 'youtube_music', deepLink: 'https://music.youtube.com/watch?v=v' } }] }));
+    (fetch as jest.Mock).mockImplementation(async (url: string) => String(url).includes('/overview') ? ok({ round: { you: {} } }) : ok({ results: [{ externalId: 'v', title: long, artist: 'Radiohead', playback: { service: 'youtube_music', deepLink: 'https://music.youtube.com/watch?v=v' } }] }));
     await render(<SubmitTrack />);
 
     await fireEvent.press(screen.getByText('Search YouTube Music'));
