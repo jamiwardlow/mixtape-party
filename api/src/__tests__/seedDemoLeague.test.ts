@@ -36,6 +36,10 @@ describe('seedDemo', () => {
       'DEMOJUKE:1:results', 'DEMOJUKE:2:submission', 'DEMOJUKE:3:submission',
     ]);
 
+    // Demo hosts nothing, so a reviewer can delete the account (hosting a live league blocks that).
+    const hosted = await testDb.pool.query('SELECT 1 FROM leagues l JOIN accounts a ON a.id = l.host_account_id WHERE a.email = $1', [DEMO_EMAIL]);
+    expect(hosted.rows).toHaveLength(0);
+
     // Results screen: a finished round has scores and nobody won by guessing everything or nothing.
     const round = await testDb.pool.query("SELECT r.id FROM rounds r JOIN leagues l ON l.id = r.league_id WHERE l.invite_code = 'DEMOFRI' AND round_number = 1");
     const results = await request(app).get(`/rounds/${round.rows[0].id}/results`).set(auth);

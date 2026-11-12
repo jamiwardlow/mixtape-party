@@ -109,7 +109,7 @@ const LEAGUES: LeagueSpec[] = [
   {
     name: 'Friday Night Mixtape',
     code: 'DEMOFRI',
-    host: 'demo',
+    host: 'maya', // never 'demo': hosting a live league blocks account deletion, which App Review tests
     seasonLength: 4,
     members: ['demo', 'maya', 'theo', 'priya', 'jonah', 'lucia'],
     rounds: [
