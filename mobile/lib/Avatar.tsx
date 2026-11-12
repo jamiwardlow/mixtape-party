@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Image, Platform, View } from 'react-native';
-import { API_URL } from './api';
+import { API_URL, fetchWithTimeout } from './api';
 import { useTheme } from './theme';
 import { avatarColor, HandText } from './ui';
 
@@ -17,7 +17,7 @@ export function Avatar({ url, token, initial, size = 96, label = 'Your photo' }:
     if (!url || !token || Platform.OS !== 'web') return;
     let objectUrl: string | undefined;
     let cancelled = false;
-    fetch(`${API_URL}${url}`, { headers: { Authorization: `Bearer ${token}` } })
+    fetchWithTimeout(`${API_URL}${url}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.blob() : Promise.reject()))
       .then((blob) => {
         if (cancelled) return;

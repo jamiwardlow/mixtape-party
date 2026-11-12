@@ -1,4 +1,4 @@
-import { API_URL, fetchApi } from '../api';
+import { API_URL, fetchApi, onOfflineChange } from '../api';
 
 let fetchMock: jest.Mock;
 
@@ -36,5 +36,26 @@ describe('fetchApi', () => {
 
     expect(init.method).toBe('POST');
     expect(init.body).toBe('{"name":"Mixtape"}');
+  });
+});
+
+describe('fetchApi timeout', () => {
+  it('rejects and reports offline when the server never answers', async () => {
+    jest.useFakeTimers();
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_res, rej) => init.signal!.addEventListener('abort', () => rej(new Error('aborted')))),
+    );
+    const offline = jest.fn();
+    const off = onOfflineChange(offline);
+
+    const p = fetchApi('/accounts/me');
+    const assertion = expect(p).rejects.toThrow('aborted');
+    jest.advanceTimersByTime(15_000);
+    await assertion;
+
+    expect(offline).toHaveBeenCalledWith(true);
+    off();
+    jest.useRealTimers();
   });
 });

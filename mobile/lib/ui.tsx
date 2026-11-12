@@ -486,6 +486,7 @@ export function DeadlineRows({
 export function avatarColor(seed: string): string {
   const t = useTheme();
   const colors = [t.accent, t.cobalt, t.mint, t.tangerine];
+  if (seed[0]?.toUpperCase() === 'T') return t.tangerine; // SCREENSHOT HACK (Theo): do not commit
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return colors[h % colors.length];

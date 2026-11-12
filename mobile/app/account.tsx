@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, ScrollView, Switch, View } from 'react-native';
-import { API_URL, fetchApi } from '../lib/api';
+import { API_URL, fetchApi, fetchWithTimeout } from '../lib/api';
 import { Avatar } from '../lib/Avatar';
 import { BestieGroup, type Bestie } from '../lib/BestieGroup';
 import { LegalLinks } from '../lib/legal';
@@ -166,11 +166,15 @@ export default function Account() {
       );
       const bytes = await (await fetch(small.uri)).blob();
       // fetchApi JSON-encodes bodies; the avatar endpoint wants the raw bytes.
-      const res = await fetch(`${API_URL}/accounts/me/avatar`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/jpeg', Authorization: `Bearer ${token}` },
-        body: bytes,
-      });
+      const res = await fetchWithTimeout(
+        `${API_URL}/accounts/me/avatar`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg', Authorization: `Bearer ${token}` },
+          body: bytes,
+        },
+        60_000, // uploads on a slow link legitimately take longer
+      );
       if (!res.ok) {
         setAvatarError((await res.json().catch(() => null))?.error ?? "Couldn't upload your photo. Try again.");
         return;

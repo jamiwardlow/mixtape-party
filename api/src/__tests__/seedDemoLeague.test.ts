@@ -43,7 +43,7 @@ describe('seedDemo', () => {
     const scores = results.body.scores.map((s: { score: number }) => s.score);
     expect(Math.max(...scores)).toBeGreaterThan(Math.min(...scores));
 
-    // Demo has not submitted to Office Jukebox round 2 and has not guessed in Friday Night round 3.
+    // Demo has submitted to Office Jukebox round 2 (the Edit your track screen) and has not guessed in Friday Night round 3.
     const open = await testDb.pool.query(
       `SELECT (SELECT count(*) FROM submissions s JOIN accounts a ON a.id = s.account_id JOIN rounds r ON r.id = s.round_id JOIN leagues l ON l.id = r.league_id
                 WHERE a.email = $1 AND l.invite_code = 'DEMOJUKE' AND r.round_number = 2) AS submitted,
@@ -52,7 +52,7 @@ describe('seedDemo', () => {
                 WHERE a.email = $1 AND l.invite_code = 'DEMOFRI' AND r.round_number = 3) AS guessed`,
       [DEMO_EMAIL],
     );
-    expect(open.rows[0]).toEqual({ submitted: '0', guessed: '0' });
+    expect(open.rows[0]).toEqual({ submitted: '1', guessed: '0' });
 
     // The sweep must not email or push anyone: every demo account opts out and every round is flagged handled.
     const swept = await request(app).post('/internal/sweep').set('x-sweep-secret', 'test-sweep-secret');

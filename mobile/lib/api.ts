@@ -27,11 +27,18 @@ export function useReconnectEpoch(): number {
   return reconnects;
 }
 
+/** fetch that rejects after `ms` instead of hanging on a stalled connection (no spinner can outlive it). */
+export function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 15_000): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 export function fetchApi(
   path: string,
   opts: { method?: string; body?: unknown; token?: string } = {},
 ): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
+  return fetchWithTimeout(`${API_URL}${path}`, {
     method: opts.method ?? 'GET',
     headers: {
       'Content-Type': 'application/json',

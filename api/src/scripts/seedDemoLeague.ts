@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { hashPassword } from '../auth.js';
 import { migrate } from '../db/migrate.js';
@@ -14,13 +15,25 @@ import { createPool } from '../db/pool.js';
  *
  * What each league is for:
  *   Friday Night Mixtape  home + results + league screens; round 3 is open for guessing (Demo has not guessed)
- *   Office Jukebox        round 2 is open for submissions (Demo has not submitted): the Submit screen
+ *   Office Jukebox        round 2 is open for submissions (Demo has submitted): the Edit your track screen
  *   Summer Road Trip      finished season: the final-standings screen
  *   Bandcamp Basement     Demo is NOT a member: join it with code DEMOJOIN
  */
 
 export const DEMO_EMAIL = 'demo@mixtape-party.com';
 const LIVE_DAYS = 45;
+const AVATAR_DIR = new URL('./demo-avatars/', import.meta.url);
+/**
+ * Guesses forced wrong (`<code>:<round>:<guesser>:<actual>`, lower case) so a screenshot gets a spread of scores.
+ * Friday round 2 ends Priya 5, Maya 4, Theo 3, then Demo, Jonah and Lucia on 2: ties sort by name, so Theo only
+ * reaches the podium's third (pink) block if everyone else is below him.
+ */
+const FORCED_WRONG = new Set([
+  'theo:demo', 'theo:lucia',
+  'demo:maya', 'demo:theo',
+  'jonah:maya', 'jonah:theo',
+  'lucia:demo', 'lucia:theo',
+].map((k) => `demofri:2:${k}`));
 
 type Service = 'youtube_music' | 'bandcamp';
 // [title, artist, service?, comment?]
@@ -146,6 +159,7 @@ const LEAGUES: LeagueSpec[] = [
         theme: 'Songs with a color in the title',
         window: [-7, L, L + 7],
         picks: {
+          demo: ['Cobalt Monday', 'Velvet Lanterns'],
           sam: ['Indigo Hours', 'Lowtide Parade'],
           dara: ['Red Door Revival', 'Cedar & Smoke'],
           maya: ['Seafoam', 'Pinwheel'],
@@ -244,10 +258,13 @@ export async function seedDemo(pool: Pool, password: string, now = new Date(), u
     const hash = hashPassword(password);
     const ids: Record<string, string> = {};
     for (const [key, p] of Object.entries(PEOPLE)) {
+      // demo-avatars/<key>.png, when present; players without a file keep the initial.
+      const avatarFile = new URL(`${key}.png`, AVATAR_DIR);
+      const avatar = existsSync(avatarFile) ? readFileSync(avatarFile) : null;
       const { rows } = await client.query<{ id: string }>(
-        `INSERT INTO accounts (email, password_hash, display_name, about_me, pronouns)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [emailOf(key), key === 'demo' ? hash : null, p.name, p.about ?? null, p.pronouns ?? null],
+        `INSERT INTO accounts (email, password_hash, display_name, about_me, pronouns, avatar, avatar_content_type, avatar_updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [emailOf(key), key === 'demo' ? hash : null, p.name, p.about ?? null, p.pronouns ?? null, avatar, avatar && 'image/png', avatar && now],
       );
       ids[key] = rows[0].id;
       // The sweep emails and pushes every member of a live round. These accounts must never be reached.
@@ -305,7 +322,7 @@ export async function seedDemo(pool: Pool, password: string, now = new Date(), u
           for (const [s, actual] of submitters.entries()) {
             if (actual === guesser) continue;
             // Deterministic: every fourth guess is wrong, and lands on the next player along.
-            const wrong = (g * 3 + s) % 4 === 0;
+            const wrong = (g * 3 + s) % 4 === 0 || FORCED_WRONG.has(`${league.code}:${i + 1}:${guesser}:${actual}`.toLowerCase());
             const others = submitters.filter((k) => k !== guesser && k !== actual);
             const guessed = wrong && others.length ? others[(g + s) % others.length] : actual;
             const commented = (g + s) % 5 === 0;
