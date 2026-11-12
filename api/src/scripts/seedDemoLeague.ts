@@ -86,8 +86,22 @@ interface RealTrack {
   pageUrl?: string;
 }
 const REAL: Record<string, RealTrack> = {
-  // 'demofri-3-maya': { title: 'REAL TITLE', artist: 'REAL ARTIST', externalId: 'VIDEO_ID' },
-  // 'demojoin-1-jonah': { title: '...', artist: '...', service: 'bandcamp', externalId: 'track=123', artId: 456, pageUrl: 'https://artist.bandcamp.com/track/slug' },
+  // Friday Night Mixtape, round 3 (open for guessing). Friends' projects, used with their say-so, plus one CC track.
+  'demofri-3-demo': { title: 'a farewell to charms', artist: 'Trough', service: 'bandcamp', externalId: 'track=3088299914', artId: 4173454769, pageUrl: 'https://troughband.bandcamp.com/track/a-farewell-to-charms-2' },
+  'demofri-3-maya': { title: 'I Wish I Was in Denver', artist: 'zach H.', service: 'bandcamp', externalId: 'track=4196785198', artId: 2008612253, pageUrl: 'https://zach.bandcamp.com/track/i-wish-i-was-in-denver' },
+  'demofri-3-theo': { title: 'Time: This Time Next Time', artist: 'Talking Ghosts', externalId: 'F2UedY2oavg' },
+  'demofri-3-priya': { title: 'Flex It, Tagger', artist: 'HLLLYH', externalId: '2SMfkFH3wts' },
+  'demofri-3-jonah': { title: 'Fool Me Once', artist: 'BAUS', service: 'bandcamp', externalId: 'track=3215498856', artId: 877994258, pageUrl: 'https://baus.bandcamp.com/track/fool-me-once-single' },
+  // CC BY-SA 3.0
+  'demofri-3-lucia': { title: 'She Never Finds', artist: 'The Whip Hand', service: 'bandcamp', externalId: 'track=3723961343', artId: 1331865975, pageUrl: 'https://thewhiphanditaly.bandcamp.com/track/she-never-finds-single' },
+  // Office Jukebox, round 2 (open for submissions). Creative Commons production music.
+  'demojuke-2-demo': { title: 'Surf Riff', artist: 'Owen Lowery', service: 'bandcamp', externalId: 'track=85140321', artId: 1147072385, pageUrl: 'https://owenlowery.bandcamp.com/track/surf-riff' },
+  'demojuke-2-sam': { title: '80s Synth Pop', artist: 'Sounds Like An Earful', service: 'bandcamp', externalId: 'track=993345619', artId: 3335967944, pageUrl: 'https://soundslikeanearful.bandcamp.com/track/80s-synth-pop' },
+  'demojuke-2-dara': { title: 'Background Pop Punk', artist: 'Sounds Like An Earful', service: 'bandcamp', externalId: 'track=1915335116', artId: 3335967944, pageUrl: 'https://soundslikeanearful.bandcamp.com/track/background-pop-punk' },
+  'demojuke-2-maya': { title: 'Mellow Harmonics', artist: 'Sounds Like An Earful', service: 'bandcamp', externalId: 'track=2928045806', artId: 3335967944, pageUrl: 'https://soundslikeanearful.bandcamp.com/track/mellow-harmonics' },
+  // Bandcamp Basement (join with DEMOJOIN).
+  'demojoin-1-jonah': { title: 'The Pohono', artist: 'Awahnichi', service: 'bandcamp', externalId: 'track=2167884026', artId: 1499503074, pageUrl: 'https://awahnichi.bandcamp.com/track/the-pohono' },
+  'demojoin-1-sam': { title: 'Corazon', artist: 'Valley Wolf', service: 'bandcamp', externalId: 'track=4271538934', artId: 1780953540, pageUrl: 'https://valleywolf.bandcamp.com/track/corazon' },
 };
 
 const L = LIVE_DAYS;
