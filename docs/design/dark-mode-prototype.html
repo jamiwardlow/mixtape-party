@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sticker Pop dark mode prototype (#187)</title>
+<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:24px;background:#777;font:14px/1.4 'Courier Prime',monospace;color:#fff}
+h1{font:400 28px 'Bagel Fat One';margin:0 0 4px}h2{font:400 22px 'Bagel Fat One';margin:36px 0 4px}
+p.n{max-width:760px;margin:0 0 14px}
+.row{display:flex;gap:24px;flex-wrap:wrap}
+/* light = shipped theme, for reference */
+.phone{--bg:#FFD93D;--shell:#fff;--ink:#1A1033;--muted:#4A3F6B;--line:#1A1033;--shadow:#1A1033;--accent:#FF4F9A;--onaccent:#1A1033;--cobalt:#3D5AFE;--oncobalt:#fff;--danger:#B3124F;--sun:#FFD93D;--mint:#5EEAD4;--tang:#FF8A3D;--art:#FFF3B8;
+ width:300px;min-height:520px;padding:16px;background:var(--bg);color:var(--ink);border-radius:28px;border:3px solid #000;box-sizing:border-box}
+/* A: Die-cut. Cream outline + cream hard shadow, like a sticker's white die-cut edge */
+.A{--bg:#1A1033;--shell:#2B1D52;--ink:#FFF4D6;--muted:#BDB0E0;--line:#FFF4D6;--shadow:#FFF4D6;--cobalt:#8C9EFF;--oncobalt:#1A1033;--danger:#FF7AA8;--art:#3B2A6E}
+/* C: Die-cut Teal. Near-white outline + shadow on deep mint-teal */
+.C{--bg:#062B2B;--shell:#0D3F3E;--ink:#FFFDF5;--muted:#A8D8D0;--line:#FFFDF5;--shadow:#FFFDF5;--cobalt:#8C9EFF;--oncobalt:#062B2B;--danger:#FF7AA8;--art:#17504C}
+h3{font:400 24px 'Bagel Fat One';transform:rotate(-2deg);margin:4px 0 12px}
+.card{background:var(--shell);border:3px solid var(--line);border-radius:20px;box-shadow:4px 4px 0 var(--shadow);padding:12px;margin-bottom:14px}
+.btn{display:inline-block;font:700 14px 'Courier Prime';background:var(--accent);color:var(--onaccent);border:3px solid var(--line);border-radius:999px;padding:8px 18px;box-shadow:4px 4px 0 var(--shadow)}
+.btn.c{background:var(--cobalt);color:var(--oncobalt)}
+.chip{display:inline-block;font:700 11px 'Courier Prime';border:2px solid var(--line);border-radius:99px;padding:2px 9px;margin-right:4px}
+.svc{display:inline-block;font:700 11px 'Courier Prime';border:2px solid var(--line);border-radius:99px;padding:1px 8px;background:var(--shell)}
+.row2{display:flex;align-items:center;gap:10px}
+.art{width:44px;height:44px;border:2px solid var(--line);border-radius:8px;background:var(--art);display:grid;place-items:center;font-size:18px;flex:none}
+.m1{color:var(--muted)}.dng{color:var(--danger);font-weight:700}
+.rx{display:flex;gap:6px;margin-top:8px}.rx span{border:2px solid var(--line);border-radius:99px;padding:1px 8px;background:var(--art)}
+.rx span.on{background:var(--accent);color:var(--onaccent)}
+.input{border:3px solid var(--line);border-radius:14px;padding:8px;background:var(--shell);color:var(--muted);margin-bottom:12px}
+.lb{display:flex;align-items:center;gap:8px;margin:6px 0}
+.disc{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-weight:700;color:#1A1033}
+.cass{height:46px;border:3px solid var(--line);border-radius:8px;background:var(--shell);position:relative;margin-bottom:12px}
+.cass i{position:absolute;top:12px;width:20px;height:20px;border-radius:50%;border:3px solid var(--line);background:var(--bg)}.cass i:nth-child(1){left:22%}.cass i:nth-child(2){right:22%}
+.lbl{font:700 11px 'Courier Prime';letter-spacing:.12em;text-transform:uppercase;margin:0 0 4px}
+.cap{margin:6px 0 0;font-size:12px;opacity:.9}
+table{border-collapse:collapse;background:#fff;color:#1A1033;font-size:12px}td,th{border:1px solid #ccc;padding:3px 8px;text-align:left}
+.sw{display:inline-block;width:14px;height:14px;border:1px solid #888;vertical-align:-2px;margin-right:4px}
+.D{--bg:#052A3D;--shell:#0C3D55;--ink:#FFFDF5;--muted:#A8D3E0;--line:#FFFDF5;--shadow:#FFFDF5;--cobalt:#8C9EFF;--oncobalt:#052A3D;--danger:#FF7AA8;--art:#165069}
+</style></head><body>
+<h1>Sticker Pop, dark (#187)</h1>
+<p class="n">Left to right per direction: Home, Guess, Results. The first row is the shipped light theme for comparison. The hard problem: ink is currently text, border and shadow at once, so on a dark page the shadow vanishes unless it gets its own colour.</p>
+
+<template id="screens">
+ <div class="phone @">
+  <span class="chip" style="background:var(--sun);color:#1A1033">Round 3 · Guessing</span>
+  <h3>Mixtape Party!</h3>
+  <div class="cass"><i></i><i></i></div>
+  <div class="card y"><p class="lbl">Your leagues</p><b>Friday Night Tapes</b><div class="m1">6 players · theme: Guilty pleasures</div></div>
+  <span class="btn">Start a round</span> <span class="btn c">Join</span>
+  <p class="cap m1">Muted text sits at 7:1+ on cards.</p>
+ </div>
+ <div class="phone @">
+  <p class="lbl">Round 3 · Guess who</p>
+  <div class="card m"><div class="row2"><div class="art">♪</div><div><b>Dreams — Fleetwood Mac</b><br><span class="svc" style="border-color:#FF8080">YouTube Music</span></div></div>
+   <div class="rx"><span>🔥 3</span><span class="on">😭 5</span><span>💀 1</span></div></div>
+  <div class="input">Pick a player…</div>
+  <div class="card"><div class="row2"><div class="art">?</div><div><b>Placeholder art</b><br><span class="svc" style="border-color:#3FC0E3">Bandcamp</span></div></div></div>
+  <p class="dng">Guesses lock in 2h</p><span class="btn">Lock it in</span>
+ </div>
+ <div class="phone @">
+  <h3>Results</h3>
+  <div class="card y">
+   <div class="lb"><div class="disc" style="background:#FFD93D">A</div><b>Alex</b><span style="margin-left:auto">5 pts</span></div>
+   <div class="lb"><div class="disc" style="background:#5EEAD4">M</div><b>Maya</b><span style="margin-left:auto">4 pts</span></div>
+   <div class="lb"><div class="disc" style="background:#FF8A3D">J</div><b>Jo</b><span style="margin-left:auto">2 pts</span></div></div>
+  <span class="chip" style="background:var(--accent);color:var(--onaccent)">Nailed it</span><span class="chip" style="background:#5EEAD4;color:#1A1033">+1</span><span class="chip" style="background:#FF8A3D;color:#1A1033">Fooled</span>
+ </div>
+</template>
+
+<h2>Today (light, shipped)</h2><div class="row" id="L"></div>
+<h2>A · Die-cut (recommended)</h2>
+<p class="n">Page is Ink, cards are a lifted purple, outline and shadow flip to cream. It reads like the white die-cut edge of a real sticker, keeps the 3px / 4px hard-shadow geometry identical, and needs no new rules per component. Accents stay saturated; text on them stays Ink.</p>
+<div class="row" id="A"></div>
+<h2>C · Die-cut Teal</h2>
+<p class="n">Same die-cut rules as A, with a near-white outline (#FFFDF5) and a deep version of Mint for the page and cards.</p>
+<div class="row" id="C"></div>
+
+<h2>D · Die-cut Deep Blue-Teal</h2>
+<p class="n">Same rules as C, with the teal pushed toward blue (hue about 200 instead of 180).</p>
+<div class="row" id="D"></div>
+
+<h2>Tokens and contrast (WCAG AA, text 4.5:1)</h2>
+<table>
+<tr><th>Token</th><th>Light</th><th>A Die-cut</th><th>C Die-cut Teal</th><th>D Blue-Teal</th></tr>
+<tr><td>bg</td><td><i class="sw" style="background:#FFD93D"></i>#FFD93D</td><td><i class="sw" style="background:#1A1033"></i>#1A1033</td><td>#062B2B</td><td>#052A3D</td></tr>
+<tr><td>shell</td><td>#FFFFFF</td><td><i class="sw" style="background:#2B1D52"></i>#2B1D52</td><td>#0D3F3E</td><td>#0C3D55</td></tr>
+<tr><td>ink / hairline</td><td>#1A1033</td><td>#FFF4D6</td><td>#FFFDF5 (11.5:1 on shell)</td><td>#FFFDF5 (11.4:1 on shell)</td></tr>
+<tr><td>inkMuted</td><td>#4A3F6B</td><td>#BDB0E0 (7.5:1 on shell)</td><td>#A8D8D0 (7.5:1)</td><td>#A8D3E0 (7.2:1)</td></tr>
+<tr><td>shadow</td><td>ink</td><td>cream (= ink)</td><td>near-white (= ink)</td><td>near-white (= ink)</td></tr>
+<tr><td>accent (bubblegum)</td><td>#FF4F9A</td><td>#FF4F9A, text on it Ink 5.9:1</td><td>#FF4F9A, Ink text on it 5.9:1</td><td>same as C</td></tr>
+<tr><td>cobalt</td><td>#3D5AFE</td><td>#8C9EFF (6.0:1 on shell); text on it Ink 7.3:1</td><td>#8C9EFF (4.7:1 on shell); text on it #062B2B 6.1:1</td><td>#8C9EFF (4.7:1 on shell)</td></tr>
+<tr><td>danger</td><td>#B3124F</td><td>#FF7AA8 (6.1:1)</td><td>#FF7AA8 (4.8:1)</td><td>#FF7AA8 (4.7:1)</td></tr>
+<tr><td>mint / tangerine / sunshine</td><td>as is</td><td>as is (Ink text on each: 12.2 / 7.7 / 13.1)</td><td>as is</td><td>as is</td></tr>
+<tr><td>YouTube badge</td><td>#FF0000</td><td>#FF5A5A (4.9:1)</td><td>#FF8080 (4.8:1)</td><td>#FF8080 (4.8:1)</td></tr>
+<tr><td>Bandcamp badge</td><td>#1DA0C3</td><td>#3FC0E3 (7.0:1)</td><td>#3FC0E3 (5.5:1)</td><td>#3FC0E3 (5.4:1)</td></tr>
+</table>
+
+<script>
+const t=document.getElementById('screens').innerHTML;
+for(const [id,c] of [['L',''],['A','A'],['C','C'],['D','D']])document.getElementById(id).innerHTML=t.replaceAll('@',c);
+</script>
+</body></html>

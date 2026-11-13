@@ -9,7 +9,7 @@ Product intent: `PRODUCT.md`. Tone is a party game, never a dashboard.
 
 ## Tokens
 
-Already implemented in `mobile/lib/theme.ts` (one static light theme, no dark mode).
+Light theme is implemented in `mobile/lib/theme.ts`. The dark variant below is designed (#187) but not yet built.
 
 | Token | Value |
 | --- | --- |
@@ -49,3 +49,38 @@ Store art (#137) is in `mobile/assets/store/`: `feature-graphic.png` (1024x500, 
 cassette) and `icon-512.png` (the app icon downscaled; Play rounds it). The splash is a Sunshine
 `#FFD93D` background with the pink badge (`mobile/assets/splash-icon.png`), configured in `app.json`; Android
 uses a smaller `imageWidth` so the 12+ circular crop doesn't clip the badge.
+
+## Dark mode (designed in #187, not yet implemented)
+
+Direction D, "Die-cut Blue-Teal". Prototype: `docs/design/dark-mode-prototype.html` (A and C are rejected alternatives).
+
+**Rule:** the outline, the hard shadow and the text all flip to near-white, like the die-cut edge of a sticker. The 3px border,
+4px offset, no-blur shadow, radii, fonts and tilt are unchanged. Accents keep their saturated colors, and text sitting on an accent
+stays dark.
+
+| Token | Light | Dark |
+| --- | --- | --- |
+| `bg` | `#FFD93D` | `#052A3D` |
+| `shell` (cards, inputs) | `#FFFFFF` | `#0C3D55` |
+| `shellPressed` | `#FFF3B8` | `#165069` |
+| `ink`, `hairline`, `reel` | `#1A1033` | `#FFFDF5` |
+| `inkMuted` | `#4A3F6B` | `#A8D3E0` |
+| shadow color (new key; ink in light) | `#1A1033` | `#FFFDF5` |
+| `accent` (Bubblegum) | `#FF4F9A` | `#FF4F9A` |
+| `accentInk` | `#1A1033` | `#1A1033` |
+| `cobalt` | `#3D5AFE` | `#8C9EFF`, text on it `#052A3D` |
+| `danger` | `#B3124F` | `#FF7AA8` |
+| `mint`, `tangerine`, Sunshine | as is | as is, with dark text on them |
+| YouTube badge | `#FF0000` | `#FF8080` |
+| Bandcamp badge | `#1DA0C3` | `#3FC0E3` |
+| Album-art placeholder, reaction pill | `#FFF3B8` | `#165069`, near-white outline |
+
+Contrast (WCAG AA, all verified): near-white on `shell` 11.4:1, `inkMuted` 7.2:1, `cobalt` 4.7:1, `danger` 4.7:1, YouTube 4.8:1,
+Bandcamp 5.4:1, dark ink on Bubblegum 5.9:1. Bubblegum on `shell` is only 3.8:1: use it for fills, never as small text.
+Leaderboard `InitialDisc` colors and the `Sticker` outline stay as they are, with dark initials.
+
+Decisions:
+- The app follows the system setting only; there is no manual toggle (revisit if players ask). Remove `userInterfaceStyle: "light"`
+  from `app.json` and the forced `colorScheme: 'light'` in `ui.tsx`.
+- The landing page follows the system setting via `prefers-color-scheme` on its existing CSS variables.
+- Store art, the splash and the app icon stay Sunshine.
