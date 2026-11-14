@@ -20,6 +20,7 @@ import {
   TouchableWithoutFeedback,
   View,
   ViewStyle,
+  useColorScheme,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
@@ -362,6 +363,7 @@ export function TapeDateField({
   testID?: string;
 }) {
   const t = useTheme();
+  const scheme = useColorScheme();
 
   function control() {
     if (Platform.OS === 'web') {
@@ -441,7 +443,7 @@ export function TapeDateField({
           mode="datetime"
           display="compact"
           accentColor={t.accent}
-          themeVariant="light"
+          themeVariant={scheme === 'dark' ? 'dark' : 'light'}
           minimumDate={minimumDate}
           maximumDate={maximumDate}
           onValueChange={(_event, date) => onChange(date)}
