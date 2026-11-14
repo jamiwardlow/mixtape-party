@@ -7,6 +7,8 @@ export interface NotificationPayload {
   link?: string;
   /** Optional link to the app itself; emailed under `link`. Push ignores it. */
   appLink?: string;
+  /** Email button text for `appLink`; defaults to "Open Mixtape Party". */
+  appLinkLabel?: string;
   /** Optional deep-link data; push delivers it to the app's tap handler. Email ignores it. */
   /** `focus` is the comment or reply (or track) the results screen should scroll to. */
   data?: { roundId: string; screen?: 'results' | 'guess' | 'submit'; focus?: string } | { leagueId: string; screen: 'final' };

@@ -27,7 +27,7 @@ describe('POST /magic-links', () => {
 
     const exchanged = await request(app)
       .post('/sessions/token')
-      .send({ token: signInTokenFrom(emailChannel.sent[0].payload.body) });
+      .send({ token: signInTokenFrom(emailChannel.sent[0].payload.appLink!) });
 
     expect(exchanged.status).toBe(200);
     const me = await request(app).get('/accounts/me').set('Authorization', `Bearer ${exchanged.body.token}`);
@@ -49,7 +49,7 @@ describe('POST /magic-links', () => {
     await request(app).post('/magic-links').send({ email: 'known@example.com' });
     const exchanged = await request(app)
       .post('/sessions/token')
-      .send({ token: signInTokenFrom(emailChannel.sent[0].payload.body) });
+      .send({ token: signInTokenFrom(emailChannel.sent[0].payload.appLink!) });
 
     expect(exchanged.body.accountId).toBe(existing.accountId);
     const { rows } = await testDb.pool.query('SELECT id FROM accounts WHERE email = $1', ['known@example.com']);
@@ -80,7 +80,7 @@ describe('POST /sessions/token', () => {
   it('accepts a sign_in token only once', async () => {
     const { app, emailChannel } = buildApp(testDb.pool);
     await request(app).post('/magic-links').send({ email: 'once@example.com' });
-    const token = signInTokenFrom(emailChannel.sent[0].payload.body);
+    const token = signInTokenFrom(emailChannel.sent[0].payload.appLink!);
 
     expect((await request(app).post('/sessions/token').send({ token })).status).toBe(200);
     expect((await request(app).post('/sessions/token').send({ token })).status).toBe(401);
@@ -90,7 +90,7 @@ describe('POST /sessions/token', () => {
     const { app, emailChannel } = buildApp(testDb.pool);
     await signUp(app, 'purpose@example.com');
     await request(app).post('/password-resets').send({ email: 'purpose@example.com' });
-    const resetToken = resetTokenFrom(emailChannel.sent[0].payload.body);
+    const resetToken = resetTokenFrom(emailChannel.sent[0].payload.appLink!);
 
     const res = await request(app).post('/sessions/token').send({ token: resetToken });
 

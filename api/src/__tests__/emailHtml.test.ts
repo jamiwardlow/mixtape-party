@@ -15,6 +15,9 @@ describe('renderEmail', () => {
     expect(html).toContain('email-badge-dark.png');
     expect(html).toContain('prefers-color-scheme:dark');
   });
+  it('uses a custom appLink label when given', () => {
+    expect(renderEmail({ title: 't', body: 'b', appLink: 'https://x.test/a', appLinkLabel: 'Sign in' }).html).toContain('>Sign in</a>');
+  });
   it('keeps a plain-text part', () => {
     expect(text).toBe('See https://x.test/a?b=1\nbye\n\nhttps://x.test/p\n\nhttps://x.test/app');
   });

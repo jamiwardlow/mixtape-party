@@ -23,7 +23,7 @@ describe('POST /password-resets/check', () => {
     const { app, emailChannel } = buildApp(testDb.pool);
     await signUp(app, 'check@example.com');
     await request(app).post('/password-resets').send({ email: 'check@example.com' });
-    const token = resetTokenFrom(emailChannel.sent[0].payload.body);
+    const token = resetTokenFrom(emailChannel.sent[0].payload.appLink!);
 
     expect((await request(app).post('/password-resets/check').send({ token })).status).toBe(204);
     expect((await request(app).post('/password-resets/check').send({ token })).status).toBe(204);
@@ -55,7 +55,7 @@ describe('POST /password-resets', () => {
 
     const confirmed = await request(app)
       .post('/password-resets/confirm')
-      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.body), password: 'brand-new-password' });
+      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.appLink!), password: 'brand-new-password' });
 
     expect(confirmed.status).toBe(200);
     const me = await request(app).get('/accounts/me').set('Authorization', `Bearer ${confirmed.body.token}`);
@@ -69,7 +69,7 @@ describe('POST /password-resets', () => {
     await request(app).post('/password-resets').send({ email: 'old-password@example.com' });
     await request(app)
       .post('/password-resets/confirm')
-      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.body), password: 'brand-new-password' });
+      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.appLink!), password: 'brand-new-password' });
 
     const res = await request(app)
       .post('/sessions')
@@ -85,7 +85,7 @@ describe('POST /password-resets', () => {
 
     const confirmed = await request(app)
       .post('/password-resets/confirm')
-      .send({ token: resetTokenFrom(emailChannel.sent[1].payload.body), password: 'brand-new-password' });
+      .send({ token: resetTokenFrom(emailChannel.sent[1].payload.appLink!), password: 'brand-new-password' });
 
     expect(confirmed.status).toBe(200);
     const signedIn = await request(app)
@@ -98,7 +98,7 @@ describe('POST /password-resets', () => {
     const { app, emailChannel } = buildApp(testDb.pool);
     await signUp(app, 'single-use@example.com');
     await request(app).post('/password-resets').send({ email: 'single-use@example.com' });
-    const token = resetTokenFrom(emailChannel.sent[0].payload.body);
+    const token = resetTokenFrom(emailChannel.sent[0].payload.appLink!);
 
     expect((await request(app).post('/password-resets/confirm').send({ token, password: 'first-password' })).status).toBe(200);
     expect((await request(app).post('/password-resets/confirm').send({ token, password: 'second-password' })).status).toBe(401);
@@ -112,7 +112,7 @@ describe('POST /password-resets', () => {
 
     const res = await request(app)
       .post('/password-resets/confirm')
-      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.body), password: 'brand-new-password' });
+      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.appLink!), password: 'brand-new-password' });
 
     expect(res.status).toBe(401);
   });
@@ -124,7 +124,7 @@ describe('POST /password-resets', () => {
 
     const res = await request(app)
       .post('/password-resets/confirm')
-      .send({ token: signInTokenFrom(emailChannel.sent[0].payload.body), password: 'brand-new-password' });
+      .send({ token: signInTokenFrom(emailChannel.sent[0].payload.appLink!), password: 'brand-new-password' });
 
     expect(res.status).toBe(401);
     const stillSignedIn = await request(app)
@@ -140,7 +140,7 @@ describe('POST /password-resets', () => {
 
     const res = await request(app)
       .post('/password-resets/confirm')
-      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.body), password: 'short' });
+      .send({ token: resetTokenFrom(emailChannel.sent[0].payload.appLink!), password: 'short' });
 
     expect(res.status).toBe(400);
   });

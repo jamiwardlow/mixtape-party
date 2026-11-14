@@ -20,17 +20,19 @@ export interface AuthDeps {
   emailChannel: EmailChannel;
 }
 
-const EMAILED_LINKS: Record<AuthTokenPurpose, { ttlMs: number; title: string; body: (url: string) => string; path: (token: string) => string }> = {
+const EMAILED_LINKS: Record<AuthTokenPurpose, { ttlMs: number; title: string; body: string; button: string; path: (token: string) => string }> = {
   password_reset: {
     ttlMs: PASSWORD_RESET_TTL_MS,
     title: 'Reset your Mixtape Party password',
-    body: (url) => `Set a new password here:\n\n${url}\n\nIf you didn't ask for this, ignore this email.`,
+    body: "Tap the button to set a new password. The link expires soon.\n\nIf you didn't ask for this, ignore this email.",
+    button: 'Reset password',
     path: (token) => `/reset-password?token=${token}`,
   },
   sign_in: {
     ttlMs: SIGN_IN_TTL_MS,
     title: 'Your Mixtape Party sign-in link',
-    body: (url) => `Sign in here:\n\n${url}\n\nIf you didn't ask for this, ignore this email.`,
+    body: "Tap the button to sign in. The link expires soon.\n\nIf you didn't ask for this, ignore this email.",
+    button: 'Sign in',
     // A fragment, not a query param: the web client renders server-side, so a token in the query
     // string lands in the web service's access logs as a live credential (see #49).
     path: (token) => `/auth/complete#t=${token}`,
@@ -50,7 +52,7 @@ async function emailAuthLink(deps: AuthDeps, account: { id: string; email: strin
     if (await isAuthTokenRateLimited(deps.pool, account.id)) return;
     const token = await issueAuthToken(deps.pool, account.id, purpose, link.ttlMs);
     const url = `${deps.appBaseUrl}${link.path(token)}`;
-    await deps.emailChannel.send(account.email, { title: link.title, body: link.body(url) });
+    await deps.emailChannel.send(account.email, { title: link.title, body: link.body, appLink: url, appLinkLabel: link.button });
   } catch (err) {
     console.error('auth link email failed', err);
   }
