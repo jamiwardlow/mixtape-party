@@ -606,10 +606,11 @@ export function LeaderboardRow({
   );
 }
 
-/** The logo: a tilted bubblegum sticker. Not the cassette mark. */
+/** The logo: a tilted bubblegum sticker, matching the landing page's. Not the cassette mark. */
 export function StickerBadge({ small }: { small?: boolean }) {
   const t = useTheme();
   const size = small ? 18 : 30;
+  const line = { color: t.accentInk, fontFamily: t.font.display, fontSize: size, lineHeight: size * 1.05, textAlign: 'center' } as const;
   return (
     <Sticker radius={t.radius} style={{ alignSelf: 'flex-start', transform: [{ rotate: '-4deg' }] }}>
       <View
@@ -617,8 +618,8 @@ export function StickerBadge({ small }: { small?: boolean }) {
         accessibilityLabel="Mixtape Party"
         style={{ backgroundColor: t.accent, borderColor: t.ink, borderWidth: t.border, borderRadius: t.radius, paddingVertical: small ? 6 : 10, paddingHorizontal: small ? 12 : 20 }}
       >
-        <Text style={{ color: t.accentInk, fontFamily: t.font.display, fontSize: size, lineHeight: size * 1.05 }}>Mixtape</Text>
-        <Text style={{ color: t.shell, fontFamily: t.font.display, fontSize: size, lineHeight: size * 1.05 }}>Party!</Text>
+        <Text style={line}>Mixtape</Text>
+        <Text style={{ ...line, color: t.badgeLight }}>Party!</Text>
       </View>
     </Sticker>
   );

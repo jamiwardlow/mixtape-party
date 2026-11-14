@@ -14,6 +14,7 @@ const light = {
   reel: '#1A1033',
   accent: '#FF4F9A', // Bubblegum
   accentInk: '#1A1033', // text on any accent fill; stays dark in both schemes
+  badgeLight: '#FFFFFF', // "Party!" on the logo
   scrim: 'rgba(0,0,0,0.35)',
   onScrim: '#FFFFFF',
   danger: '#B3124F', // accent is too light to read as text on Sunshine
@@ -40,6 +41,7 @@ const dark: Theme = {
   reel: '#FFFDF5',
   danger: '#FF7AA8',
   cobalt: '#8C9EFF',
+  badgeLight: '#FFFDF5',
 };
 
 export function useTheme(): Theme {

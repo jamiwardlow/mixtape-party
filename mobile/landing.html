@@ -53,18 +53,19 @@ a{color:inherit}
 .svc-group{display:flex;flex-direction:column;align-items:center;gap:12px}
 
 /* badge logo */
-.badge{background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:16px;padding:9px 14px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-4deg);display:grid;font:22px/.95 var(--f-display);text-align:center}
-.badge span:last-child{color:var(--bg)}
+.badge{background:var(--c1);color:#1A1033;border:var(--bw) solid var(--ink);border-radius:16px;padding:9px 14px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-4deg);display:grid;font:22px/.95 var(--f-display);text-align:center}
 
+.badge span:last-child{color:#fff}
+@media (prefers-color-scheme:dark){.badge span:last-child{color:#FFFDF5}}
 /* cassette */
 .k svg{display:block;width:100%;height:auto}
 .kb{fill:#FF4F9A;stroke:var(--ink);stroke-width:4}
 .kl{fill:var(--panel);stroke:var(--ink);stroke-width:2.4}
-.ks{fill:#3D5AFE}
+.ks{fill:var(--c2)}
 .kt{fill:var(--ink);font:700 14px var(--f-body);letter-spacing:.06em}
-.kw{fill:var(--ink);stroke:var(--ink);stroke-width:2}
+.kw{fill:#1A1033;stroke:var(--ink);stroke-width:2}
 .kd{fill:var(--ink)}.kf{fill:rgba(0,0,0,.18)}
-.ktp{fill:#2a1b12}.kh{fill:#fff;stroke:var(--ink);stroke-width:1.5}.kr2{stroke:var(--ink);stroke-width:2;stroke-linecap:round;fill:none}
+.ktp{fill:#2a1b12}.kh{fill:#fff;stroke:#1A1033;stroke-width:1.5}.kr2{stroke:#1A1033;stroke-width:2;stroke-linecap:round;fill:none}
 .kr{stroke:#fff;stroke-width:1.2;stroke-linecap:round;fill:none;opacity:.35}
 .reel{transform-box:fill-box;transform-origin:center}
 @media(prefers-reduced-motion:no-preference){.reel{animation:spin 6s linear infinite}}
@@ -82,10 +83,11 @@ a{color:inherit}
 .pile{position:relative;min-height:320px}
 .pile .k{position:absolute;filter:drop-shadow(6px 6px 0 var(--ink))}
 .pile .k:nth-child(2){width:78%;left:0;top:10px;transform:rotate(-7deg)}
-.pile .k:nth-child(3){width:62%;right:0;bottom:0;transform:rotate(9deg);--b:#3D5AFE}
-.pile .k:nth-child(3) .kb{fill:#3D5AFE}.pile .k:nth-child(3) .ks{fill:#5EEAD4}
+.pile .k:nth-child(3){width:62%;right:0;bottom:0;transform:rotate(9deg)}
+.pile .k:nth-child(3) .kb{fill:var(--c2)}.pile .k:nth-child(3) .ks{fill:#5EEAD4}
+@media (prefers-color-scheme:dark){.kl{fill:#000}}
 .sticker a{display:grid;place-items:center;width:100%;height:100%;color:inherit;text-decoration:none}
-.sticker{position:absolute;right:4%;top:0;z-index:2;background:var(--c3);border:var(--bw) solid var(--ink);border-radius:50%;width:124px;height:124px;display:grid;place-items:center;text-align:center;font:19px/1 var(--f-display);transform:rotate(12deg);box-shadow:var(--shadow);padding:10px}
+.sticker{position:absolute;right:4%;top:0;z-index:2;background:var(--c3);color:#1A1033;border:var(--bw) solid var(--ink);border-radius:50%;width:124px;height:124px;display:grid;place-items:center;text-align:center;font:19px/1 var(--f-display);transform:rotate(12deg);box-shadow:var(--shadow);padding:10px}
 @media(prefers-reduced-motion:no-preference){.sticker{transition:transform .15s}}
 .sticker:hover{transform:rotate(4deg) scale(1.05)}
 @media(max-width:760px){.hero{grid-template-columns:1fr}.pile{min-height:260px}.svc-group{align-items:flex-start}}
@@ -155,7 +157,7 @@ a{color:inherit}
 </div></div>
 <script>
 // Cassette markup from the design artifact; one template, stamped per [data-k].
-const K=t=>`<svg viewBox="0 0 200 130" role="img" aria-label="Cassette tape"><rect class="kb" x="3" y="3" width="194" height="124" rx="10"/><rect class="kl" x="13" y="11" width="174" height="76" rx="4"/><rect class="ks" x="13" y="11" width="174" height="12" rx="4"/><text class="kt" x="100" y="40" text-anchor="middle">${t}</text><path class="kr" d="M30 44H170" style="stroke:#1A1033"/><rect class="kw" x="38" y="49" width="124" height="29" rx="14.5"/><g transform="translate(53 63.5)"><circle r="13" class="ktp"/><g class="reel"><circle r="7.5" class="kh"/><path class="kr2" d="M0-7.5V-4M6.5 3.7L3.5 2M-6.5 3.7L-3.5 2"/></g></g><g transform="translate(147 63.5)"><circle r="10" class="ktp"/><g class="reel"><circle r="7.5" class="kh"/><path class="kr2" d="M0-7.5V-4M6.5 3.7L3.5 2M-6.5 3.7L-3.5 2"/></g></g><path class="kf" d="M40 127L52 94H148L160 127z"/><rect class="kd" x="91" y="104" width="18" height="9" rx="2"/><circle class="kd" cx="68" cy="114" r="4.5"/><circle class="kd" cx="132" cy="114" r="4.5"/><rect class="kd" x="78" y="120" width="5" height="4" rx="1"/><rect class="kd" x="117" y="120" width="5" height="4" rx="1"/><circle class="kd" cx="9" cy="9" r="2.5"/><circle class="kd" cx="191" cy="9" r="2.5"/><circle class="kd" cx="9" cy="121" r="2.5"/><circle class="kd" cx="191" cy="121" r="2.5"/></svg>`;
+const K=t=>`<svg viewBox="0 0 200 130" role="img" aria-label="Cassette tape"><rect class="kb" x="3" y="3" width="194" height="124" rx="10"/><rect class="kl" x="13" y="11" width="174" height="76" rx="4"/><rect class="ks" x="13" y="11" width="174" height="12" rx="4"/><text class="kt" x="100" y="40" text-anchor="middle">${t}</text><path class="kr" d="M30 44H170" style="stroke:var(--ink)"/><rect class="kw" x="38" y="49" width="124" height="29" rx="14.5"/><g transform="translate(53 63.5)"><circle r="13" class="ktp"/><g class="reel"><circle r="7.5" class="kh"/><path class="kr2" d="M0-7.5V-4M6.5 3.7L3.5 2M-6.5 3.7L-3.5 2"/></g></g><g transform="translate(147 63.5)"><circle r="10" class="ktp"/><g class="reel"><circle r="7.5" class="kh"/><path class="kr2" d="M0-7.5V-4M6.5 3.7L3.5 2M-6.5 3.7L-3.5 2"/></g></g><path class="kf" d="M40 127L52 94H148L160 127z"/><rect class="kd" x="91" y="104" width="18" height="9" rx="2"/><circle class="kd" cx="68" cy="114" r="4.5"/><circle class="kd" cx="132" cy="114" r="4.5"/><rect class="kd" x="78" y="120" width="5" height="4" rx="1"/><rect class="kd" x="117" y="120" width="5" height="4" rx="1"/><circle class="kd" cx="9" cy="9" r="2.5"/><circle class="kd" cx="191" cy="9" r="2.5"/><circle class="kd" cx="9" cy="121" r="2.5"/><circle class="kd" cx="191" cy="121" r="2.5"/></svg>`;
 document.querySelectorAll('[data-k]').forEach(e=>{e.classList.add('k');e.innerHTML=K(e.dataset.k)});
 </script>
 </body>
