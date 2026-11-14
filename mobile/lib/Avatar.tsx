@@ -42,7 +42,7 @@ export function Avatar({ url, token, initial, size = 96, label = 'Your photo' }:
   return (
     <View
       accessibilityLabel={label}
-      style={[box, { backgroundColor: avatarColor(initial), borderColor: t.ink, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }]}
+      style={[box, { backgroundColor: avatarColor(initial, t), borderColor: t.ink, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }]}
     >
       <HandText style={{ fontSize: size * 0.5 }}>{initial}</HandText>
     </View>

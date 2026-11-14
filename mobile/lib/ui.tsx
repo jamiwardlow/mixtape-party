@@ -26,7 +26,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import type { RoundPhase, ServiceName } from './rounds';
-import { SERVICE_META, useServiceColor, useTheme } from './theme';
+import { SERVICE_META, useServiceColor, useTheme, type Theme } from './theme';
 import { openPlaybackLink } from './bandcamp';
 
 // Sticker Pop primitives. Component names predate the design; screens import them as-is.
@@ -483,10 +483,8 @@ export function DeadlineRows({
 }
 
 /** Sticker colours cycled by name, so a player keeps the same one across screens. */
-export function avatarColor(seed: string): string {
-  const t = useTheme();
+export function avatarColor(seed: string, t: Theme): string {
   const colors = [t.accent, t.cobalt, t.mint, t.tangerine];
-  if (seed[0]?.toUpperCase() === 'T') return t.tangerine; // SCREENSHOT HACK (Theo): do not commit
   let h = 0;
   for (const c of seed) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return colors[h % colors.length];
@@ -497,7 +495,7 @@ export function InitialDisc({ name, size = 28 }: { name: string; size?: number }
   const t = useTheme();
   return (
     <View
-      style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: t.ink, backgroundColor: avatarColor(name), alignItems: 'center', justifyContent: 'center' }}
+      style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: t.ink, backgroundColor: avatarColor(name, t), alignItems: 'center', justifyContent: 'center' }}
     >
       <Text style={{ color: t.accentInk, fontFamily: t.font.display, fontSize: size * 0.5 }}>{name[0]?.toUpperCase() ?? '?'}</Text>
     </View>
