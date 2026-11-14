@@ -84,3 +84,28 @@ Decisions:
   from `app.json` and the forced `colorScheme: 'light'` in `ui.tsx`.
 - The landing page follows the system setting via `prefers-color-scheme` on its existing CSS variables.
 - Store art, the splash and the app icon stay Sunshine.
+
+## Email (#151)
+
+Direction B, "Quiet". Prototype: `docs/design/email-prototype.html` (A and C are rejected alternatives). Tables, solid colors, borders
+and web-safe fonts only; the one image is the badge, a hosted PNG with the tilt baked in.
+
+Layout: neutral page, one 520px card with a 3px ink outline and 20px radius. A header band holds the badge (Sunshine in light,
+page `bg` in dark), then a 3px ink rule, then the body. Headline in bold Courier, body in Courier, one pink pill button, small muted footer.
+
+| Token | Light | Dark |
+| --- | --- | --- |
+| page | `#F4F1EA` | `#031C29` |
+| header band | `#FFD93D` | `#052A3D` |
+| card body | `#FFFFFF` | `#0C3D55` |
+| ink (text, outline) | `#1A1033` | `#FFFDF5` |
+| muted (footer) | `#4A3F6B` | `#A8D3E0` |
+| button fill / text | `#FF4F9A` / `#1A1033` | same |
+
+Fonts: `'Courier New',Courier,monospace` for everything, `'Arial Black','Helvetica Neue',Arial,sans-serif` for the badge only.
+Bagel Fat One and Courier Prime don't load in mail clients. Spacing: 28px page padding, 26px card padding, 22px above the button.
+Button: 12px 24px padding, 3px border, thicker 6px bottom and right edge for the shadow, 16px bold.
+
+Degrades on purpose: radius and pill become square in Outlook desktop, the badge is a PNG with alt text, and Gmail on the web ignores
+`prefers-color-scheme` and shows the light look. Use `bgcolor` attributes beside inline backgrounds so forced inversion has something to read.
+Still to check in real clients: Gmail, Apple Mail, Outlook.

@@ -46,5 +46,5 @@ it('does not swallow an escaped character after a URL in the body into the link'
   await new ResendEmailChannel('key', 'from@x.com').send('to@x.com', { title: 't', body: 'go https://a.test/x<b' });
 
   const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-  expect(JSON.parse(init.body as string).html).toContain('<a href="https://a.test/x">https://a.test/x</a>&lt;b');
+  expect(JSON.parse(init.body as string).html).toMatch(/<a href="https:\/\/a\.test\/x"[^>]*>https:\/\/a\.test\/x<\/a>&lt;b/);
 });
