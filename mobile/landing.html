@@ -22,7 +22,9 @@
   --bw:3px;--r:20px;--shadow:5px 5px 0 var(--ink);--tilt:-2deg;
   --f-display:'Bagel Fat One','Arial Rounded MT Bold',sans-serif;
   --f-body:'Courier Prime','Courier New',monospace;
+  --on2:#fff;color-scheme:light dark;
 }
+@media (prefers-color-scheme:dark){:root{--bg:#052A3D;--panel:#0C3D55;--ink:#FFFDF5;--muted:#A8D3E0;--c2:#8C9EFF;--on2:#052A3D}}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--f-body);padding-inline:max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-right))}
@@ -37,10 +39,10 @@ a{color:inherit}
 .tape{display:inline-block;font:700 12px var(--f-body);letter-spacing:.14em;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:4px 10px;transform:rotate(var(--tilt));border-radius:3px}
 .card{background:var(--panel);border:var(--bw) solid var(--ink);border-radius:var(--r);box-shadow:var(--shadow);padding:20px;min-width:0}
 .grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}
-.btn{font:700 15px var(--f-body);background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:999px;padding:12px 22px;box-shadow:var(--shadow);transition:transform .1s,box-shadow .1s;text-decoration:none;display:inline-block;text-align:center}
+.btn{font:700 15px var(--f-body);background:var(--c1);color:#1A1033;border:var(--bw) solid var(--ink);border-radius:999px;padding:12px 22px;box-shadow:var(--shadow);transition:transform .1s,box-shadow .1s;text-decoration:none;display:inline-block;text-align:center}
 .btn:hover{transform:translate(-1px,-1px)}
 .btn:active{transform:translate(3px,3px);box-shadow:none}
-.btn.alt{background:var(--c2);color:#fff}
+.btn.alt{background:var(--c2);color:var(--on2)}
 .badge-app{display:inline-block;line-height:0}
 .badge-app img{height:40px;width:auto;display:block}
 .nav .r{display:flex;gap:12px;align-items:center}
@@ -57,7 +59,7 @@ a{color:inherit}
 /* cassette */
 .k svg{display:block;width:100%;height:auto}
 .kb{fill:#FF4F9A;stroke:var(--ink);stroke-width:4}
-.kl{fill:#fff;stroke:var(--ink);stroke-width:2.4}
+.kl{fill:var(--panel);stroke:var(--ink);stroke-width:2.4}
 .ks{fill:#3D5AFE}
 .kt{fill:var(--ink);font:700 14px var(--f-body);letter-spacing:.06em}
 .kw{fill:var(--ink);stroke:var(--ink);stroke-width:2}
@@ -74,7 +76,7 @@ a{color:inherit}
 .hero{display:grid;gap:32px;align-items:center;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)}
 .hero h1{font-size:clamp(40px,7.5vw,84px);margin-top:16px}
 .hero h1 mark{background:var(--c1);color:var(--ink);padding:0 .15em;border:var(--bw) solid var(--ink);border-radius:12px;display:inline-block;transform:rotate(-2deg)}
-.hero h1 mark.b{background:var(--c2);color:#fff;transform:rotate(1.5deg)}
+.hero h1 mark.b{background:var(--c2);color:var(--on2);transform:rotate(1.5deg)}
 .lead{font-size:18px;max-width:46ch;margin-top:20px}
 .cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:24px}
 .pile{position:relative;min-height:320px}
@@ -92,9 +94,9 @@ a{color:inherit}
 .how h2{font-size:clamp(28px,4.5vw,44px);margin-bottom:24px}
 .step{display:grid;gap:10px;align-content:start}
 .step h3{font-size:24px}
-.step .n{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:20px var(--f-display);background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink)}
-.step:nth-child(2) .n{background:var(--c2);color:#fff}.step:nth-child(3) .n{background:var(--c3)}
-.band{background:var(--c2);color:#fff;border-block:var(--bw) solid var(--ink);display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.step .n{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:20px var(--f-display);background:var(--c1);color:#1A1033;border:var(--bw) solid var(--ink)}
+.step:nth-child(2) .n{background:var(--c2);color:var(--on2)}.step:nth-child(3) .n{background:var(--c3)}
+.band{background:var(--c2);color:var(--on2);border-block:var(--bw) solid var(--ink);display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .band>div:first-child{flex:1 1 240px}
 .band>div:first-child h2{margin-bottom:12px}
 .band h2{font-size:clamp(24px,4vw,36px);max-width:22ch}

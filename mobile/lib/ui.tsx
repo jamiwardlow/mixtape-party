@@ -26,7 +26,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import type { RoundPhase, ServiceName } from './rounds';
-import { SERVICE_META, useTheme } from './theme';
+import { SERVICE_META, useServiceColor, useTheme } from './theme';
 import { openPlaybackLink } from './bandcamp';
 
 // Sticker Pop primitives. Component names predate the design; screens import them as-is.
@@ -38,7 +38,7 @@ function Sticker({ style, radius, children }: { style?: StyleProp<ViewStyle>; ra
     <View style={[{ marginRight: t.shadow, marginBottom: t.shadow }, style]}>
       <View
         pointerEvents="none"
-        style={{ position: 'absolute', top: t.shadow, left: t.shadow, right: -t.shadow, bottom: -t.shadow, borderRadius: radius, backgroundColor: t.ink }}
+        style={{ position: 'absolute', top: t.shadow, left: t.shadow, right: -t.shadow, bottom: -t.shadow, borderRadius: radius, backgroundColor: t.shadowColor }}
       />
       {children}
     </View>
@@ -141,7 +141,7 @@ export function Thumb({ url, title = '', size = 48 }: { url?: string | null; tit
   const color = colors[[...title].reduce((n, c) => n + c.charCodeAt(0), 0) % colors.length];
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[box, { backgroundColor: color, alignItems: 'center', justifyContent: 'center' }]}>
-      <Text style={{ color: t.ink, fontSize: size * 0.5 }}>♪</Text>
+      <Text style={{ color: t.accentInk, fontSize: size * 0.5 }}>♪</Text>
     </View>
   );
 }
@@ -177,8 +177,8 @@ export function TrackRow({
     <View>
       <Thumb url={thumbnailUrl} title={title} />
       {onPlay ? (
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 8 }]}>
-          <Text style={{ color: '#fff', fontSize: 20 }}>{playing ? '■' : '▶︎'}</Text>
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: t.scrim, borderRadius: 8 }]}>
+          <Text style={{ color: t.onScrim, fontSize: 20 }}>{playing ? '■' : '▶︎'}</Text>
         </View>
       ) : null}
     </View>
@@ -210,9 +210,10 @@ export function TrackRow({
 
 export function ServiceBadge({ service }: { service: ServiceName }) {
   const t = useTheme();
+  const color = useServiceColor(service);
   return (
     <View style={[styles.chip, { borderColor: t.ink, backgroundColor: t.shell }]}>
-      <View style={[styles.dot, { backgroundColor: SERVICE_META[service]?.color ?? t.ink, borderColor: t.ink }]} />
+      <View style={[styles.dot, { backgroundColor: color ?? t.ink, borderColor: t.ink }]} />
       <Text style={{ color: t.ink, fontFamily: t.font.bold, fontSize: 12 }}>{SERVICE_META[service]?.label ?? service}</Text>
     </View>
   );
@@ -298,7 +299,7 @@ export function TapeButton({
           focusRing(t, focused),
         ]}
       >
-        <Text style={{ color: t.ink, fontFamily: t.font.display, fontSize: 16 }}>{title}</Text>
+        <Text style={{ color: variant === 'secondary' ? t.ink : t.accentInk, fontFamily: t.font.display, fontSize: 16 }}>{title}</Text>
       </Pressable>
     </Sticker>
   );
@@ -397,7 +398,6 @@ export function TapeDateField({
             fontFamily: t.font.body,
             // Tints the browser's calendar popup; there's no way to restyle it beyond that.
             accentColor: t.accent,
-            colorScheme: 'light',
           }}
         />
       );
@@ -499,7 +499,7 @@ export function InitialDisc({ name, size = 28 }: { name: string; size?: number }
     <View
       style={{ width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: t.ink, backgroundColor: avatarColor(name), alignItems: 'center', justifyContent: 'center' }}
     >
-      <Text style={{ color: t.ink, fontFamily: t.font.display, fontSize: size * 0.5 }}>{name[0]?.toUpperCase() ?? '?'}</Text>
+      <Text style={{ color: t.accentInk, fontFamily: t.font.display, fontSize: size * 0.5 }}>{name[0]?.toUpperCase() ?? '?'}</Text>
     </View>
   );
 }
@@ -537,7 +537,7 @@ export function Chip({
       ]}
     >
       {avatar !== undefined && <InitialDisc name={avatar} size={22} />}
-      <Text style={{ color: t.ink, fontFamily: t.font.bold, fontSize: 14 }}>{label}</Text>
+      <Text style={{ color: selected ? t.accentInk : t.ink, fontFamily: t.font.bold, fontSize: 14 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -559,7 +559,7 @@ export function PhaseSteps({ phase }: { phase: RoundPhase }) {
           key={s.phase}
           style={[styles.step, { borderColor: t.ink, borderWidth: t.border, backgroundColor: i < at ? t.mint : i === at ? t.accent : t.shell }]}
         >
-          <Text style={{ color: t.ink, fontFamily: t.font.display, fontSize: 13 }}>{s.label}</Text>
+          <Text style={{ color: i < at + 1 ? t.accentInk : t.ink, fontFamily: t.font.display, fontSize: 13 }}>{s.label}</Text>
         </View>
       ))}
     </View>
@@ -571,7 +571,7 @@ export function Toast({ children }: { children: React.ReactNode }) {
   return (
     <Sticker radius={999} style={{ alignSelf: 'flex-start' }}>
       <View accessibilityLiveRegion="polite" style={[styles.pill, { borderColor: t.ink, borderWidth: t.border, backgroundColor: t.mint }]}>
-        <Text style={{ color: t.ink, fontFamily: t.font.bold, fontSize: 14 }}>{children}</Text>
+        <Text style={{ color: t.accentInk, fontFamily: t.font.bold, fontSize: 14 }}>{children}</Text>
       </View>
     </Sticker>
   );
@@ -600,7 +600,7 @@ export function LeaderboardRow({
       {avatar ?? <InitialDisc name={name} />}
       <Text numberOfLines={1} style={{ color: t.ink, fontFamily: t.font.body, fontSize: 15, flex: 1 }}>{name}</Text>
       <View style={[styles.points, { borderColor: t.ink, backgroundColor: t.accent }]}>
-        <Text testID={pointsTestID} style={{ color: t.ink, fontFamily: t.font.display, fontSize: 14 }}>{points}</Text>
+        <Text testID={pointsTestID} style={{ color: t.accentInk, fontFamily: t.font.display, fontSize: 14 }}>{points}</Text>
       </View>
     </View>
   );
@@ -617,7 +617,7 @@ export function StickerBadge({ small }: { small?: boolean }) {
         accessibilityLabel="Mixtape Party"
         style={{ backgroundColor: t.accent, borderColor: t.ink, borderWidth: t.border, borderRadius: t.radius, paddingVertical: small ? 6 : 10, paddingHorizontal: small ? 12 : 20 }}
       >
-        <Text style={{ color: t.ink, fontFamily: t.font.display, fontSize: size, lineHeight: size * 1.05 }}>Mixtape</Text>
+        <Text style={{ color: t.accentInk, fontFamily: t.font.display, fontSize: size, lineHeight: size * 1.05 }}>Mixtape</Text>
         <Text style={{ color: t.shell, fontFamily: t.font.display, fontSize: size, lineHeight: size * 1.05 }}>Party!</Text>
       </View>
     </Sticker>

@@ -6,7 +6,6 @@
     "scheme": "mixtapeparty",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mixtapeparty.app",

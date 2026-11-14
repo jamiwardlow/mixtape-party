@@ -50,7 +50,7 @@ cassette) and `icon-512.png` (the app icon downscaled; Play rounds it). The spla
 `#FFD93D` background with the pink badge (`mobile/assets/splash-icon.png`), configured in `app.json`; Android
 uses a smaller `imageWidth` so the 12+ circular crop doesn't clip the badge.
 
-## Dark mode (designed in #187, not yet implemented)
+## Dark mode (implemented in #198)
 
 Direction D, "Die-cut Blue-Teal". Prototype: `docs/design/dark-mode-prototype.html` (A and C are rejected alternatives).
 

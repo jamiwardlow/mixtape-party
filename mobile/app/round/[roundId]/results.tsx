@@ -10,7 +10,7 @@ import { usePreview } from '../../../lib/preview';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { SERVICE_META } from '../../../lib/theme';
+import { SERVICE_META, useTheme } from '../../../lib/theme';
 import {
   BodyText,
   ErrorNote,
@@ -319,10 +319,11 @@ function TrackCard({
 }
 
 const PODIUM_HEIGHT = [140, 116, 96];
-const PODIUM_COLOR = ['#5EEAD4', '#FF8A3D', '#FF4F9A'];
 
 /** Top 3 as blocks (1st centred and tallest); ties share a height. Everyone past 3rd gets a row below. */
 function Podium({ results, token }: { results: Results; token: string | null }) {
+  const t = useTheme();
+  const podiumColor = [t.mint, t.tangerine, t.accent];
   const { scores, winners } = results;
   const rank = (s: Score) => Math.min(scores.filter((o) => o.score > s.score).length, 2); // ties share
   // 2nd left, 1st centre, 3rd right; with fewer players the gaps just close up.
@@ -343,15 +344,16 @@ function Podium({ results, token }: { results: Results; token: string | null }) 
                   gap: 4,
                   padding: 6,
                   borderWidth: 3,
+                  borderColor: t.ink,
                   borderBottomWidth: 0,
                   borderTopLeftRadius: 14,
                   borderTopRightRadius: 14,
-                  backgroundColor: PODIUM_COLOR[rank(s)],
+                  backgroundColor: podiumColor[rank(s)],
                 }}
               >
                 <Avatar size={28} label="" url={s.avatarUrl} token={token} initial={(s.displayName ?? '?')[0]} />
-                <BodyText numberOfLines={1} style={{ fontSize: 13 }}>{s.displayName ?? 'A player'}</BodyText>
-                <BodyText style={{ fontSize: 13 }}>{s.score} pts</BodyText>
+                <BodyText numberOfLines={1} style={{ fontSize: 13, color: t.accentInk }}>{s.displayName ?? 'A player'}</BodyText>
+                <BodyText style={{ fontSize: 13, color: t.accentInk }}>{s.score} pts</BodyText>
               </View>
             </PlayerLink>
           </View>
