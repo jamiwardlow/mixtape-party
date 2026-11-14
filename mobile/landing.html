@@ -41,6 +41,17 @@ a{color:inherit}
 .btn:hover{transform:translate(-1px,-1px)}
 .btn:active{transform:translate(3px,3px);box-shadow:none}
 .btn.alt{background:var(--c2);color:#fff}
+.appbtn{display:inline-flex;align-items:center;gap:10px;background:#fff;color:var(--ink);border:var(--bw) solid var(--ink);border-radius:999px;padding:8px 22px 8px 16px;box-shadow:var(--shadow);text-decoration:none;text-align:left;line-height:1.1;transition:transform .1s,box-shadow .1s}
+.appbtn:hover{transform:translate(-1px,-1px)}
+.appbtn:active{transform:translate(3px,3px);box-shadow:none}
+.appbtn small{display:block;font:400 11px var(--f-body)}
+.appbtn b{font:400 20px var(--f-display)}
+.appbtn.sm{padding:6px 12px 6px 9px;gap:6px}
+.appbtn.sm b{font-size:14px}
+.nav .r{display:flex;gap:12px;align-items:stretch}
+.nav .r .btn{display:inline-flex;align-items:center}
+.nav .r .btn{padding-block:9px 7px}
+.nav .r .appbtn b{position:relative;top:-1px}
 .btn.sm{padding:8px 14px;font-size:13px}
 .svc{display:inline-flex;font:700 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;border:var(--bw) solid var(--ink);border-radius:99px;padding:2px 10px;background:var(--panel);color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -77,7 +88,10 @@ a{color:inherit}
 .pile .k:nth-child(2){width:78%;left:0;top:10px;transform:rotate(-7deg)}
 .pile .k:nth-child(3){width:62%;right:0;bottom:0;transform:rotate(9deg);--b:#3D5AFE}
 .pile .k:nth-child(3) .kb{fill:#3D5AFE}.pile .k:nth-child(3) .ks{fill:#5EEAD4}
-.sticker{position:absolute;right:4%;top:0;z-index:2;background:var(--c3);border:var(--bw) solid var(--ink);border-radius:50%;width:110px;height:110px;display:grid;place-items:center;text-align:center;font:18px/1 var(--f-display);transform:rotate(12deg);box-shadow:var(--shadow);padding:10px}
+.sticker a{display:grid;place-items:center;width:100%;height:100%;color:inherit;text-decoration:none}
+.sticker{position:absolute;right:4%;top:0;z-index:2;background:var(--c3);border:var(--bw) solid var(--ink);border-radius:50%;width:124px;height:124px;display:grid;place-items:center;text-align:center;font:19px/1 var(--f-display);transform:rotate(12deg);box-shadow:var(--shadow);padding:10px}
+@media(prefers-reduced-motion:no-preference){.sticker{transition:transform .15s}}
+.sticker:hover{transform:rotate(4deg) scale(1.05)}
 @media(max-width:760px){.hero{grid-template-columns:1fr}.pile{min-height:260px}}
 
 /* sections */
@@ -100,7 +114,7 @@ a{color:inherit}
   <nav class="nav" aria-label="Main">
     <a href="/" aria-label="Mixtape Party" style="text-decoration:none"><div class="badge"><span>Mixtape</span><span>Party!</span></div></a>
     <ul><li><a href="#how">How it works</a></li><li><a href="#services">Services</a></li></ul>
-    <a class="btn sm" href="/sign-in">Sign in</a>
+    <span class="r"><a class="appbtn sm" href="https://apps.apple.com/app/id6828562097"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.100 1.700 2.400 2.900 2.3 1.2 0 1.6-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.8-2.3.9-1.300 1.300-2.600 1.300-2.700 0 0-2.500-1-2.500-3.700zM14.200 5.800c.6-.8 1.100-1.900.9-3-.9 0-2.100.6-2.700 1.400-.6.700-1.100 1.800-1 2.900 1 .1 2.100-.5 2.8-1.300z"/></svg><b>Get the app</b></a><a class="btn sm" href="/sign-in">Sign in</a></span>
   </nav>
 
   <div class="hero">
@@ -110,7 +124,7 @@ a{color:inherit}
       <p class="lead">Make a playlist with your friends. Each round has a theme, everyone secretly adds one track, then you guess who picked what.</p>
       <div class="cta"><a class="btn" href="/create-league">Start a league</a><a class="btn alt" href="/join">Join with a code</a></div>
     </div>
-    <div class="pile" aria-hidden="true"><div class="sticker">Who<br>picked<br>it?!</div><div class="k" data-k="Side A"></div><div class="k" data-k="Side B"></div></div>
+    <div class="pile"><div class="sticker"><a href="https://apps.apple.com/app/id6828562097">Now on<br>iPhone!<br>↗</a></div><div class="k" aria-hidden="true" data-k="Side A"></div><div class="k" aria-hidden="true" data-k="Side B"></div></div>
   </div>
 </header>
 
@@ -127,6 +141,7 @@ a{color:inherit}
   <h2>Listen paywall-free</h2>
   <div class="chips"><span class="svc">YT Music</span><span class="svc">Bandcamp</span></div>
   <p style="max-width:44ch">When a round ends, listen to an open-access playlist on YouTube or embedded tracks from Bandcamp. That's how we party.</p>
+  <a class="appbtn" href="https://apps.apple.com/app/id6828562097"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.100 1.700 2.400 2.900 2.3 1.2 0 1.6-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.8-2.3.9-1.300 1.300-2.600 1.300-2.700 0 0-2.500-1-2.500-3.700zM14.200 5.800c.6-.8 1.100-1.900.9-3-.9 0-2.100.6-2.700 1.400-.6.700-1.100 1.800-1 2.900 1 .1 2.100-.5 2.8-1.300z"/></svg><span><small>Download on the</small><b>App Store</b></span></a>
 </section>
 
 <section class="sec final">
