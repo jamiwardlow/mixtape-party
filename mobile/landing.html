@@ -41,17 +41,9 @@ a{color:inherit}
 .btn:hover{transform:translate(-1px,-1px)}
 .btn:active{transform:translate(3px,3px);box-shadow:none}
 .btn.alt{background:var(--c2);color:#fff}
-.appbtn{display:inline-flex;align-items:center;gap:10px;background:#fff;color:var(--ink);border:var(--bw) solid var(--ink);border-radius:999px;padding:8px 22px 8px 16px;box-shadow:var(--shadow);text-decoration:none;text-align:left;line-height:1.1;transition:transform .1s,box-shadow .1s}
-.appbtn:hover{transform:translate(-1px,-1px)}
-.appbtn:active{transform:translate(3px,3px);box-shadow:none}
-.appbtn small{display:block;font:400 11px var(--f-body)}
-.appbtn b{font:400 20px var(--f-display)}
-.appbtn.sm{padding:6px 12px 6px 9px;gap:6px}
-.appbtn.sm b{font-size:14px}
-.nav .r{display:flex;gap:12px;align-items:stretch}
-.nav .r .btn{display:inline-flex;align-items:center}
-.nav .r .btn{padding-block:9px 7px}
-.nav .r .appbtn b{position:relative;top:-1px}
+.badge-app{display:inline-block;line-height:0}
+.badge-app img{height:40px;width:auto;display:block}
+.nav .r{display:flex;gap:12px;align-items:center}
 .btn.sm{padding:8px 14px;font-size:13px}
 .svc{display:inline-flex;font:700 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;border:var(--bw) solid var(--ink);border-radius:99px;padding:2px 10px;background:var(--panel);color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -114,7 +106,7 @@ a{color:inherit}
   <nav class="nav" aria-label="Main">
     <a href="/" aria-label="Mixtape Party" style="text-decoration:none"><div class="badge"><span>Mixtape</span><span>Party!</span></div></a>
     <ul><li><a href="#how">How it works</a></li><li><a href="#services">Services</a></li></ul>
-    <span class="r"><a class="appbtn sm" href="https://apps.apple.com/app/id6828562097"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.100 1.700 2.400 2.900 2.3 1.2 0 1.6-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.8-2.3.9-1.300 1.300-2.600 1.300-2.700 0 0-2.500-1-2.500-3.700zM14.200 5.800c.6-.8 1.100-1.900.9-3-.9 0-2.100.6-2.700 1.400-.6.700-1.100 1.800-1 2.900 1 .1 2.100-.5 2.8-1.300z"/></svg><b>Get the app</b></a><a class="btn sm" href="/sign-in">Sign in</a></span>
+    <span class="r"><a class="badge-app" href="https://apps.apple.com/app/id6828562097"><img src="/app-store-badge.svg" alt="Download on the App Store"></a><a class="btn sm" href="/sign-in">Sign in</a></span>
   </nav>
 
   <div class="hero">
@@ -141,7 +133,7 @@ a{color:inherit}
   <h2>Listen paywall-free</h2>
   <div class="chips"><span class="svc">YT Music</span><span class="svc">Bandcamp</span></div>
   <p style="max-width:44ch">When a round ends, listen to an open-access playlist on YouTube or embedded tracks from Bandcamp. That's how we party.</p>
-  <a class="appbtn" href="https://apps.apple.com/app/id6828562097"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.100 1.700 2.400 2.900 2.3 1.2 0 1.6-.7 3-.7s1.800.7 3 .7c1.300 0 2.100-1.100 2.8-2.3.9-1.300 1.300-2.600 1.300-2.700 0 0-2.500-1-2.500-3.700zM14.200 5.800c.6-.8 1.100-1.900.9-3-.9 0-2.100.6-2.700 1.400-.6.700-1.100 1.800-1 2.900 1 .1 2.100-.5 2.8-1.300z"/></svg><span><small>Download on the</small><b>App Store</b></span></a>
+  <a class="badge-app" href="https://apps.apple.com/app/id6828562097"><img src="/app-store-badge.svg" alt="Download on the App Store"></a>
 </section>
 
 <section class="sec final">
