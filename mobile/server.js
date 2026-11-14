@@ -14,6 +14,7 @@ app.disable('x-powered-by');
 // The marketing page lives at exactly `/` (ahead of expo-server, whose `/` just redirects).
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'landing.html')));
 app.get('/app-store-badge.svg', (_req, res) => res.sendFile(path.join(__dirname, 'app-store-badge.svg')));
+app.get('/og-image.png', (_req, res) => res.sendFile(path.join(__dirname, 'og-image.png')));
 app.get('/landing-favicon.svg', (_req, res) => res.sendFile(path.join(__dirname, 'landing-favicon.svg')));
 // Universal links / Android app links (#142). Served here, not from public/, because static
 // middleware skips dotfile dirs and AASA has no extension. Set APPLE_TEAM_ID and
