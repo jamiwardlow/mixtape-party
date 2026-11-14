@@ -44,9 +44,11 @@ a{color:inherit}
 .badge-app{display:inline-block;line-height:0}
 .badge-app img{height:40px;width:auto;display:block}
 .nav .r{display:flex;gap:12px;align-items:center}
+.nav .badge-app{position:relative;top:2px}
 .btn.sm{padding:8px 14px;font-size:13px}
 .svc{display:inline-flex;font:700 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;border:var(--bw) solid var(--ink);border-radius:99px;padding:2px 10px;background:var(--panel);color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
+.svc-group{display:flex;flex-direction:column;align-items:center;gap:12px}
 
 /* badge logo */
 .badge{background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink);border-radius:16px;padding:9px 14px;box-shadow:3px 3px 0 var(--ink);transform:rotate(-4deg);display:grid;font:22px/.95 var(--f-display);text-align:center}
@@ -84,7 +86,7 @@ a{color:inherit}
 .sticker{position:absolute;right:4%;top:0;z-index:2;background:var(--c3);border:var(--bw) solid var(--ink);border-radius:50%;width:124px;height:124px;display:grid;place-items:center;text-align:center;font:19px/1 var(--f-display);transform:rotate(12deg);box-shadow:var(--shadow);padding:10px}
 @media(prefers-reduced-motion:no-preference){.sticker{transition:transform .15s}}
 .sticker:hover{transform:rotate(4deg) scale(1.05)}
-@media(max-width:760px){.hero{grid-template-columns:1fr}.pile{min-height:260px}}
+@media(max-width:760px){.hero{grid-template-columns:1fr}.pile{min-height:260px}.svc-group{align-items:flex-start}}
 
 /* sections */
 .how h2{font-size:clamp(28px,4.5vw,44px);margin-bottom:24px}
@@ -93,6 +95,8 @@ a{color:inherit}
 .step .n{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:20px var(--f-display);background:var(--c1);color:var(--ink);border:var(--bw) solid var(--ink)}
 .step:nth-child(2) .n{background:var(--c2);color:#fff}.step:nth-child(3) .n{background:var(--c3)}
 .band{background:var(--c2);color:#fff;border-block:var(--bw) solid var(--ink);display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.band>div:first-child{flex:1 1 240px}
+.band>div:first-child h2{margin-bottom:12px}
 .band h2{font-size:clamp(24px,4vw,36px);max-width:22ch}
 .final{text-align:center;display:grid;gap:18px;justify-items:center}
 .final h2{font-size:clamp(32px,6vw,60px);max-width:16ch}
@@ -130,10 +134,12 @@ a{color:inherit}
 </section>
 
 <section class="sec band" id="services">
+  <div>
   <h2>Listen paywall-free</h2>
-  <div class="chips"><span class="svc">YT Music</span><span class="svc">Bandcamp</span></div>
   <p style="max-width:44ch">When a round ends, listen to an open-access playlist on YouTube or embedded tracks from Bandcamp. That's how we party.</p>
-  <a class="badge-app" href="https://apps.apple.com/app/id6828562097"><img src="/app-store-badge.svg" alt="Download on the App Store"></a>
+  </div>
+  <div class="svc-group"><div class="chips"><span class="svc">YT Music</span><span class="svc">Bandcamp</span></div>
+  <a class="badge-app" href="https://apps.apple.com/app/id6828562097"><img src="/app-store-badge.svg" alt="Download on the App Store"></a></div>
 </section>
 
 <section class="sec final">
