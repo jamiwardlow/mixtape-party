@@ -43,6 +43,7 @@ export function runMusicServiceAdapterContractTests(
       expect(typeof playlist.externalId).toBe('string');
       try {
         const [track] = await adapter.search('test query');
+        expect(track, 'search returned no tracks to append').toBeDefined();
         await expect(adapter.appendToPlaylist(accessToken, playlist, [track])).resolves.not.toThrow();
       } finally {
         await cleanupPlaylist?.(accessToken, playlist);
