@@ -135,8 +135,14 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
     // UNLISTED, not PRIVATE: this playlist is built under one shared, server-held account (see
     // createPlaylist's accessToken) and shared to arbitrary listeners via its watch link.
     const body = (await innertubePost('playlist/create', { title: name, privacyStatus: 'UNLISTED' }, accessToken)) as {
-      playlistId: string;
+      playlistId?: string;
     };
+    if (!body.playlistId) {
+      throw new ServiceUnavailableError(
+        'youtube_music',
+        `youtube music playlist/create returned no playlistId: ${JSON.stringify(body).slice(0, 300)}`,
+      );
+    }
     return { externalId: body.playlistId, service: this.service };
   }
 
