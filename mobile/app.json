@@ -88,6 +88,10 @@
           "image": "./assets/splash-icon.png",
           "backgroundColor": "#FFD93D",
           "imageWidth": 512,
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#052A3D"
+          },
           "android": {
             "imageWidth": 200
           }
