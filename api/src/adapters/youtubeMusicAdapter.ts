@@ -138,9 +138,11 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
       playlistId?: string;
     };
     if (!body.playlistId) {
+      // responseContext is ~2KB of tracking noise that would push the useful part past the slice.
+      const { responseContext: _ignored, ...rest } = body as Record<string, unknown>;
       throw new ServiceUnavailableError(
         'youtube_music',
-        `youtube music playlist/create returned no playlistId: ${JSON.stringify(body).slice(0, 300)}`,
+        `youtube music playlist/create returned no playlistId: ${JSON.stringify(rest).slice(0, 600)}`,
       );
     }
     return { externalId: body.playlistId, service: this.service };
