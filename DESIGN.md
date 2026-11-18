@@ -38,7 +38,7 @@ Custom fonts: never use `fontWeight`; use the explicit bold family.
 
 ## Built
 
-Components live in `mobile/lib/ui.tsx`: `PhaseSteps`, `Chip`, `Toast`, `LeaderboardRow`, `StickerBadge`
+Components live in `mobile/lib/ui.tsx`: `Chip`, `Toast`, `LeaderboardRow`, `StickerBadge`
 (the logo), `Cassette` (spinning reels; still under reduced motion), `TapeButton`, `TapeInput`,
 `ServiceBadge`, `InitialDisc`. All screens were restyled on Sticker Pop (#155), and the web client adapts
 to desktop/tablet widths (#156). The marketing page is `mobile/landing.html`.

@@ -18,7 +18,6 @@ import {
   JCard,
   Label,
   LeaderboardRow,
-  PhaseSteps,
   RoundGate,
   Screen,
   ServiceBadge,
@@ -465,7 +464,6 @@ export default function RoundResults() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ gap: 12, padding: 6 }}
         >
-        <PhaseSteps phase="results" />
         {results ? <Podium results={results} token={token} /> : null}
         {playlists.length > 0 ? (
           <JCard>

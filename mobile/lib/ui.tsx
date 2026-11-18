@@ -26,7 +26,7 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
-import type { RoundPhase, ServiceName } from './rounds';
+import type { ServiceName } from './rounds';
 import { SERVICE_META, useServiceColor, useTheme, type Theme } from './theme';
 import { openPlaybackLink } from './bandcamp';
 
@@ -542,30 +542,6 @@ export function Chip({
   );
 }
 
-const STEPS: { phase: RoundPhase; label: string }[] = [
-  { phase: 'submission', label: 'Submit' },
-  { phase: 'guessing', label: 'Guess' },
-  { phase: 'results', label: 'Results' },
-];
-
-/** Where a round is: past steps mint, the current one bubblegum, the rest white. */
-export function PhaseSteps({ phase }: { phase: RoundPhase }) {
-  const t = useTheme();
-  const at = STEPS.findIndex((s) => s.phase === phase);
-  return (
-    <View style={styles.steps} accessibilityLabel={`Step ${at + 1} of 3: ${STEPS[at].label}`}>
-      {STEPS.map((s, i) => (
-        <View
-          key={s.phase}
-          style={[styles.step, { borderColor: t.ink, borderWidth: t.border, backgroundColor: i < at ? t.mint : i === at ? t.accent : t.shell }]}
-        >
-          <Text style={{ color: i < at + 1 ? t.accentInk : t.ink, fontFamily: t.font.display, fontSize: 13 }}>{s.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export function Toast({ children }: { children: React.ReactNode }) {
   const t = useTheme();
   return (
@@ -721,8 +697,6 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
   spinner: { alignSelf: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14, minHeight: 36 },
-  steps: { flexDirection: 'row', gap: 6 },
-  step: { flex: 1, alignItems: 'center', borderRadius: 999, paddingVertical: 6 },
   lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, paddingVertical: 8, paddingHorizontal: 12 },
   points: { borderWidth: 2, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 10 },
 });

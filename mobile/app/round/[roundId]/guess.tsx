@@ -7,7 +7,7 @@ import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../l
 import { usePreview } from '../../../lib/preview';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, Chip, ErrorNote, HandText, JCard, Label, PhaseSteps, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 import { openPlaybackLink } from '../../../lib/bandcamp';
 
 interface Track {
@@ -130,7 +130,6 @@ export default function GuessRound() {
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
       <Screen label="Guess the submitters">
-        <PhaseSteps phase="guessing" />
         {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         {playlistUrl ? <TapeButton title="Open playlist" onPress={() => Linking.openURL(playlistUrl)} /> : null}
         <FlatList keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled"
