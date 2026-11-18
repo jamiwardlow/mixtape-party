@@ -91,8 +91,7 @@ describe('guess screen editing', () => {
 
     await fireEvent.press(await screen.findByText('Bo'));
 
-    await waitFor(() => expect(screen.getByText('Guessed:')).toBeTruthy());
-    expect(screen.getAllByText('Bo').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Bo', selected: true })).toBeTruthy());
     const post = (fetch as jest.Mock).mock.calls.find(([url, init]) => String(url).endsWith('/guesses') && init?.method === 'POST');
     expect(JSON.parse(post[1].body)).toEqual({ guessedAccountId: 'a2' });
   });
@@ -175,5 +174,33 @@ describe('guess screen reactions and favorites', () => {
     await screen.findByText(/Song/);
     expect(screen.queryByLabelText('Add reaction')).toBeNull();
     expect(screen.queryByLabelText('Not favorited')).toBeNull();
+  });
+
+  it('dims a player guessed on another track, and unselects by pressing them where they were guessed', async () => {
+    const base = { service: 'youtube_music', artist: 'Artist', playback: { deepLink: 'ytm://s' }, comment: null, reactions: [], favorited: false };
+    const tracks = [
+      { ...base, submissionId: 's1', title: 'One', guessedAccountId: 'a1' },
+      { ...base, submissionId: 's2', title: 'Two', guessedAccountId: null },
+    ];
+    const players = [{ accountId: 'a1', displayName: 'Ann' }];
+    globalThis.fetch = jest.fn(async (url: string, init?: { method?: string }) =>
+      String(url).includes('/export')
+        ? new Response(JSON.stringify({ services: [] }), { status: 200 })
+        : init?.method === 'DELETE'
+          ? new Response(null, { status: 204 })
+          : new Response(JSON.stringify({ tracks, players }), { status: 200 }),
+    ) as unknown as typeof fetch;
+    await render(<GuessRound />);
+
+    const chips = await screen.findAllByRole('button', { name: 'Ann' });
+    expect(chips[0]).toHaveProp('accessibilityState', expect.objectContaining({ selected: true }));
+    expect(chips[1]).toHaveProp('accessibilityState', expect.objectContaining({ disabled: true }));
+
+    await fireEvent.press(chips[0]);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/submissions/s1/guesses'), expect.objectContaining({ method: 'DELETE' })));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Ann' })[1]).toHaveProp('accessibilityState', expect.objectContaining({ disabled: false })),
+    );
   });
 });

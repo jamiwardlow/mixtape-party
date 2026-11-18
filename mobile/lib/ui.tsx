@@ -512,6 +512,7 @@ export function Chip({
   avatar,
   testID,
   disabled,
+  taken,
 }: {
   label: string;
   selected?: boolean;
@@ -519,6 +520,8 @@ export function Chip({
   avatar?: string;
   testID?: string;
   disabled?: boolean;
+  /** Already used elsewhere: dimmed, dotted outline, not pressable. */
+  taken?: boolean;
 }) {
   const t = useTheme();
   return (
@@ -526,12 +529,18 @@ export function Chip({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected: !!selected, disabled: !!disabled }}
-      disabled={disabled}
+      accessibilityState={{ selected: !!selected, disabled: !!disabled || !!taken }}
+      disabled={disabled || taken}
       onPress={onPress}
       style={({ focused, hovered }: WebState) => [
         styles.pill,
-        { borderColor: t.ink, borderWidth: t.border, backgroundColor: selected ? t.mint : t.shell, opacity: disabled ? 0.5 : 1 },
+        {
+          borderColor: t.ink,
+          borderWidth: t.border,
+          borderStyle: taken ? 'dotted' : 'solid',
+          backgroundColor: selected ? t.mint : t.shell,
+          opacity: taken ? 0.45 : disabled ? 0.5 : 1,
+        },
         hovered && !disabled && !selected ? { backgroundColor: t.mint + '55' } : null,
         focusRing(t, focused),
       ]}

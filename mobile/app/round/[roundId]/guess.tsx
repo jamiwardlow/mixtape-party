@@ -7,7 +7,7 @@ import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../l
 import { usePreview } from '../../../lib/preview';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
-import { BodyText, Chip, ErrorNote, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 import { openPlaybackLink } from '../../../lib/bandcamp';
 
 interface Track {
@@ -84,6 +84,15 @@ export default function GuessRound() {
     }
   }
 
+  async function unguess(submissionId: string) {
+    if (!token) return;
+    const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses`, { method: 'DELETE', token });
+    if (res.ok) {
+      // The server drops the comment with the guess; the draft stays in the box to re-send with the next guess.
+      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId: null, comment: null } : t)) ?? null);
+    }
+  }
+
   async function saveComment(submissionId: string) {
     if (!token) return;
     const mine = tracks?.find((t) => t.submissionId === submissionId)?.mine;
@@ -126,6 +135,9 @@ export default function GuessRound() {
   );
   const previewPath = useCallback((id: string) => `/rounds/${roundId}/submissions/${id}/preview`, [roundId]);
   const { playingId, toggle } = usePreview(previewPath, token, openInService);
+
+  // Each player can be guessed on one track only.
+  const guessedIds = new Set((tracks ?? []).map((t) => t.guessedAccountId).filter(Boolean));
 
   return (
     <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
@@ -173,23 +185,20 @@ export default function GuessRound() {
               {(item.mine || item.guessedAccountId) && (drafts[item.submissionId] ?? '').trim() !== (item.comment ?? '') ? (
                 <TapeButton title="Save comment" onPress={() => saveComment(item.submissionId)} variant="secondary" />
               ) : null}
-              {item.guessedAccountId ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Label>Guessed:</Label>
-                  <HandText>{players.find((p) => p.accountId === item.guessedAccountId)?.displayName ?? 'a player'}</HandText>
-                </View>
-              ) : null}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {(item.mine ? [] : players)
-                  .filter((player) => player.accountId !== item.guessedAccountId)
-                  .map((player) => (
+                {(item.mine ? [] : players).map((player) => {
+                  const here = player.accountId === item.guessedAccountId;
+                  return (
                     <Chip
                       key={player.accountId}
                       avatar={player.displayName ?? 'A player'}
                       label={player.displayName ?? 'A player'}
-                      onPress={() => guess(item.submissionId, player.accountId)}
+                      selected={here}
+                      taken={!here && guessedIds.has(player.accountId)}
+                      onPress={() => (here ? unguess(item.submissionId) : guess(item.submissionId, player.accountId))}
                     />
-                  ))}
+                  );
+                })}
               </View>
             </JCard>
           )}

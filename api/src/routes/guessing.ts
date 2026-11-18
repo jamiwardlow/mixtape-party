@@ -279,6 +279,17 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       return;
     }
 
+    // Each player can be guessed on one track only; unselect it there (DELETE) before using it here.
+    const taken = await deps.pool.query(
+      `SELECT 1 FROM guesses g JOIN submissions s ON s.id = g.submission_id
+       WHERE s.round_id = $1 AND g.guesser_account_id = $2 AND g.guessed_account_id = $3 AND g.submission_id != $4`,
+      [req.params.roundId, accountId, guessedAccountId, req.params.submissionId],
+    );
+    if (taken.rowCount) {
+      res.status(409).json({ error: 'you already guessed that player on another track' });
+      return;
+    }
+
     // A repeat POST changes the guess; the comment is only touched when one is sent.
     const upserted = await deps.pool.query<{ id: string; inserted: boolean }>(
       `INSERT INTO guesses (submission_id, guesser_account_id, guessed_account_id, comment)
@@ -291,6 +302,28 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     );
     const { id, inserted } = upserted.rows[0];
     res.status(inserted ? 201 : 200).json({ guessId: id });
+  });
+
+  // Unselects your guess on a track (frees that player for another track). Drops the guess's comment with it.
+  router.delete('/rounds/:roundId/submissions/:submissionId/guesses', requireAuth(deps), async (req, res) => {
+    const accountId = (req as unknown as AuthedRequest).accountId;
+    const round = await deps.pool.query<{ guessing_deadline: string }>(
+      `SELECT r.guessing_deadline FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1 AND s.round_id = $2`,
+      [req.params.submissionId, req.params.roundId],
+    );
+    if (!round.rows[0]) {
+      res.status(404).json({ error: 'submission not found' });
+      return;
+    }
+    if (new Date(round.rows[0].guessing_deadline) <= new Date()) {
+      res.status(403).json({ error: 'guessing has closed for this round' });
+      return;
+    }
+    await deps.pool.query('DELETE FROM guesses WHERE submission_id = $1 AND guesser_account_id = $2', [
+      req.params.submissionId,
+      accountId,
+    ]);
+    res.status(204).end();
   });
 
   // Edits (or clears) your comment on a guess you've made. Allowed at any time, results included.
