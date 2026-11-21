@@ -64,4 +64,17 @@ describe('seedDemo', () => {
     expect(emailChannel.sent).toHaveLength(0);
     expect(pushChannel.sent).toHaveLength(0);
   });
+
+  it('deletes the playlists exported for the demo rounds it wipes, after the rebuild commits', async () => {
+    await seedDemo(testDb.pool, 'demo-password-1');
+    await testDb.pool.query(
+      `INSERT INTO round_exports (round_id, account_id, service, playlist_external_id)
+       SELECT r.id, l.host_account_id, 'youtube_music', 'PLold' FROM rounds r JOIN leagues l ON l.id = r.league_id
+       WHERE l.invite_code = 'DEMOFRI' AND r.round_number = 1`,
+    );
+    const deleted: string[] = [];
+    await seedDemo(testDb.pool, 'demo-password-1', new Date(), false, async (id) => void deleted.push(id));
+    expect(deleted).toEqual(['PLold']);
+    expect((await testDb.pool.query('SELECT 1 FROM round_exports')).rows).toHaveLength(0);
+  });
 });
