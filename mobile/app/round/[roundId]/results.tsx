@@ -504,8 +504,8 @@ export default function RoundResults() {
             />
           </View>
         ))}
-        <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
         </ScrollView>
+        <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
       </Screen>
     </RoundGate>
   );
