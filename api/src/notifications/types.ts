@@ -1,4 +1,4 @@
-export type NotificationType = 'submission_reminder' | 'guessing_reminder' | 'guessing_open' | 'results_ready' | 'season_concluded' | 'comment_reply' | 'comment_reaction';
+export type NotificationType = 'submission_reminder' | 'guessing_reminder' | 'submission_last_call' | 'guessing_last_call' | 'guessing_open' | 'results_ready' | 'season_concluded' | 'comment_reply' | 'comment_reaction';
 
 export interface NotificationPayload {
   title: string;

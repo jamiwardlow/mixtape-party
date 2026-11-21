@@ -738,10 +738,14 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
                CASE WHEN (n.submission_opens_at, n.submission_deadline)
                          = (r.submission_opens_at, r.submission_deadline)
                     THEN r.submission_reminder_sent_at END,
+             submission_last_call_sent_at =
+               CASE WHEN n.submission_deadline = r.submission_deadline THEN r.submission_last_call_sent_at END,
              guessing_reminder_sent_at =
                CASE WHEN (n.submission_deadline, n.guessing_deadline)
                          = (r.submission_deadline, r.guessing_deadline)
-                    THEN r.guessing_reminder_sent_at END
+                    THEN r.guessing_reminder_sent_at END,
+             guessing_last_call_sent_at =
+               CASE WHEN n.guessing_deadline = r.guessing_deadline THEN r.guessing_last_call_sent_at END
          FROM (
            SELECT id,
                   submission_opens_at + $7::interval AS submission_opens_at,
@@ -759,8 +763,12 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
              guessing_deadline = $4::timestamptz,
              submission_reminder_sent_at =
                CASE WHEN submission_deadline = $3::timestamptz THEN submission_reminder_sent_at END,
+             submission_last_call_sent_at =
+               CASE WHEN submission_deadline = $3::timestamptz THEN submission_last_call_sent_at END,
              guessing_reminder_sent_at =
-               CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_reminder_sent_at END
+               CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_reminder_sent_at END,
+             guessing_last_call_sent_at =
+               CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_last_call_sent_at END
          WHERE id = $1
          RETURNING id, round_number, theme, submission_deadline, guessing_deadline
        )

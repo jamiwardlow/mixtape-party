@@ -136,7 +136,9 @@ export async function closeGuessingWindow(pool: Pool, roundId: string) {
 /** Every round of a league already reminded, so a test can watch a moved window clear its flag. */
 export async function markRemindersSent(pool: Pool, leagueId: string) {
   await pool.query(
-    'UPDATE rounds SET submission_reminder_sent_at = now(), guessing_reminder_sent_at = now() WHERE league_id = $1',
+    `UPDATE rounds SET submission_reminder_sent_at = now(), guessing_reminder_sent_at = now(),
+                       submission_last_call_sent_at = now(), guessing_last_call_sent_at = now()
+     WHERE league_id = $1`,
     [leagueId],
   );
 }

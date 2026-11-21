@@ -322,11 +322,12 @@ export async function seedDemo(
 
       for (const [i, round] of league.rounds.entries()) {
         const [opens, closes, guessCloses] = round.window;
-        // All four sweep flags are set so the notification sweep treats every demo round as already handled.
+        // Every sweep flag is set so the notification sweep treats every demo round as already handled.
         const r = await client.query<{ id: string }>(
           `INSERT INTO rounds (league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline, created_at,
-                               submission_reminder_sent_at, guessing_reminder_sent_at, guessing_notified_at, results_notified_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $8, $8) RETURNING id`,
+                               submission_reminder_sent_at, guessing_reminder_sent_at, submission_last_call_sent_at,
+                               guessing_last_call_sent_at, guessing_notified_at, results_notified_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $8, $8, $8, $8) RETURNING id`,
           [leagueId, i + 1, round.theme, at(opens), at(closes), at(guessCloses), at(league.rounds[0].window[0] - 3), now],
         );
         const roundId = r.rows[0].id;

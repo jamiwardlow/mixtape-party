@@ -289,6 +289,127 @@ describe('runNotificationSweep', () => {
     expect(results(deps.emailChannel.sent)).toHaveLength(1);
   });
 
+  describe('last call (#208)', () => {
+    async function typesSent() {
+      const res = await testDb.pool.query<{ account_id: string; type: string }>(
+        'SELECT account_id, type FROM notifications ORDER BY created_at, type',
+      );
+      return res.rows;
+    }
+
+    it('sends a submission last call 3h out, not before, once, to non-submitters only', async () => {
+      const host = await createAccount(`host-${Math.random()}@example.com`);
+      const laggard = await createAccount(`laggard-${Math.random()}@example.com`);
+      const leagueId = await createLeague(host);
+      await addMember(leagueId, host);
+      await addMember(leagueId, laggard);
+      const roundId = await createRound(
+        leagueId,
+        1,
+        new Date('2030-01-01T00:00:00Z'),
+        new Date('2030-01-06T00:00:00Z'),
+        new Date('2030-01-13T00:00:00Z'),
+      );
+      await submit(roundId, host);
+      await testDb.pool.query('UPDATE rounds SET submission_reminder_sent_at = now() WHERE id = $1', [roundId]);
+
+      const deps = buildDeps();
+      await runNotificationSweep(deps, new Date('2030-01-05T20:59:00Z'));
+      expect(await typesSent()).toEqual([]);
+
+      await runNotificationSweep(deps, new Date('2030-01-05T21:00:00Z'));
+      await runNotificationSweep(deps, new Date('2030-01-05T22:00:00Z'));
+      expect(await typesSent()).toEqual([{ account_id: laggard, type: 'submission_last_call' }]);
+      expect(deps.emailChannel.sent[0].payload.title).toBe('Last call: Round 1 submissions close in 3 hours');
+      expect(deps.emailChannel.sent[0].payload.appLink).toBe(`https://app.test/round/${roundId}/submit`);
+    });
+
+    it('sends a guessing last call 3h out to members who have not guessed every track', async () => {
+      const host = await createAccount(`host-${Math.random()}@example.com`);
+      const laggard = await createAccount(`laggard-${Math.random()}@example.com`);
+      const leagueId = await createLeague(host);
+      await addMember(leagueId, host);
+      await addMember(leagueId, laggard);
+      const roundId = await createRound(
+        leagueId,
+        1,
+        new Date('2030-01-01T00:00:00Z'),
+        new Date('2000-01-01T00:00:00Z'),
+        new Date('2030-01-11T00:00:00Z'),
+      );
+      const hostSub = await testDb.pool.query<{ id: string }>(
+        `INSERT INTO submissions (round_id, account_id, service, external_id, title, artist)
+         VALUES ($1, $2, 'youtube_music', 'x', 'Song', 'Artist') RETURNING id`,
+        [roundId, host],
+      );
+      await testDb.pool.query(
+        'INSERT INTO guesses (submission_id, guesser_account_id, guessed_account_id) VALUES ($1, $2, $3)',
+        [hostSub.rows[0].id, host, laggard],
+      );
+      await testDb.pool.query(
+        'UPDATE rounds SET guessing_reminder_sent_at = now(), guessing_notified_at = now() WHERE id = $1',
+        [roundId],
+      );
+
+      const deps = buildDeps();
+      await runNotificationSweep(deps, new Date('2030-01-10T20:59:00Z'));
+      expect(await typesSent()).toEqual([]);
+
+      await runNotificationSweep(deps, new Date('2030-01-10T21:00:00Z'));
+      await runNotificationSweep(deps, new Date('2030-01-10T22:00:00Z'));
+      expect(await typesSent()).toEqual([{ account_id: laggard, type: 'guessing_last_call' }]);
+      expect(deps.emailChannel.sent[0].payload.title).toBe('Last call: Round 1 guessing closes in 3 hours');
+      expect(deps.emailChannel.sent[0].payload.appLink).toBe(`https://app.test/round/${roundId}/guess`);
+    });
+
+    it('on a window under 15h, sends the last call and never the 20% reminder after it', async () => {
+      const host = await createAccount(`host-${Math.random()}@example.com`);
+      const leagueId = await createLeague(host);
+      await addMember(leagueId, host);
+      // 10h window: the 20% reminder would be due at 2h left, after the 3h last call.
+      await createRound(
+        leagueId,
+        1,
+        new Date('2030-01-01T00:00:00Z'),
+        new Date('2030-01-01T10:00:00Z'),
+        new Date('2030-01-08T00:00:00Z'),
+      );
+
+      const deps = buildDeps();
+      await runNotificationSweep(deps, new Date('2030-01-01T07:00:00Z'));
+      await runNotificationSweep(deps, new Date('2030-01-01T08:30:00Z'));
+      expect(await typesSent()).toEqual([{ account_id: host, type: 'submission_last_call' }]);
+    });
+
+    it('fires again for the new deadline after a reschedule', async () => {
+      const { app } = buildApp(testDb.pool);
+      const host = await signUp(app, `resched-host-${Math.random()}@example.com`);
+      const created = await request(app)
+        .post('/leagues')
+        .set('Authorization', `Bearer ${host.token}`)
+        .send({
+          name: 'L',
+          seasonLength: 2,
+          theme: 'T',
+          submissionDeadline: '2030-01-10T00:00:00.000Z',
+          guessingDeadline: '2030-01-17T00:00:00.000Z',
+        });
+      const lastCalls = async () =>
+        (await testDb.pool.query("SELECT 1 FROM notifications WHERE type = 'submission_last_call'")).rowCount;
+
+      await runNotificationSweep(buildDeps(), new Date('2030-01-09T21:00:00Z'));
+      expect(await lastCalls()).toBe(1);
+
+      await request(app)
+        .patch(`/rounds/${created.body.round.id}`)
+        .set('Authorization', `Bearer ${host.token}`)
+        .send({ submissionDeadline: '2030-01-11T00:00:00.000Z' })
+        .expect(200);
+      await runNotificationSweep(buildDeps(), new Date('2030-01-10T21:00:00Z'));
+      expect(await lastCalls()).toBe(2);
+    });
+  });
+
   describe('playlist build', () => {
     async function closedRound(service: string) {
       const host = await createAccount(`host-${Math.random()}@example.com`);

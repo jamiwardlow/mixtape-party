@@ -46,9 +46,12 @@ async function scheduleOf(leagueId: string) {
     guessing_deadline: Date;
     submission_reminder_sent_at: Date | null;
     guessing_reminder_sent_at: Date | null;
+    submission_last_call_sent_at: Date | null;
+    guessing_last_call_sent_at: Date | null;
   }>(
     `SELECT id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline,
-            submission_reminder_sent_at, guessing_reminder_sent_at
+            submission_reminder_sent_at, guessing_reminder_sent_at,
+            submission_last_call_sent_at, guessing_last_call_sent_at
      FROM rounds WHERE league_id = $1 ORDER BY round_number`,
     [leagueId],
   );
@@ -667,11 +670,15 @@ describe('PATCH /rounds/:roundId', () => {
     for (const index of [2, 3]) {
       expect(after[index].submission_reminder_sent_at).toBeNull();
       expect(after[index].guessing_reminder_sent_at).toBeNull();
+      expect(after[index].submission_last_call_sent_at).toBeNull();
+      expect(after[index].guessing_last_call_sent_at).toBeNull();
     }
     // Round 2's guessing window moved so its guessing reminder is due again, but nothing touched
     // its submission window -- and round 1 is before the boundary entirely.
     expect(after[1].guessing_reminder_sent_at).toBeNull();
+    expect(after[1].guessing_last_call_sent_at).toBeNull();
     expect(after[1].submission_reminder_sent_at).not.toBeNull();
+    expect(after[1].submission_last_call_sent_at).not.toBeNull();
     expect(after[0].submission_reminder_sent_at).not.toBeNull();
     expect(after[0].guessing_reminder_sent_at).not.toBeNull();
   });
@@ -851,7 +858,9 @@ describe('PATCH /rounds/:roundId', () => {
     const after = await scheduleOf(leagueId);
     // Round 2's submission window moved; nothing touched its guessing window, or rounds 3 and 4.
     expect(after[1].submission_reminder_sent_at).toBeNull();
+    expect(after[1].submission_last_call_sent_at).toBeNull();
     expect(after[1].guessing_reminder_sent_at).not.toBeNull();
+    expect(after[1].guessing_last_call_sent_at).not.toBeNull();
     expect(after[2].submission_reminder_sent_at).not.toBeNull();
     expect(after[3].submission_reminder_sent_at).not.toBeNull();
   });
