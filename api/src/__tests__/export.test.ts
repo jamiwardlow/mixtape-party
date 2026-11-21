@@ -197,6 +197,21 @@ describe('POST /rounds/:roundId/export', () => {
     expect(youtubeMusicExport.playlistUrl).toBeNull();
   });
 
+  it('deletes the new playlist when filling it fails, so a retry does not leave an empty one behind', async () => {
+    const { app, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
+    youtubeMusicAdapter.appendToPlaylist = async () => {
+      throw new ServiceUnavailableError('youtube_music', 'youtube music browse/edit_playlist failed: 400');
+    };
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    expect(res.body.services.find((s: { service: string }) => s.service === 'youtube_music').status).toBe('failed');
+    expect(youtubeMusicAdapter.playlists.size).toBe(0);
+  });
+
   it('runs the export once per round, reusing the same playlist on a repeat request', async () => {
     const { app, youtubeMusicAdapter } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);

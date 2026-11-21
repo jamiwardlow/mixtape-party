@@ -33,6 +33,7 @@ export interface MusicServiceAdapter {
   match(track: TrackRef, accessToken?: string): Promise<TrackResult | null>;
   createPlaylist(accessToken: string, name: string): Promise<PlaylistRef>;
   appendToPlaylist(accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void>;
+  deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void>;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
   getPreviewUrl(track: TrackResult): Promise<string | null>;
 }

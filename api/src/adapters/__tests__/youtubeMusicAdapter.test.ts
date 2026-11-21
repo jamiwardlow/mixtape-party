@@ -55,13 +55,13 @@ describe('YouTubeMusicAdapter.deletePlaylist', () => {
   });
 
   it('surfaces a refused delete as a service outage rather than resolving quietly', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 }) as unknown as Response));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"unauthenticated"}', { status: 401 })));
 
     await expect(
       new YouTubeMusicAdapter().deletePlaylist('SAPISID=abc123', {
         externalId: 'PL_contract_test',
         service: 'youtube_music',
       }),
-    ).rejects.toThrow(/youtube music request failed: 401/);
+    ).rejects.toThrow(/youtube music playlist\/delete failed: 401 \{"error":"unauthenticated"\}/);
   });
 });

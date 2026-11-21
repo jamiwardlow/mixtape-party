@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { adapterFor, playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { resolveMatch } from '../adapters/matchCache.js';
-import type { MusicServiceAdapter, PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
+import type { MusicServiceAdapter, PlaybackLaunchHandle, PlaylistRef, ServiceName, TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound, type RoundInfo } from './rounds.js';
 
@@ -62,6 +62,27 @@ interface ServiceExport {
 /** A leg that produced no playlist, for any of the reasons that can end one: there is no link to give. */
 function noPlaylistExport(service: ExportableService, status: ExportStatus): ServiceExport {
   return { service, status, playlistExternalId: null, playlistUrl: null, matchedCount: 0, skipped: [] };
+}
+
+/**
+ * Creates a playlist and fills it, deleting it again if the fill fails. Nothing has recorded the
+ * playlist yet at that point, so without the delete every retry would leave another empty one in
+ * the shared app account.
+ */
+async function createFilledPlaylist(
+  adapter: MusicServiceAdapter,
+  accessToken: string,
+  name: string,
+  tracks: TrackResult[],
+): Promise<PlaylistRef> {
+  const playlist = await adapter.createPlaylist(accessToken, name);
+  try {
+    await adapter.appendToPlaylist(accessToken, playlist, tracks);
+  } catch (err) {
+    await adapter.deletePlaylist(accessToken, playlist).catch((deleteErr: unknown) => console.error(deleteErr));
+    throw err;
+  }
+  return playlist;
 }
 
 /** Resolves each submission to a track on `service`, keyed by submission id; the unmatched are left out. */
@@ -149,9 +170,8 @@ async function exportForService(
 
     playlistExternalId = null;
     if (matches.size > 0) {
-      const playlist = await adapter.createPlaylist(accessToken, playlistName);
-      await adapter.appendToPlaylist(accessToken, playlist, [...matches.values()]);
-      playlistExternalId = playlist.externalId;
+      playlistExternalId = (await createFilledPlaylist(adapter, accessToken, playlistName, [...matches.values()]))
+        .externalId;
     }
     matchedIds = new Set(matches.keys());
 
@@ -226,11 +246,8 @@ export async function buildRoundExports(
           // Logged rather than returned: the message names internals, and the client's copy keys
           // off the status. Nothing is persisted, so the next sweep or export request retries from scratch.
           //
-          // ponytail: that retry is unbounded and not free. A service that keeps refusing
-          // re-hits it on every results view, and a leg that fails *between* createPlaylist and
-          // appendToPlaylist leaves an empty playlist behind in the app account each time,
-          // since no round_exports row records the one already made. Record an attempted_at on
-          // round_exports (and reuse the orphaned playlist id) if either starts to bite.
+          // ponytail: that retry is unbounded and not free -- a service that keeps refusing is
+          // re-hit every sweep and results view. Record an attempted_at on round_exports to back off.
           console.error(err);
           return noPlaylistExport(service, 'failed');
         }),
@@ -283,11 +300,13 @@ async function exportFavorites(
   if (matches.size > 0) {
     // ponytail: unfavoriting never removes a track from an exported playlist, since the adapter has
     // no remove method. Add `removeFromPlaylist` to the adapter and diff against favorites to fix.
-    const playlist = playlistExternalId
-      ? { externalId: playlistExternalId, service }
-      : await adapter.createPlaylist(accessToken, 'Mixtape Party — Favorites');
-    await adapter.appendToPlaylist(accessToken, playlist, [...matches.values()]);
-    playlistExternalId = playlist.externalId;
+    if (playlistExternalId) {
+      await adapter.appendToPlaylist(accessToken, { externalId: playlistExternalId, service }, [...matches.values()]);
+    } else {
+      playlistExternalId = (
+        await createFilledPlaylist(adapter, accessToken, 'Mixtape Party — Favorites', [...matches.values()])
+      ).externalId;
+    }
     await deps.pool.query(
       `INSERT INTO favorite_exports (account_id, service, playlist_external_id, exported_submission_ids)
        VALUES ($1, $2, $3, $4)

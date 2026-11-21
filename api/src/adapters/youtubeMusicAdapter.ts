@@ -79,7 +79,11 @@ export async function innertubePost(endpoint: string, body: Record<string, unkno
     throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable', { cause: err });
   }
   if (!res.ok) {
-    throw new ServiceUnavailableError('youtube_music', `youtube music request failed: ${res.status}`);
+    const detail = await res.text().catch(() => '');
+    throw new ServiceUnavailableError(
+      'youtube_music',
+      `youtube music ${endpoint} failed: ${res.status} ${detail.slice(0, 600)}`,
+    );
   }
   try {
     return await res.json();
@@ -159,11 +163,7 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
     );
   }
 
-  /**
-   * Not part of {@link MusicServiceAdapter}: nothing in the product deletes an export playlist, so
-   * this exists for the contract test, which would otherwise leave a playlist in the shared app
-   * account on every scheduled run.
-   */
+  /** Undoes a createPlaylist whose append failed, and cleans up after the contract test. */
   async deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void> {
     await innertubePost('playlist/delete', { playlistId: playlist.externalId }, accessToken);
   }
