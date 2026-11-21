@@ -31,12 +31,12 @@ export type Theme = typeof light;
 
 const dark: Theme = {
   ...light,
-  bg: '#052A3D',
-  shell: '#0C3D55',
-  shellPressed: '#165069',
+  bg: '#2A1A5E',
+  shell: '#000000',
+  shellPressed: '#2B1D52',
   ink: '#FFFDF5',
   shadowColor: '#FFFDF5',
-  inkMuted: '#A8D3E0',
+  inkMuted: '#BDB0E0',
   hairline: '#FFFDF5',
   reel: '#FFFDF5',
   danger: '#FF7AA8',

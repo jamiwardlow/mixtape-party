@@ -52,7 +52,7 @@ uses a smaller `imageWidth` so the 12+ circular crop doesn't clip the badge.
 
 ## Dark mode (implemented in #198)
 
-Direction D, "Die-cut Blue-Teal". Prototype: `docs/design/dark-mode-prototype.html` (A and C are rejected alternatives).
+Direction H, "Die-cut Violet, black cards". Prototype: `docs/design/dark-sunshine-prototype.html` (G, the teal page with black cards, and the teal D that first shipped in #198 are superseded; A and C in `dark-mode-prototype.html` were rejected earlier).
 
 **Rule:** the outline, the hard shadow and the text all flip to near-white, like the die-cut edge of a sticker. The 3px border,
 4px offset, no-blur shadow, radii, fonts and tilt are unchanged. Accents keep their saturated colors, and text sitting on an accent
@@ -60,23 +60,23 @@ stays dark.
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `bg` | `#FFD93D` | `#052A3D` |
-| `shell` (cards, inputs) | `#FFFFFF` | `#0C3D55` |
-| `shellPressed` | `#FFF3B8` | `#165069` |
+| `bg` | `#FFD93D` | `#2A1A5E` |
+| `shell` (cards, inputs) | `#FFFFFF` | `#000000` |
+| `shellPressed` | `#FFF3B8` | `#2B1D52` |
 | `ink`, `hairline`, `reel` | `#1A1033` | `#FFFDF5` |
-| `inkMuted` | `#4A3F6B` | `#A8D3E0` |
+| `inkMuted` | `#4A3F6B` | `#BDB0E0` |
 | shadow color (new key; ink in light) | `#1A1033` | `#FFFDF5` |
 | `accent` (Bubblegum) | `#FF4F9A` | `#FF4F9A` |
 | `accentInk` | `#1A1033` | `#1A1033` |
-| `cobalt` | `#3D5AFE` | `#8C9EFF`, text on it `#052A3D` |
+| `cobalt` | `#3D5AFE` | `#8C9EFF`, text on it `#2A1A5E` |
 | `danger` | `#B3124F` | `#FF7AA8` |
 | `mint`, `tangerine`, Sunshine | as is | as is, with dark text on them |
 | YouTube badge | `#FF0000` | `#FF8080` |
 | Bandcamp badge | `#1DA0C3` | `#3FC0E3` |
-| Album-art placeholder, reaction pill | `#FFF3B8` | `#165069`, near-white outline |
+| Album-art placeholder, reaction pill | `#FFF3B8` | `#2B1D52`, near-white outline |
 
-Contrast (WCAG AA, all verified): near-white on `shell` 11.4:1, `inkMuted` 7.2:1, `cobalt` 4.7:1, `danger` 4.7:1, YouTube 4.8:1,
-Bandcamp 5.4:1, dark ink on Bubblegum 5.9:1. Bubblegum on `shell` is only 3.8:1: use it for fills, never as small text.
+Contrast (WCAG AA, all verified): near-white on `shell` 20.6:1, `inkMuted` 10.5:1 (7.4:1 on `bg`), `cobalt` 8.4:1, `danger` 8.6:1, YouTube 8.7:1,
+Bandcamp 9.9:1, dark ink on Bubblegum 5.9:1. Bubblegum on `shell` is 6.8:1 and on `bg` 4.9:1.
 Leaderboard `InitialDisc` colors and the `Sticker` outline stay as they are, with dark initials.
 
 Decisions:
@@ -95,11 +95,11 @@ page `bg` in dark), then a 3px ink rule, then the body. Headline in bold Courier
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| page | `#F4F1EA` | `#031C29` |
-| header band | `#FFD93D` | `#052A3D` |
-| card body | `#FFFFFF` | `#0C3D55` |
+| page | `#F4F1EA` | `#1A1033` |
+| header band | `#FFD93D` | `#2A1A5E` |
+| card body | `#FFFFFF` | `#000000` |
 | ink (text, outline) | `#1A1033` | `#FFFDF5` |
-| muted (footer) | `#4A3F6B` | `#A8D3E0` |
+| muted (footer) | `#4A3F6B` | `#BDB0E0` |
 | button fill / text | `#FF4F9A` / `#1A1033` | same |
 
 Fonts: `'Courier New',Courier,monospace` for everything, `'Arial Black','Helvetica Neue',Arial,sans-serif` for the badge only.

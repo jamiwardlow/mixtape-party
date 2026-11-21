@@ -90,7 +90,7 @@
           "imageWidth": 512,
           "dark": {
             "image": "./assets/splash-icon.png",
-            "backgroundColor": "#052A3D"
+            "backgroundColor": "#2A1A5E"
           },
           "android": {
             "imageWidth": 200

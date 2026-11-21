@@ -13,8 +13,8 @@ const BADGE_URL = 'https://mixtape-party.com';
 
 const DARK_CSS = `:root{color-scheme:light dark;supported-color-schemes:light dark}
 @media (prefers-color-scheme:dark){
-.pg{background:#031C29!important}.band{background:#052A3D!important}.card{background:#0C3D55!important}
-.bd{border-color:#FFFDF5!important}.ink{color:#FFFDF5!important}.muted{color:#A8D3E0!important}.lk{color:#8C9EFF!important}
+.pg{background:#1A1033!important}.band{background:#2A1A5E!important}.card{background:#000000!important}
+.bd{border-color:#FFFDF5!important}.ink{color:#FFFDF5!important}.muted{color:#BDB0E0!important}.lk{color:#8C9EFF!important}
 .lt{display:none!important}.dk{display:block!important;max-height:none!important;overflow:visible!important}}`;
 
 const button = (href: string, label: string) =>
