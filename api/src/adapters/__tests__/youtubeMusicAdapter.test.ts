@@ -65,3 +65,14 @@ describe('YouTubeMusicAdapter.deletePlaylist', () => {
     ).rejects.toThrow(/youtube music playlist\/delete failed: 401 \{"error":"unauthenticated"\}/);
   });
 });
+
+describe('YouTubeMusicAdapter.isTrackId', () => {
+  it('accepts an 11-character video id and rejects anything else', () => {
+    const adapter = new YouTubeMusicAdapter();
+    expect(adapter.isTrackId('F2UedY2oavg')).toBe(true);
+    expect(adapter.isTrackId('2SMfkFH3w-_')).toBe(true);
+    expect(adapter.isTrackId('demo-demofri-1-maya')).toBe(false);
+    expect(adapter.isTrackId('')).toBe(false);
+  });
+});
+

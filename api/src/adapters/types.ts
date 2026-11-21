@@ -34,6 +34,8 @@ export interface MusicServiceAdapter {
   createPlaylist(accessToken: string, name: string): Promise<PlaylistRef>;
   appendToPlaylist(accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void>;
   deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void>;
+  /** Whether `externalId` is shaped like a real track id here; export skips one that isn't rather than sink the whole playlist. */
+  isTrackId(externalId: string): boolean;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
   getPreviewUrl(track: TrackResult): Promise<string | null>;
 }

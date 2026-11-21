@@ -70,6 +70,10 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter {
     this.playlists.delete(playlist.externalId);
   }
 
+  isTrackId(_externalId: string): boolean {
+    return true;
+  }
+
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `fake://play/${track.externalId}` };
   }

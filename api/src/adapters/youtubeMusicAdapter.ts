@@ -168,6 +168,11 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
     await innertubePost('playlist/delete', { playlistId: playlist.externalId }, accessToken);
   }
 
+  /** A video id is 11 url-safe base64 characters; anything else (e.g. the fake demo-league picks) makes browse/edit_playlist 400 the whole batch. */
+  isTrackId(externalId: string): boolean {
+    return /^[\w-]{11}$/.test(externalId);
+  }
+
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
     return { service: this.service, deepLink: `${ORIGIN}/watch?v=${track.externalId}` };
   }

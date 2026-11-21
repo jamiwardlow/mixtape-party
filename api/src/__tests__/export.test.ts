@@ -212,6 +212,21 @@ describe('POST /rounds/:roundId/export', () => {
     expect(youtubeMusicAdapter.playlists.size).toBe(0);
   });
 
+  it('skips a same-service submission whose id the service would reject, instead of failing the playlist', async () => {
+    const { app, youtubeMusicAdapter } = buildApp();
+    const { roundId, members } = await createLeagueWithPlayers(app, 4);
+    youtubeMusicAdapter.isTrackId = () => false;
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+
+    const res = await exportRound(app, roundId, members[0].token);
+
+    const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
+    expect(youtubeMusicExport.status).toBe('no_matches');
+    expect(youtubeMusicExport.skipped).toHaveLength(4);
+    expect(youtubeMusicAdapter.playlists.size).toBe(0);
+  });
+
   it('runs the export once per round, reusing the same playlist on a repeat request', async () => {
     const { app, youtubeMusicAdapter } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);

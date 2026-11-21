@@ -94,10 +94,11 @@ async function matchSubmissions(
 ): Promise<Map<string, TrackResult>> {
   const matches = new Map<string, TrackResult>();
   for (const submission of submissions) {
-    // A submission already on this exact service is a confirmed match; no need to re-search.
+    // A submission already on this exact service is a confirmed match; no need to re-search. One
+    // whose id the service wouldn't recognize is left unmatched instead.
     const match =
       submission.service === service
-        ? {
+        ? adapter.isTrackId(submission.external_id) && {
             externalId: submission.external_id,
             title: submission.title,
             artist: submission.artist,
