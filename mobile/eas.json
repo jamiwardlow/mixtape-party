@@ -27,6 +27,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.1"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.mixtape-party.com"
       }

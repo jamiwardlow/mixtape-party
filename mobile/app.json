@@ -106,7 +106,8 @@
         }
       ],
       "expo-notifications",
-      "expo-font"
+      "expo-font",
+      ["expo-build-properties", { "ios": { "enableSceneSupport": true } }]
     ],
     "extra": {
       "eas": {
