@@ -105,6 +105,35 @@ export default function RoundOverview() {
     <Screen label={leagueName}>
       <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
         <JCard>
+          <HandText>You</HandText>
+          {round.you.submission ? (
+            <View style={styles.row}>
+              <ServiceBadge service={round.you.submission.service} />
+              <TrackRow
+                testID="your-submission"
+                thumbnailUrl={round.you.submission.thumbnailUrl}
+                title={round.you.submission.title}
+                artist={round.you.submission.artist}
+                href={playbackHref(round.you.submission.playback)}
+                playing={playingId === round.you.submission.submissionId}
+                onPlay={() => toggle(round.you.submission!.submissionId)}
+              />
+            </View>
+          ) : (
+            <BodyText testID="your-submission">You have not submitted a track</BodyText>
+          )}
+          {/* Only while guesses are being made: before then it counts tracks nobody can guess yet,
+              and afterwards it is a leftover from a window that has shut. */}
+          {round.phase === 'guessing' && (
+            <BodyText testID="your-guesses">
+              {round.you.guessesRemaining === 0
+                ? 'You have made all your guesses'
+                : `${round.you.guessesRemaining} guess${round.you.guessesRemaining === 1 ? '' : 'es'} to go`}
+            </BodyText>
+          )}
+        </JCard>
+
+        <JCard>
           <HandText testID="round-heading">{`Round ${round.number}`}</HandText>
           {round.theme ? <BodyText>{round.theme}</BodyText> : <Label>Theme not set yet</Label>}
           <DeadlineRows
@@ -135,35 +164,6 @@ export default function RoundOverview() {
               <Label>Finished guessing</Label>
               <Label testID="guessed-players">{round.guessedPlayers.map(nameOf).join(', ')}</Label>
             </View>
-          )}
-        </JCard>
-
-        <JCard>
-          <HandText>You</HandText>
-          {round.you.submission ? (
-            <View style={styles.row}>
-              <ServiceBadge service={round.you.submission.service} />
-              <TrackRow
-                testID="your-submission"
-                thumbnailUrl={round.you.submission.thumbnailUrl}
-                title={round.you.submission.title}
-                artist={round.you.submission.artist}
-                href={playbackHref(round.you.submission.playback)}
-                playing={playingId === round.you.submission.submissionId}
-                onPlay={() => toggle(round.you.submission!.submissionId)}
-              />
-            </View>
-          ) : (
-            <BodyText testID="your-submission">You have not submitted a track</BodyText>
-          )}
-          {/* Only while guesses are being made: before then it counts tracks nobody can guess yet,
-              and afterwards it is a leftover from a window that has shut. */}
-          {round.phase === 'guessing' && (
-            <BodyText testID="your-guesses">
-              {round.you.guessesRemaining === 0
-                ? 'You have made all your guesses'
-                : `${round.you.guessesRemaining} guess${round.you.guessesRemaining === 1 ? '' : 'es'} to go`}
-            </BodyText>
           )}
         </JCard>
 
