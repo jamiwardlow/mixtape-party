@@ -7,18 +7,16 @@ import type { AdapterRegistry } from '../adapters/registry.js';
 import { playbackFor } from './guessing.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
-  CURRENT_ROUND_CLAUSE,
   describeRound,
   emptyRoundActivity,
   isLeagueMember,
-  isSeasonConcluded,
   loadCurrentRound,
   loadLeague,
   loadRound,
-  roundPhase,
   type Player,
   type RoundActivity,
 } from './rounds.js';
+import { CURRENT_ROUND_CLAUSE, guessingOpened, isScored, isSeasonConcluded, roundPhase, roundSql } from '../roundTimeline.js';
 import { blockedIds, maskBlocked } from './blocks.js';
 import { correctGuessCounts, scoreboard } from './results.js';
 
@@ -30,6 +28,7 @@ function summarizeRound(
     round_id: string | null;
     round_number: number | null;
     theme: string | null;
+    submission_opens_at: string | null;
     submission_deadline: string | null;
     guessing_deadline: string | null;
     submitted: boolean;
@@ -37,7 +36,7 @@ function summarizeRound(
   now: Date,
 ) {
   const phase = roundPhase(
-    { submissionDeadline: row.submission_deadline!, guessingDeadline: row.guessing_deadline! },
+    { submissionOpensAt: row.submission_opens_at, submissionDeadline: row.submission_deadline!, guessingDeadline: row.guessing_deadline! },
     now,
   );
   return {
@@ -69,6 +68,7 @@ interface RoundRow {
   id: string;
   round_number: number;
   theme: string | null;
+  submission_opens_at: string | null;
   submission_deadline: string;
   guessing_deadline: string;
 }
@@ -112,6 +112,7 @@ function serializeRound(round: RoundRow) {
     id: round.id,
     number: round.round_number,
     theme: round.theme,
+    submissionOpensAt: round.submission_opens_at,
     submissionDeadline: round.submission_deadline,
     guessingDeadline: round.guessing_deadline,
   };
@@ -161,17 +162,18 @@ export async function listLeagues(pool: Pool, accountId: string) {
     round_id: string | null;
     round_number: number | null;
     theme: string | null;
+    submission_opens_at: string | null;
     submission_deadline: string | null;
     guessing_deadline: string | null;
     submitted: boolean;
   }>(
     `SELECT l.id AS league_id, l.name AS league_name, l.season_length, lm.joined_at,
-            r.id AS round_id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline,
+            r.id AS round_id, r.round_number, r.theme, r.submission_opens_at, r.submission_deadline, r.guessing_deadline,
             EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.account_id = $1) AS submitted
      FROM leagues l
      JOIN league_members lm ON lm.league_id = l.id AND lm.account_id = $1
      LEFT JOIN LATERAL (
-       SELECT id, round_number, theme, submission_deadline, guessing_deadline
+       SELECT id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
        FROM rounds WHERE league_id = l.id ${CURRENT_ROUND_CLAUSE}
      ) r ON true
      ORDER BY l.name`,
@@ -185,10 +187,8 @@ export async function listLeagues(pool: Pool, accountId: string) {
     seasonLength: row.season_length,
     joinedAt: row.joined_at,
     concluded: isSeasonConcluded(
-      { seasonLength: row.season_length },
-      row.round_id
-        ? { id: row.round_id, roundNumber: row.round_number!, guessingDeadline: row.guessing_deadline! }
-        : null,
+      row.season_length,
+      row.round_id ? { roundNumber: row.round_number!, guessingDeadline: row.guessing_deadline! } : null,
       now,
     ),
     round: row.round_id ? summarizeRound(row, now) : null,
@@ -284,7 +284,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
                 CASE WHEN n = 1 THEN $4::timestamptz
                      ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 1) END
          FROM generate_series(1, $5::int) AS n
-         RETURNING id, round_number, theme, submission_deadline, guessing_deadline`,
+         RETURNING id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline`,
         [
           leagueId,
           theme,
@@ -331,7 +331,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         league.host_account_id,
       ]),
       deps.pool.query<RoundRow>(
-        `SELECT id, round_number, theme, submission_deadline, guessing_deadline FROM rounds WHERE league_id = $1 ${CURRENT_ROUND_CLAUSE}`,
+        `SELECT id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline FROM rounds WHERE league_id = $1 ${CURRENT_ROUND_CLAUSE}`,
         [league.id],
       ),
       deps.pool.query<{ display_name: string | null }>(
@@ -413,7 +413,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     }
 
     const rounds = await deps.pool.query<RoundRow>(
-      `SELECT id, round_number, theme, submission_deadline, guessing_deadline
+      `SELECT id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
        FROM rounds WHERE league_id = $1 ORDER BY round_number`,
       [req.params.leagueId],
     );
@@ -452,8 +452,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       deps.pool.query<RoundRow & { scored: boolean }>(
         // `scored` comes from Postgres's clock, not the app's: correctGuessCounts filters on the
         // same now(), so "after 3 of 8 rounds" can never disagree with the standings beside it.
-        `SELECT id, round_number, theme, submission_deadline, guessing_deadline,
-                guessing_deadline <= now() AS scored
+        `SELECT id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline,
+                ${roundSql().scored} AS scored
          FROM rounds WHERE league_id = $1 ORDER BY round_number`,
         [leagueId],
       ),
@@ -494,7 +494,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       activity.get(row.round_id)?.guessCounts.set(row.guesser_account_id, Number(row.guess_count));
     }
 
-    const concluded = isSeasonConcluded(league, current, now);
+    const concluded = isSeasonConcluded(league.seasonLength, current, now);
     const { scores, winners } = scoreboard([...players.values()], correctGuesses);
 
     res.json({
@@ -592,6 +592,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
           id: roundId,
           number: round.roundNumber,
           theme: round.theme,
+          submissionOpensAt: round.submissionOpensAt,
           submissionDeadline: round.submissionDeadline,
           guessingDeadline: round.guessingDeadline,
         },
@@ -626,7 +627,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     // guessing-deadline checkpoint (#7); moving it now would mean re-running or invalidating that
     // export, so the schedule only flexes forward of now.
     const now = new Date();
-    if (new Date(round.guessingDeadline) <= now) {
+    if (isScored(round, now)) {
       res.status(409).json({ error: 'this round is over and can no longer be changed' });
       return;
     }
@@ -659,7 +660,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     // underway on the set of tracks that made it in, so moving the deadline would reopen
     // submissions mid-guessing. Only checked when the patch names that deadline -- naming a
     // mid-guessing round is the whole point of this route and stays allowed.
-    if (submissionDeadline !== undefined && new Date(round.submissionDeadline) <= now) {
+    if (submissionDeadline !== undefined && guessingOpened(round, now)) {
       res.status(409).json({ error: "this round's submission window has closed and can no longer be moved" });
       return;
     }
@@ -710,7 +711,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
     // Nothing already played may move. A slide only ever touches rounds after N, and N is not
     // over, so monotonicity already implies every slid round is in the future -- but a legacy or
     // hand-edited league need not be monotonic, so assert it rather than assume it.
-    if (shiftMs !== 0 && earliestLater && new Date(earliestLater) <= now) {
+    if (shiftMs !== 0 && earliestLater && isScored({ guessingDeadline: earliestLater }, now)) {
       res.status(409).json({ error: 'a later round of this season is already over and cannot be moved' });
       return;
     }
@@ -756,7 +757,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
              AND round_number >= $6 AND $7::interval <> interval '0'
          ) n
          WHERE r.id = n.id
-         RETURNING r.id, r.round_number, r.theme, r.submission_deadline, r.guessing_deadline
+         RETURNING r.id, r.round_number, r.theme, r.submission_opens_at, r.submission_deadline, r.guessing_deadline
        ), patched AS (
          UPDATE rounds
          SET theme = COALESCE($2::text, theme), submission_deadline = $3::timestamptz,
@@ -770,7 +771,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
              guessing_last_call_sent_at =
                CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_last_call_sent_at END
          WHERE id = $1
-         RETURNING id, round_number, theme, submission_deadline, guessing_deadline
+         RETURNING id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
        )
        SELECT * FROM patched UNION ALL SELECT * FROM slid ORDER BY round_number`,
       [
@@ -805,7 +806,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(403).json({ error: 'only the league host can delete a round' });
       return;
     }
-    if (new Date(round.guessingDeadline) <= new Date()) {
+    if (isScored(round, new Date())) {
       res.status(409).json({ error: 'this round is over and can no longer be deleted' });
       return;
     }

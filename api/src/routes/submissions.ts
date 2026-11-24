@@ -5,6 +5,7 @@ import { thumbnailUrlOf } from '../adapters/thumbnail.js';
 import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
+import { guessingOpened, submissionOpened } from '../roundTimeline.js';
 
 export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
 
@@ -139,12 +140,12 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    if (round.submissionOpensAt && new Date(round.submissionOpensAt) > new Date()) {
+    if (!submissionOpened(round, new Date())) {
       res.status(403).json({ error: 'the submission window for this round has not opened yet' });
       return;
     }
 
-    if (new Date(round.submissionDeadline) <= new Date()) {
+    if (guessingOpened(round, new Date())) {
       res.status(403).json({ error: 'the submission window for this round has closed' });
       return;
     }
@@ -217,7 +218,7 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       res.status(404).json({ error: 'round not found' });
       return;
     }
-    if (new Date(round.submissionDeadline) <= new Date()) {
+    if (guessingOpened(round, new Date())) {
       res.status(403).json({ error: 'the submission window for this round has closed' });
       return;
     }

@@ -186,15 +186,17 @@ export default function LeagueOverview() {
               guessingDeadline={new Date(current.guessingDeadline)}
               testID="current-round"
             />
-            <TapeButton
-              title={phaseLabel(current.phase, iSubmitted)}
-              onPress={() =>
-                router.push({
-                  pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
-                  params: current.phase === 'submission' && iSubmitted ? { roundId: current.id, edit: '1' } : { roundId: current.id },
-                })
-              }
-            />
+            {current.phase !== 'upcoming' && (
+              <TapeButton
+                title={phaseLabel(current.phase, iSubmitted)}
+                onPress={() =>
+                  router.push({
+                    pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
+                    params: current.phase === 'submission' && iSubmitted ? { roundId: current.id, edit: '1' } : { roundId: current.id },
+                  })
+                }
+              />
+            )}
           </JCard>
         )}
 

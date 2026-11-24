@@ -6,9 +6,9 @@ import { blockedIds, isUuid, maskBlocked } from './blocks.js';
 import { loadFavorites, playbackFor } from './guessing.js';
 import { listLeagues } from './leagues.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { isScored, isSeasonConcluded, roundSql } from '../roundTimeline.js';
 import {
   isLeagueMember,
-  isSeasonConcluded,
   loadCurrentRound,
   loadLeague,
   loadRound,
@@ -46,7 +46,7 @@ export async function correctGuessCounts(pool: Pool, leagueId: string): Promise<
      JOIN submissions s ON s.id = g.submission_id
      JOIN rounds r ON r.id = s.round_id
      WHERE r.league_id = $1 AND g.guessed_account_id = s.account_id
-       AND r.guessing_deadline <= now()
+       AND ${roundSql('r').scored}
      GROUP BY g.guesser_account_id`,
     [leagueId],
   );
@@ -69,7 +69,7 @@ export async function topBesties(pool: Pool, accountId: string, direction: 'gues
      JOIN rounds r ON r.id = s.round_id
      JOIN accounts a ON a.id = ${themCol}
      WHERE ${meCol} = $1 AND ${themCol} <> $1 AND g.guessed_account_id = s.account_id
-       AND r.guessing_deadline <= now()${leagueId ? ' AND r.league_id = $2' : ''}
+       AND ${roundSql('r').scored}${leagueId ? ' AND r.league_id = $2' : ''}
      GROUP BY a.id, a.display_name
      ORDER BY count(*) DESC, a.display_name, a.id
      LIMIT 3`,
@@ -173,7 +173,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       res.status(403).json({ error: 'join the league before viewing this round\'s results' });
       return;
     }
-    if (new Date(round.guessingDeadline) > new Date()) {
+    if (!isScored(round, new Date())) {
       res.status(403).json({ error: 'results are not available until the guessing deadline passes' });
       return;
     }
@@ -330,7 +330,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     }
 
     const current = await loadCurrentRound(deps.pool, req.params.leagueId);
-    if (!isSeasonConcluded(league, current, new Date())) {
+    if (!isSeasonConcluded(league.seasonLength, current, new Date())) {
       res.status(403).json({ error: 'final standings are not available until the season concludes' });
       return;
     }

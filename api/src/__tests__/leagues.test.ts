@@ -1009,6 +1009,7 @@ describe('GET /leagues/:leagueId/rounds', () => {
       'id',
       'number',
       'submissionDeadline',
+      'submissionOpensAt',
       'theme',
     ]);
   });

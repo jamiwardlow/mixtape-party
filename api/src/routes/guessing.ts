@@ -7,6 +7,7 @@ import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js
 import { PLAYLIST_URL } from './export.js';
 import { blockedIds, maskBlocked } from './blocks.js';
 import { isLeagueMember, loadRound } from './rounds.js';
+import { guessingOpened, isScored } from '../roundTimeline.js';
 import { parseComment } from './submissions.js';
 
 export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
@@ -20,7 +21,7 @@ async function guessingGuardError(
   if (!(await isLeagueMember(pool, leagueId, accountId))) {
     return { status: 403, error: 'join the league before guessing on this round' };
   }
-  if (new Date(submissionDeadline) > new Date()) {
+  if (!guessingOpened({ submissionDeadline }, new Date())) {
     return { status: 403, error: 'guessing has not opened yet for this round' };
   }
   return null;
@@ -266,7 +267,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(guardError.status).json({ error: guardError.error });
       return;
     }
-    if (new Date(row.guessing_deadline) <= new Date()) {
+    if (isScored({ guessingDeadline: row.guessing_deadline }, new Date())) {
       res.status(403).json({ error: 'guessing has closed for this round' });
       return;
     }
@@ -315,7 +316,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(404).json({ error: 'submission not found' });
       return;
     }
-    if (new Date(round.rows[0].guessing_deadline) <= new Date()) {
+    if (isScored({ guessingDeadline: round.rows[0].guessing_deadline }, new Date())) {
       res.status(403).json({ error: 'guessing has closed for this round' });
       return;
     }
@@ -359,11 +360,11 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(404).json({ error: 'round not found' });
       return;
     }
-    if (new Date(round.submissionDeadline) > new Date()) {
+    if (!guessingOpened(round, new Date())) {
       res.status(403).json({ error: 'guessing has not opened yet for this round' });
       return;
     }
-    if (new Date(round.guessingDeadline) <= new Date()) {
+    if (isScored(round, new Date())) {
       res.status(403).json({ error: 'guessing has closed for this round' });
       return;
     }

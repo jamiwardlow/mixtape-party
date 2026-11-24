@@ -5,6 +5,7 @@ import type { EmailChannel, PushChannel } from '../notifications/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { hasBlocked } from './blocks.js';
 import { isLeagueMember } from './rounds.js';
+import { roundSql } from '../roundTimeline.js';
 
 export interface CommentsDeps extends AccountsDeps {
   pushChannel: PushChannel;
@@ -29,15 +30,15 @@ export function isEmoji(value: unknown): value is string {
 
 type ReactionColumn = 'submission_id' | 'guess_id' | 'reply_id';
 
-// What a reaction can land on, each with the round it belongs to and when it opens (`opens_at`). A
+// What a reaction can land on, each with the round it belongs to and whether it is open yet. A
 // comment (guess) only exists to react to once it has text; the track itself is reactable whether or
 // not the submitter left a note, and from the moment guessing opens, so it can be reacted to and
 // favorited while you listen.
 export const REACTION_TARGETS: Record<ReactionColumn, string> = {
-  submission_id: `SELECT r.league_id, r.submission_deadline AS opens_at FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
-  guess_id: `SELECT r.league_id, r.guessing_deadline AS opens_at FROM guesses g JOIN submissions s ON s.id = g.submission_id
+  submission_id: `SELECT r.league_id, ${roundSql('r').guessingOpened} AS opened FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
+  guess_id: `SELECT r.league_id, ${roundSql('r').scored} AS opened FROM guesses g JOIN submissions s ON s.id = g.submission_id
              JOIN rounds r ON r.id = s.round_id WHERE g.id = $1 AND g.comment IS NOT NULL`,
-  reply_id: `SELECT r.league_id, r.guessing_deadline AS opens_at FROM guess_replies p JOIN guesses g ON g.id = p.guess_id
+  reply_id: `SELECT r.league_id, ${roundSql('r').scored} AS opened FROM guess_replies p JOIN guesses g ON g.id = p.guess_id
              JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE p.id = $1`,
 };
 
@@ -45,7 +46,7 @@ export const REACTION_TARGETS: Record<ReactionColumn, string> = {
 const REACTOR = `(SELECT display_name FROM accounts WHERE id = $2) AS name`;
 const REACTION_OWNERS: Record<ReactionColumn, string> = {
   submission_id: `SELECT s.account_id AS recipient, r.id AS round_id, r.league_id, s.title AS text, ${REACTOR},
-                  r.guessing_deadline > now() AS guessing_open
+                  ${roundSql('r').unscored} AS guessing_open
                   FROM submissions s JOIN rounds r ON r.id = s.round_id WHERE s.id = $1`,
   guess_id: `SELECT g.guesser_account_id AS recipient, r.id AS round_id, r.league_id, g.comment AS text, ${REACTOR}
              FROM guesses g JOIN submissions s ON s.id = g.submission_id JOIN rounds r ON r.id = s.round_id WHERE g.id = $1`,
@@ -57,12 +58,12 @@ const REACTION_LABEL: Record<ReactionColumn, string> = { submission_id: 'track',
 
 /** League members only, once the target is open: results for comments and replies, guessing for tracks. */
 export async function guardError(pool: Pool, sql: string, id: string, accountId: string) {
-  const round = (await pool.query<{ league_id: string; opens_at: string }>(sql, [id])).rows[0];
+  const round = (await pool.query<{ league_id: string; opened: boolean }>(sql, [id])).rows[0];
   if (!round) return { status: 404, error: 'not found' };
   if (!(await isLeagueMember(pool, round.league_id, accountId))) {
     return { status: 403, error: 'join the league before joining the conversation' };
   }
-  if (new Date(round.opens_at) > new Date()) {
+  if (!round.opened) {
     return { status: 403, error: 'not open yet' };
   }
   return null;

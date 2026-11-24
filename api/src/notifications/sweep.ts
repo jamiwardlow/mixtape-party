@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { buildRoundExports, PLAYLIST_URL, type ExportableService, RoundExportDeps } from '../routes/export.js';
+import { roundSql, seasonConcludedSql } from '../roundTimeline.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
 export interface NotificationSweepDeps {
@@ -120,15 +121,18 @@ async function unfinishedGuesserIds(pool: Pool, round: DueRound): Promise<string
   return result.rows.map((r) => r.account_id);
 }
 
+/** The round timeline against the sweep's clock, bound as $1 in every query below. */
+const AT_SWEEP = roundSql('', '$1');
+
 // Last calls (#208) fire 3h before each deadline. Each also marks the matching 20% reminder sent:
 // on a window under 15h that reminder would otherwise land *after* the last call.
 async function sweepSubmissionLastCalls(deps: NotificationSweepDeps, now: Date): Promise<void> {
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE submission_last_call_sent_at IS NULL
-       AND submission_deadline > $1
+       AND NOT ${AT_SWEEP.guessingOpened}
        AND submission_deadline - make_interval(hours => $2) <= $1
-       AND COALESCE(submission_opens_at, created_at) <= $1`,
+       AND ${AT_SWEEP.submissionOpened}`,
     [now.toISOString(), LAST_CALL_HOURS],
   );
 
@@ -158,9 +162,9 @@ async function sweepGuessingLastCalls(deps: NotificationSweepDeps, now: Date): P
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE guessing_last_call_sent_at IS NULL
-       AND guessing_deadline > $1
+       AND ${AT_SWEEP.unscored}
        AND guessing_deadline - make_interval(hours => $2) <= $1
-       AND submission_deadline <= $1`,
+       AND ${AT_SWEEP.guessingOpened}`,
     [now.toISOString(), LAST_CALL_HOURS],
   );
 
@@ -194,7 +198,7 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
     // column, where the two were the same instant.
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE submission_reminder_sent_at IS NULL
-       AND submission_deadline > $1
+       AND NOT ${AT_SWEEP.guessingOpened}
        AND submission_deadline - (submission_deadline - COALESCE(submission_opens_at, created_at)) * $2 <= $1`,
     [now.toISOString(), REMINDER_REMAINING_FRACTION],
   );
@@ -223,7 +227,7 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
      WHERE guessing_reminder_sent_at IS NULL
-       AND guessing_deadline > $1
+       AND ${AT_SWEEP.unscored}
        AND guessing_deadline - (guessing_deadline - submission_deadline) * $2 <= $1`,
     [now.toISOString(), REMINDER_REMAINING_FRACTION],
   );
@@ -253,7 +257,7 @@ async function sweepResultsReady(deps: NotificationSweepDeps, now: Date): Promis
     // A round with no submissions has no results to announce -- which is the normal state of a
     // round the season scheduled but never reached.
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
-     WHERE results_notified_at IS NULL AND guessing_deadline <= $1
+     WHERE results_notified_at IS NULL AND ${AT_SWEEP.scored}
        -- The season's final round is announced by season_concluded, whose wrap-up covers it.
        AND round_number < (SELECT season_length FROM leagues WHERE id = rounds.league_id)
        AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = rounds.id)`,
@@ -282,9 +286,8 @@ async function sweepSeasonConcluded(deps: NotificationSweepDeps, now: Date): Pro
   // round_number DESC territory, not the current-round ordering: a season concludes when its
   // genuinely final round is revealed.
   const dueLeagues = await deps.pool.query<{ id: string; name: string }>(
-    `SELECT DISTINCT l.id, l.name FROM leagues l
-     JOIN rounds r ON r.league_id = l.id AND r.round_number >= l.season_length
-     WHERE l.concluded_notified_at IS NULL AND r.guessing_deadline <= $1`,
+    `SELECT l.id, l.name FROM leagues l
+     WHERE l.concluded_notified_at IS NULL AND ${seasonConcludedSql('l', '$1')}`,
     [now.toISOString()],
   );
 
@@ -316,7 +319,7 @@ async function sweepPlaylists(deps: NotificationSweepDeps, now: Date): Promise<v
   const due = await deps.pool.query<{ id: string; host_account_id: string }>(
     `SELECT r.id, l.host_account_id FROM rounds r
      JOIN leagues l ON l.id = r.league_id
-     WHERE r.submission_deadline <= $1
+     WHERE ${roundSql('r', '$1').guessingOpened}
        AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.service != 'bandcamp')
        AND NOT EXISTS (SELECT 1 FROM round_exports e WHERE e.round_id = r.id)`,
     [now.toISOString()],
@@ -330,7 +333,7 @@ async function sweepPlaylists(deps: NotificationSweepDeps, now: Date): Promise<v
 async function sweepGuessingOpen(deps: NotificationSweepDeps, now: Date): Promise<void> {
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
-     WHERE guessing_notified_at IS NULL AND submission_deadline <= $1
+     WHERE guessing_notified_at IS NULL AND ${AT_SWEEP.guessingOpened}
        AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = rounds.id)`,
     [now.toISOString()],
   );

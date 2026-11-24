@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { hashPassword, signSessionToken, verifyPassword, verifySessionToken } from '../auth.js';
 import { isSessionTokenRevoked, revokeSessionToken } from '../authTokens.js';
 import { isUuid } from './blocks.js';
+import { seasonConcludedSql } from '../roundTimeline.js';
 
 export interface AccountsDeps {
   pool: Pool;
@@ -206,12 +207,12 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
     try {
       await client.query('BEGIN');
       // Hosting someone else's season to its end isn't something to abandon mid-game. A season is
-      // over once its last round's guessing deadline has passed (same rule as isSeasonConcluded).
+      // over once its last round is scored.
       const hosting = await client.query(
         `SELECT 1 FROM leagues l
           WHERE l.host_account_id = $1
             AND EXISTS (SELECT 1 FROM league_members m WHERE m.league_id = l.id AND m.account_id <> $1)
-            AND NOT EXISTS (SELECT 1 FROM rounds r WHERE r.league_id = l.id AND r.round_number >= l.season_length AND r.guessing_deadline <= now())
+            AND NOT ${seasonConcludedSql('l')}
           LIMIT 1`,
         [accountId],
       );

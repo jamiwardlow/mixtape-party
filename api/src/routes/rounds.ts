@@ -1,15 +1,6 @@
 import type { Pool } from 'pg';
 import type { PlaybackLaunchHandle, ServiceName } from '../adapters/types.js';
-
-/**
- * How to pick a league's current round now that every round of the season exists from creation
- * (#74): the earliest round still open, or the last round once the season is over. Plain
- * `round_number DESC` would name the final round of the season on day one.
- */
-export const CURRENT_ROUND_CLAUSE = `ORDER BY
-     (guessing_deadline > now()) DESC,
-     CASE WHEN guessing_deadline > now() THEN round_number ELSE -round_number END ASC
-   LIMIT 1`;
+import { CURRENT_ROUND_CLAUSE, roundPhase } from '../roundTimeline.js';
 
 export interface Player {
   accountId: string;
@@ -103,23 +94,6 @@ export async function loadCurrentRound(pool: Pool, leagueId: string): Promise<Cu
   return round ? { id: round.id, roundNumber: round.round_number, guessingDeadline: round.guessing_deadline } : null;
 }
 
-/**
- * The season is over once the current round is the season's last and its guessing deadline has
- * passed. One definition, because final standings and the overview's `concluded` must agree.
- */
-export function isSeasonConcluded(league: Pick<LeagueInfo, 'seasonLength'>, current: CurrentRoundInfo | null, now: Date): boolean {
-  return !!current && current.roundNumber >= league.seasonLength && new Date(current.guessingDeadline) <= now;
-}
-
-export type RoundPhase = 'submission' | 'guessing' | 'results';
-
-/** Derived from the two deadlines, never stored. The one phase rule, GET /leagues/mine included. */
-export function roundPhase(round: { submissionDeadline: string; guessingDeadline: string }, now: Date): RoundPhase {
-  if (now < new Date(round.submissionDeadline)) return 'submission';
-  if (now < new Date(round.guessingDeadline)) return 'guessing';
-  return 'results';
-}
-
 /** What actually happened in one round: who submitted, and how many guesses each player made. */
 export interface RoundActivity {
   /** Account ids that submitted, in submission order. */
@@ -149,7 +123,7 @@ export function emptyRoundActivity(): RoundActivity {
  * `guessedPlayers` is safe in every phase: it says who has answered, never what they answered.
  */
 export function describeRound(
-  round: { id: string; number: number; theme: string | null; submissionDeadline: string; guessingDeadline: string },
+  round: { id: string; number: number; theme: string | null; submissionOpensAt: string | null; submissionDeadline: string; guessingDeadline: string },
   activity: RoundActivity,
   players: Map<string, Player>,
   viewerAccountId: string,

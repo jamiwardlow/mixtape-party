@@ -53,6 +53,7 @@ interface Overview {
 
 /** What the round is doing right now, in words. The CTA below says what to do about it. */
 const PHASE_STATUS: Record<RoundPhase, string> = {
+  upcoming: 'Submissions open later',
   submission: 'Submissions are open',
   guessing: 'Guessing is open',
   results: 'This round is over',
@@ -167,15 +168,17 @@ export default function RoundOverview() {
           )}
         </JCard>
 
-        <TapeButton
-          title={phaseLabel(round.phase, !!round.you.submission)}
-          onPress={() =>
-            router.push({
-              pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
-              params: round.phase === 'submission' && round.you.submission ? { roundId: round.id, edit: '1' } : { roundId: round.id },
-            })
-          }
-        />
+        {round.phase !== 'upcoming' && (
+          <TapeButton
+            title={phaseLabel(round.phase, !!round.you.submission)}
+            onPress={() =>
+              router.push({
+                pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
+                params: round.phase === 'submission' && round.you.submission ? { roundId: round.id, edit: '1' } : { roundId: round.id },
+              })
+            }
+          />
+        )}
       </ScrollView>
       <TapeButton
         title={`Back to ${leagueName}`}
