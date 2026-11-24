@@ -239,4 +239,22 @@ describe('GET /leagues/:leagueId/standings', () => {
     expect(scoreFor(members[0].accountId)).toBe(1);
     expect(res.body.winners.map((w: { accountId: string }) => w.accountId)).toEqual([members[0].accountId]);
   });
+
+  it('masks a player the viewer has blocked', async () => {
+    const { app } = buildApp();
+    const { leagueId, roundId, members } = await createLeagueWithPlayers(app, 4, { seasonLength: 1 });
+    await closeSubmissionWindow(roundId);
+    await closeGuessingWindow(roundId);
+    await request(app).put(`/blocks/${members[1].accountId}`).set('Authorization', `Bearer ${members[0].token}`).expect(204);
+
+    const res = await request(app)
+      .get(`/leagues/${leagueId}/standings`)
+      .set('Authorization', `Bearer ${members[0].token}`);
+
+    expect(res.status).toBe(200);
+    const rowFor = (accountId: string) => res.body.scores.find((s: { accountId: string }) => s.accountId === accountId);
+    expect(rowFor(members[1].accountId).displayName).toBe('Blocked player');
+    expect(rowFor(members[1].accountId).avatarUrl).toBeUndefined();
+    expect(rowFor(members[2].accountId).displayName).not.toBe('Blocked player');
+  });
 });

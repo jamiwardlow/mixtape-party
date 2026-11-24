@@ -342,11 +342,10 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       [req.params.leagueId],
     );
 
-    const members = membersResult.rows.map((row) => ({
-      accountId: row.account_id,
-      displayName: row.display_name,
-      avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at),
-    }));
+    const blocked = await blockedIds(deps.pool, accountId);
+    const members = membersResult.rows.map((row) =>
+      maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked),
+    );
 
     res.json(scoreboard(members, await correctGuessCounts(deps.pool, req.params.leagueId)));
   });
