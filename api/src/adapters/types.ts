@@ -21,29 +21,39 @@ export interface PlaybackLaunchHandle {
   webUrl?: string;
 }
 
-/** Shared contract every per-service music adapter must satisfy (Seam 2). */
-export interface MusicServiceAdapter {
-  readonly service: ServiceName;
-  search(query: string, accessToken?: string): Promise<TrackResult[]>;
-  match(track: TrackRef, accessToken?: string): Promise<TrackResult | null>;
-  /** Whether `externalId` is shaped like a real track id here; export skips one that isn't rather than sink the whole playlist. */
-  isTrackId(externalId: string): boolean;
-  getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
-  getPreviewUrl(track: TrackResult): Promise<string | null>;
-}
+/** The fields of a submit request (`POST /rounds/:roundId/submissions`) as the client sent them, unvalidated. */
+export type SubmissionRequest = Record<string, unknown>;
+
+/** A submit request turned into the track to store, or the status and message to answer with instead. */
+export type SubmissionResolution = { track: TrackResult } | { status: 400 | 503; error: string };
 
 /**
- * Contract for a service with no catalog search/discovery API (currently only Bandcamp): a player
- * submits a track by pasting its URL instead of searching, and it's excluded from cross-service
- * playlist export since there's no ID to match against the other services' catalogs.
+ * Shared contract every per-service music adapter must satisfy (Seam 2). Routes ask an adapter what
+ * it can do -- search, export, build a playlist link -- and never compare service names.
  */
-export interface EmbedOnlyMusicServiceAdapter {
+export interface MusicServiceAdapter {
   readonly service: ServiceName;
-  /** Resolves a pasted track/album URL into a track, or null if the URL isn't a valid/resolvable link. */
-  submit(url: string): Promise<TrackResult | null>;
+  /** Catalog search. Absent for a paste-a-URL service (Bandcamp), which has no search API. */
+  search?(query: string, accessToken?: string): Promise<TrackResult[]>;
+  /** Finds `track` in this catalog, for verifying a submit and for cross-service export. Absent with `search`. */
+  match?(track: TrackRef, accessToken?: string): Promise<TrackResult | null>;
+  /** Whether a submission on this service goes into the round's playlists; one that doesn't is shown as excluded. */
+  readonly exportable: boolean;
+  /** Web address of a playlist built from the comma-joined ids an export stored. Absent where no playlist can be built. */
+  playlistUrl?(playlistExternalId: string): string;
+  /** Whether `externalId` is shaped like a real track id here; export skips one that isn't rather than sink the whole playlist. */
+  isTrackId(externalId: string): boolean;
+  /** Turns a submit request into the track to store: verifying a searched pick, or resolving a pasted link. */
+  resolveSubmission(request: SubmissionRequest): Promise<SubmissionResolution>;
+  thumbnailUrl(track: TrackResult): string | null;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;
   getPreviewUrl(track: TrackResult): Promise<string | null>;
+  /** Extra fields for a preview response whose url came back null, so the client can resolve it itself. */
+  previewFallback?(track: TrackResult): Record<string, string>;
 }
+
+/** A service a round's playlist can be built on: it can match other services' tracks and link the result. */
+export type PlaylistService = MusicServiceAdapter & Required<Pick<MusicServiceAdapter, 'match' | 'playlistUrl'>>;
 
 /**
  * Thrown by an adapter whose underlying API can go down, change shape without notice, or be

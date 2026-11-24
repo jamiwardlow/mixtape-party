@@ -1,7 +1,7 @@
 import { FAKE_BANDCAMP_URL, FakeBandcampAdapter } from '../fakeAdapter.js';
-import { runEmbedOnlyAdapterContractTests } from '../contract.js';
+import { runMusicServiceAdapterContractTests } from '../contract.js';
 
-runEmbedOnlyAdapterContractTests(
+runMusicServiceAdapterContractTests(
   'bandcamp (fake)',
   () => new FakeBandcampAdapter(),
   () => FAKE_BANDCAMP_URL,

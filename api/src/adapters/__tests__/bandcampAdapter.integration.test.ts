@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BandcampAdapter } from '../bandcampAdapter.js';
-import { runEmbedOnlyAdapterContractTests } from '../contract.js';
+import { runMusicServiceAdapterContractTests } from '../contract.js';
 import { ServiceUnavailableError } from '../types.js';
 
 // Exercises a real Bandcamp track page. Requires network access, so this is kept out of the
@@ -29,7 +29,7 @@ if (blocked) console.warn('bandcamp contract tests skipped: bot challenge / unav
 const suite = blocked ? describe.skip : describe;
 
 suite('bandcamp contract (real API)', () => {
-  runEmbedOnlyAdapterContractTests(
+  runMusicServiceAdapterContractTests(
     'bandcamp (real API)',
     () => new BandcampAdapter(),
     () => process.env.BANDCAMP_TEST_URL || DEFAULT_URL,

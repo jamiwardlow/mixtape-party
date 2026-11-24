@@ -1,10 +1,7 @@
 import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import type { Pool } from 'pg';
-import type {
-  EmbedOnlyMusicServiceAdapter,
-  MusicServiceAdapter,
-} from './adapters/types.js';
+import type { MusicServiceAdapter } from './adapters/types.js';
 import { createAccountsRouter } from './routes/accounts.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createCommentsRouter } from './routes/comments.js';
@@ -40,7 +37,7 @@ export interface AppDeps extends InboundEmailDeps {
   /** Native iOS sheet: verifies the client-supplied identity token (signature, iss, aud = bundle id, exp). */
   appleIdentityVerifier: (identityToken: string) => Promise<GoogleProfile>;
   youtubeMusicAdapter: MusicServiceAdapter;
-  bandcampAdapter: EmbedOnlyMusicServiceAdapter;
+  bandcampAdapter: MusicServiceAdapter;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
   /** Where user reports are emailed; see routes/moderation.ts. */

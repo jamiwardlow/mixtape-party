@@ -3,6 +3,8 @@ import {
   ServiceUnavailableError,
   type MusicServiceAdapter,
   type PlaybackLaunchHandle,
+  type SubmissionRequest,
+  type SubmissionResolution,
   type TrackRef,
   type TrackResult,
 } from './types.js';
@@ -86,6 +88,7 @@ async function innertubePost(endpoint: string, body: Record<string, unknown>): P
  */
 export class YouTubeMusicAdapter implements MusicServiceAdapter {
   readonly service = 'youtube_music' as const;
+  readonly exportable = true;
 
   async search(query: string): Promise<TrackResult[]> {
     const body = (await innertubePost('search', {
@@ -121,6 +124,42 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
   /** A video id is 11 url-safe base64 characters; anything else (e.g. the fake demo-league picks) makes browse/edit_playlist 400 the whole batch. */
   isTrackId(externalId: string): boolean {
     return /^[\w-]{11}$/.test(externalId);
+  }
+
+  /**
+   * A comma-joined video id list (#215): YouTube builds an anonymous playlist from it on click, so
+   * no account or cookie is involved. Rows exported before #215 hold a real playlist id under the
+   * old shared account instead, and keep linking to it.
+   * ponytail: YouTube may only queue the first ~50 ids; split into several links if a list outgrows it.
+   */
+  playlistUrl(playlistExternalId: string): string {
+    return /^PL[\w-]{16,}$/.test(playlistExternalId)
+      ? `${ORIGIN}/playlist?list=${playlistExternalId}`
+      : `https://www.youtube.com/watch_videos?video_ids=${playlistExternalId}`;
+  }
+
+  /** The client picked a search result; it's stored as sent once a catalog match confirms it exists. */
+  async resolveSubmission({ externalId, title, artist, isrc }: SubmissionRequest): Promise<SubmissionResolution> {
+    if (
+      typeof externalId !== 'string' ||
+      typeof title !== 'string' ||
+      typeof artist !== 'string' ||
+      (isrc !== undefined && isrc !== null && typeof isrc !== 'string')
+    ) {
+      return { status: 400, error: 'externalId, title, and artist are required' };
+    }
+    const track = { externalId, title, artist, isrc: isrc ?? undefined, service: this.service };
+    try {
+      if (!(await this.match(track))) return { status: 400, error: 'track not found in catalog' };
+    } catch (err) {
+      if (err instanceof ServiceUnavailableError) return { status: 503, error: 'search unavailable' };
+      throw err;
+    }
+    return { track };
+  }
+
+  thumbnailUrl(track: TrackResult): string {
+    return `https://i.ytimg.com/vi/${track.externalId}/mqdefault.jpg`;
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {

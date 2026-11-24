@@ -1,43 +1,29 @@
-import {
-  ServiceUnavailableError,
-  type EmbedOnlyMusicServiceAdapter,
-  type MusicServiceAdapter,
-  type PlaybackLaunchHandle,
-  type ServiceName,
-  type TrackRef,
-  type TrackResult,
-} from './types.js';
+import { BandcampAdapter } from './bandcampAdapter.js';
+import { ServiceUnavailableError, type PlaybackLaunchHandle, type TrackRef, type TrackResult } from './types.js';
+import { YouTubeMusicAdapter } from './youtubeMusicAdapter.js';
 
 /** A pasted URL this fake resolves successfully, for exercising the Bandcamp submit-by-URL flow in tests. */
 export const FAKE_BANDCAMP_URL = 'https://fakeartist.bandcamp.com/track/fake-song';
 
-/** Search query that makes a `youtube_music` fake throw {@link ServiceUnavailableError}, to exercise the fallback path. */
+/** Search query that makes the fake throw {@link ServiceUnavailableError}, to exercise the fallback path. */
 export const SEARCH_UNAVAILABLE_QUERY = 'SEARCH_UNAVAILABLE';
 
 /**
- * In-memory stand-in for a real music-service adapter, used to exercise the
- * backend API (Seam 1) without hitting a real third-party service.
+ * In-memory stand-in for {@link YouTubeMusicAdapter}, used to exercise the backend API (Seam 1)
+ * without hitting YouTube. Only the network calls are faked; the capabilities built on them
+ * (submission, thumbnail, playlist link) are the real adapter's.
  */
-export class FakeMusicServiceAdapter implements MusicServiceAdapter {
+export class FakeMusicServiceAdapter extends YouTubeMusicAdapter {
   private nextTrackId = 1;
 
-  constructor(readonly service: ServiceName = 'youtube_music') {}
-
-  /** Test hook: titles that this specific adapter instance (i.e. this one service) will fail to match, to exercise cross-service export fallback. */
+  /** Test hook: titles this adapter will fail to match, to exercise export fallback. */
   readonly forcedNoMatchTitles = new Set<string>();
 
   async search(query: string): Promise<TrackResult[]> {
-    if (this.service === 'youtube_music' && query === SEARCH_UNAVAILABLE_QUERY) {
+    if (query === SEARCH_UNAVAILABLE_QUERY) {
       throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable');
     }
-    return [
-      {
-        externalId: `fake-track-${this.nextTrackId++}`,
-        title: query,
-        artist: 'Fake Artist',
-        service: this.service,
-      },
-    ];
+    return [{ externalId: `fake-track-${this.nextTrackId++}`, title: query, artist: 'Fake Artist', service: this.service }];
   }
 
   async match(track: TrackRef): Promise<TrackResult | null> {
@@ -51,8 +37,9 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter {
     };
   }
 
-  isTrackId(_externalId: string): boolean {
-    return true;
+  /** Accepts any non-empty id; tests reassign it on the instance to exercise rejected or failing ids. */
+  isTrackId(externalId: string): boolean {
+    return externalId !== '';
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
@@ -64,15 +51,14 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter {
   }
 }
 
-/** In-memory stand-in for {@link BandcampAdapter}, used to exercise the submit-by-URL flow without hitting Bandcamp. */
-export class FakeBandcampAdapter implements EmbedOnlyMusicServiceAdapter {
-  readonly service = 'bandcamp' as const;
+/** In-memory stand-in for {@link BandcampAdapter}: only reading Bandcamp is faked. */
+export class FakeBandcampAdapter extends BandcampAdapter {
   private nextTrackId = 1;
 
   async submit(url: string): Promise<TrackResult | null> {
     if (url !== FAKE_BANDCAMP_URL) return null;
     return {
-      externalId: `fake-bandcamp-track-${this.nextTrackId++}`,
+      externalId: `track=${this.nextTrackId++}`,
       title: 'Fake Bandcamp Song',
       artist: 'Fake Bandcamp Artist',
       service: this.service,

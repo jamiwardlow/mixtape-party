@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import { adapterFor, playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
+import { exportableServiceNames, playbackFor, playlistServices, type AdapterRegistry } from '../adapters/registry.js';
 import { resolveMatch } from '../adapters/matchCache.js';
-import type { MusicServiceAdapter, PlaybackLaunchHandle, ServiceName, TrackResult } from '../adapters/types.js';
+import type { PlaybackLaunchHandle, PlaylistService, ServiceName, TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { guessingOpened } from '../roundTimeline.js';
@@ -14,25 +14,6 @@ export interface RoundExportDeps extends AdapterRegistry {
 
 export interface ExportDeps extends AccountsDeps, RoundExportDeps {}
 
-export type ExportableService = Exclude<ServiceName, 'bandcamp'>;
-const EXPORTABLE_SERVICES: ExportableService[] = ['youtube_music'];
-
-/**
- * Web address of an exported playlist, the only form of it a client can open (#69). Per-track
- * launch handles come from the adapters; a playlist has no adapter method because the id read back
- * out of `round_exports` is all there is to build one from.
- */
-export const PLAYLIST_URL: Record<ExportableService, (externalId: string) => string> = {
-  // A comma-joined video id list (#215): YouTube builds an anonymous playlist from it on click, so
-  // no account or cookie is involved. Rows exported before #215 hold a real playlist id under the
-  // old shared account instead, and keep linking to it.
-  // ponytail: YouTube may only queue the first ~50 ids; split into several links if a list outgrows it.
-  youtube_music: (externalId) =>
-    /^PL[\w-]{16,}$/.test(externalId)
-      ? `https://music.youtube.com/playlist?list=${externalId}`
-      : `https://www.youtube.com/watch_videos?video_ids=${externalId}`,
-};
-
 /** What `round_exports` / `favorite_exports` store for a set of matched tracks: their ids, in order, or null for none. */
 function playlistIdFor(tracks: Iterable<TrackResult>): string | null {
   return [...tracks].map((t) => t.externalId).join(',') || null;
@@ -40,7 +21,7 @@ function playlistIdFor(tracks: Iterable<TrackResult>): string | null {
 
 interface SubmissionRow {
   id: string;
-  service: ExportableService;
+  service: ServiceName;
   external_id: string;
   title: string;
   artist: string;
@@ -62,7 +43,7 @@ interface SkippedTrack {
 type ExportStatus = 'ok' | 'no_matches' | 'failed';
 
 interface ServiceExport {
-  service: ExportableService;
+  service: ServiceName;
   status: ExportStatus;
   playlistExternalId: string | null;
   playlistUrl: string | null;
@@ -71,15 +52,14 @@ interface ServiceExport {
 }
 
 /** A leg that produced no playlist, for any of the reasons that can end one: there is no link to give. */
-function noPlaylistExport(service: ExportableService, status: ExportStatus): ServiceExport {
+function noPlaylistExport(service: ServiceName, status: ExportStatus): ServiceExport {
   return { service, status, playlistExternalId: null, playlistUrl: null, matchedCount: 0, skipped: [] };
 }
 
 /** Resolves each submission to a track on `service`, keyed by submission id; the unmatched are left out. */
 async function matchSubmissions(
   deps: RoundExportDeps,
-  adapter: MusicServiceAdapter,
-  service: ExportableService,
+  adapter: PlaylistService,
   submissions: SubmissionRow[],
 ): Promise<Map<string, TrackResult>> {
   const matches = new Map<string, TrackResult>();
@@ -87,13 +67,13 @@ async function matchSubmissions(
     // A submission already on this exact service is a confirmed match; no need to re-search. One
     // whose id the service wouldn't recognize is left unmatched instead.
     const match =
-      submission.service === service
+      submission.service === adapter.service
         ? adapter.isTrackId(submission.external_id) && {
             externalId: submission.external_id,
             title: submission.title,
             artist: submission.artist,
             isrc: submission.isrc ?? undefined,
-            service,
+            service: adapter.service,
           }
         : await resolveMatch(deps.pool, adapter, {
             title: submission.title,
@@ -118,13 +98,7 @@ function skippedTracks(
         submissionId: s.id,
         title: s.title,
         artist: s.artist,
-        playback: await playbackAdapterFor(deps, s.service).getPlaybackLaunchHandle({
-          externalId: s.external_id,
-          title: s.title,
-          artist: s.artist,
-          isrc: s.isrc ?? undefined,
-          service: s.service,
-        }),
+        playback: await playbackFor(deps, s),
       })),
   );
 }
@@ -133,10 +107,10 @@ async function exportForService(
   deps: RoundExportDeps,
   roundId: string,
   accountId: string,
-  service: ExportableService,
+  adapter: PlaylistService,
   submissions: SubmissionRow[],
 ): Promise<ServiceExport> {
-  const adapter = adapterFor(deps, service);
+  const { service } = adapter;
 
   // The playlist belongs to the round rather than the player: whoever opens the results first
   // matches it and every other player reuses that same match, instead of re-searching per account.
@@ -154,7 +128,7 @@ async function exportForService(
     playlistExternalId = existing.rows[0].playlist_external_id;
     matchedIds = new Set(existing.rows[0].matched_submission_ids);
   } else {
-    const matches = await matchSubmissions(deps, adapter, service, submissions);
+    const matches = await matchSubmissions(deps, adapter, submissions);
     playlistExternalId = playlistIdFor(matches.values());
     matchedIds = new Set(matches.keys());
 
@@ -172,14 +146,14 @@ async function exportForService(
     service,
     status: playlistExternalId ? 'ok' : 'no_matches',
     playlistExternalId,
-    playlistUrl: playlistExternalId ? PLAYLIST_URL[service](playlistExternalId) : null,
+    playlistUrl: playlistExternalId ? adapter.playlistUrl(playlistExternalId) : null,
     matchedCount: matchedIds.size,
     skipped,
   };
 }
 
 /**
- * Builds (once per round and service) the playlist of every non-Bandcamp submission, returning each
+ * Builds (once per round and service) the playlist of every exportable submission, returning each
  * service's leg. `accountId` only owns the round_exports row; the playlist itself is the round's.
  */
 export async function buildRoundExports(
@@ -189,23 +163,23 @@ export async function buildRoundExports(
 ): Promise<ServiceExport[]> {
   const submissionsResult = await deps.pool.query<SubmissionRow>(
     `SELECT id, service, external_id, title, artist, isrc FROM submissions
-     WHERE round_id = $1 AND service != 'bandcamp' ORDER BY id`,
-    [roundId],
+     WHERE round_id = $1 AND service = ANY($2) ORDER BY id`,
+    [roundId, exportableServiceNames(deps)],
   );
 
   // Settled one service at a time so a single broken link cannot take the others down with it
   // (#73). A bare Promise.all rejected the whole request, throwing away a playlist another
   // service had already built and written to round_exports -- the client then saw only a 500.
   return Promise.all(
-    EXPORTABLE_SERVICES.map((service) =>
-      exportForService(deps, roundId, accountId, service, submissionsResult.rows).catch((err: unknown) => {
+    playlistServices(deps).map((adapter) =>
+      exportForService(deps, roundId, accountId, adapter, submissionsResult.rows).catch((err: unknown) => {
         // Logged rather than returned: the message names internals, and the client's copy keys
         // off the status. Nothing is persisted, so the next sweep or export request retries from scratch.
         //
         // ponytail: that retry is unbounded and not free -- a service that keeps refusing is
         // re-hit every sweep and results view. Record an attempted_at on round_exports to back off.
         console.error(err);
-        return noPlaylistExport(service, 'failed');
+        return noPlaylistExport(adapter.service, 'failed');
       }),
     ),
   );
@@ -215,8 +189,8 @@ export async function buildRoundExports(
  * Rebuilds the caller's favorites playlist from every current favorite. A link is free to rebuild
  * (#215), so unlike the old shared-account playlist this also drops unfavorited tracks.
  */
-async function exportFavorites(deps: RoundExportDeps, accountId: string, service: ExportableService): Promise<ServiceExport> {
-  const adapter = adapterFor(deps, service);
+async function exportFavorites(deps: RoundExportDeps, accountId: string, adapter: PlaylistService): Promise<ServiceExport> {
+  const { service } = adapter;
   // Same league-membership join as GET /favorites, so a favorite from a league the caller left stays out.
   const favorites = (
     await deps.pool.query<SubmissionRow>(
@@ -225,13 +199,13 @@ async function exportFavorites(deps: RoundExportDeps, accountId: string, service
        JOIN submissions s ON s.id = f.submission_id
        JOIN rounds r ON r.id = s.round_id
        JOIN league_members lm ON lm.league_id = r.league_id AND lm.account_id = f.account_id
-       WHERE f.account_id = $1 AND s.service != 'bandcamp'
+       WHERE f.account_id = $1 AND s.service = ANY($2)
        ORDER BY f.created_at`,
-      [accountId],
+      [accountId, exportableServiceNames(deps)],
     )
   ).rows;
 
-  const matches = await matchSubmissions(deps, adapter, service, favorites);
+  const matches = await matchSubmissions(deps, adapter, favorites);
   const playlistExternalId = playlistIdFor(matches.values());
   if (playlistExternalId) {
     await deps.pool.query(
@@ -251,7 +225,7 @@ async function exportFavorites(deps: RoundExportDeps, accountId: string, service
     service,
     status: playlistExternalId ? 'ok' : 'no_matches',
     playlistExternalId,
-    playlistUrl: playlistExternalId ? PLAYLIST_URL[service](playlistExternalId) : null,
+    playlistUrl: playlistExternalId ? adapter.playlistUrl(playlistExternalId) : null,
     matchedCount: matches.size,
     skipped: await skippedTracks(deps, favorites, matchedIds),
   };
@@ -283,12 +257,14 @@ export function createExportRouter(deps: ExportDeps): Router {
   router.post('/favorites/export', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     // A failing service must not 500 (#73).
-    const services = [
-      await exportFavorites(deps, accountId, 'youtube_music').catch((err: unknown) => {
-        console.error(err);
-        return noPlaylistExport('youtube_music', 'failed');
-      }),
-    ];
+    const services = await Promise.all(
+      playlistServices(deps).map((adapter) =>
+        exportFavorites(deps, accountId, adapter).catch((err: unknown) => {
+          console.error(err);
+          return noPlaylistExport(adapter.service, 'failed');
+        }),
+      ),
+    );
     res.json({ services });
   });
 

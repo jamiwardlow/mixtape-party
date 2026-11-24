@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import { type AdapterRegistry } from '../adapters/registry.js';
-import { thumbnailUrlOf } from '../adapters/thumbnail.js';
+import type { ServiceName } from '../adapters/types.js';
+import { playbackFor, serviceFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
 import { blockedIds, isUuid, maskBlocked } from './blocks.js';
-import { loadFavorites, playbackFor } from './guessing.js';
+import { loadFavorites } from './guessing.js';
 import { listLeagues } from './leagues.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isScored, isSeasonConcluded, roundSql } from '../roundTimeline.js';
@@ -111,7 +111,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const [leagues, mine, favorites, guessedMe, iGuessed] = await Promise.all([
       listLeagues(deps.pool, id),
       listLeagues(deps.pool, viewerId),
-      loadFavorites(deps.pool, id),
+      loadFavorites(deps, id),
       topBesties(deps.pool, id, 'guessedMe'),
       topBesties(deps.pool, id, 'iGuessed'),
     ]);
@@ -196,7 +196,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
 
     const submissionsResult = await deps.pool.query<{
       id: string;
-      service: 'youtube_music' | 'bandcamp';
+      service: ServiceName;
       external_id: string;
       art_id: string | null;
       page_url: string | null;
@@ -301,13 +301,13 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       service: row.service,
       title: row.title,
       artist: row.artist,
-      thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
+      thumbnailUrl: thumbnailFor(deps, row),
       playback: await playbackFor(deps, row),
       comment: row.comment,
       note: row.guessing_note,
       submitter: players.get(row.account_id) ?? { accountId: row.account_id, displayName: null },
       correctGuessers: correctGuessersBySubmission.get(row.id) ?? [],
-      excludedFromExport: row.service === 'bandcamp',
+      excludedFromExport: !serviceFor(deps, row.service).exportable,
       reactions: reactionsFor(row.id),
       favorited: favoritedIds.has(row.id),
       comments: commentsBySubmission.get(row.id) ?? [],

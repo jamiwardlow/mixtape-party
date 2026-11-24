@@ -32,7 +32,7 @@ export function buildApp(
     sweepSecret = 'test-sweep-secret',
   }: { googleConfigured?: boolean; appBaseUrl?: string; sweepSecret?: string | null } = {},
 ) {
-  const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+  const youtubeMusicAdapter = new FakeMusicServiceAdapter();
   const bandcampAdapter = new FakeBandcampAdapter();
   const pushChannel = new FakePushChannel();
   const emailChannel = new FakeEmailChannel();

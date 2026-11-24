@@ -1,20 +1,11 @@
 import { Router } from 'express';
-import { ServiceUnavailableError, type ServiceName } from '../adapters/types.js';
-import { validPageUrl } from '../adapters/bandcampAdapter.js';
-import { thumbnailUrlOf } from '../adapters/thumbnail.js';
-import { adapterFor, type AdapterRegistry } from '../adapters/registry.js';
+import { ServiceUnavailableError } from '../adapters/types.js';
+import { findService, type AdapterRegistry } from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { guessingOpened, submissionOpened } from '../roundTimeline.js';
 
 export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}
-
-function parseService(value: unknown): ServiceName | null {
-  if (value === 'youtube_music' || value === 'bandcamp') {
-    return value;
-  }
-  return null;
-}
 
 export function parseComment(value: unknown): { ok: true; comment: string | null } | { ok: false; error: string } {
   if (value !== undefined && value !== null && typeof value !== 'string') {
@@ -34,24 +25,23 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       res.status(400).json({ error: 'q is required' });
       return;
     }
-    const service = parseService(req.query.service);
-    if (!service) {
+    const adapter = findService(deps, req.query.service);
+    if (!adapter) {
       res.status(400).json({ error: 'unsupported service' });
       return;
     }
-    if (service === 'bandcamp') {
-      res.status(400).json({ error: 'bandcamp has no search; submit a track by pasting its URL' });
+    if (!adapter.search) {
+      res.status(400).json({ error: `${adapter.service} has no search; submit a track by pasting its URL` });
       return;
     }
 
     try {
-      const adapter = adapterFor(deps, service);
       const results = await adapter.search(query);
       res.json({
         results: await Promise.all(
           results.map(async (r) => ({
             ...r,
-            thumbnailUrl: thumbnailUrlOf(r.service, r.externalId, r.artId),
+            thumbnailUrl: adapter.thumbnailUrl(r),
             playback: await adapter.getPlaybackLaunchHandle(r),
           })),
         ),
@@ -65,19 +55,25 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
     }
   });
 
-  // Preview of a search result before it's submitted (YouTube Music only; Bandcamp has no search).
+  // Preview of a search result before it's submitted. Clients that predate `service` only ever
+  // searched YouTube Music, so that's the default.
   router.get('/search/preview', requireAuth(deps), async (req, res) => {
     const { externalId, title, artist, isrc } = req.query;
     if (typeof externalId !== 'string' || typeof title !== 'string' || typeof artist !== 'string') {
       res.status(400).json({ error: 'externalId, title and artist are required' });
       return;
     }
-    const url = await adapterFor(deps, 'youtube_music').getPreviewUrl({
+    const adapter = findService(deps, req.query.service ?? 'youtube_music');
+    if (!adapter) {
+      res.status(400).json({ error: 'unsupported service' });
+      return;
+    }
+    const url = await adapter.getPreviewUrl({
       externalId,
       title,
       artist,
       isrc: typeof isrc === 'string' ? isrc : undefined,
-      service: 'youtube_music',
+      service: adapter.service,
     });
     res.json({ url });
   });
@@ -85,49 +81,17 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
   router.post('/rounds/:roundId/submissions', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const body = req.body ?? {};
-    const service = parseService(body.service);
-    if (!service) {
+    const adapter = findService(deps, body.service);
+    if (!adapter) {
       res.status(400).json({ error: 'unsupported service' });
       return;
     }
-
-    const { externalId, title, artist, isrc, url, artId } = body;
-    const clientPageUrl = validPageUrl(body.pageUrl);
     const parsed = parseComment(body.comment);
     if (!parsed.ok) {
       res.status(400).json({ error: parsed.error });
       return;
     }
     const comment = parsed.comment;
-    // Bandcamp bot-walls our server, so a device that read the page itself may send what it found
-    // (externalId/title/artist/artId) instead of the url. Only shape and length are checked: the
-    // worst a lying client can do is put a wrong label on its own submission.
-    const clientResolved =
-      service === 'bandcamp' &&
-      typeof url !== 'string' &&
-      typeof externalId === 'string' &&
-      /^(track|album)=\d{1,20}$/.test(externalId) &&
-      typeof title === 'string' &&
-      typeof artist === 'string' &&
-      title.trim() !== '' &&
-      artist.trim() !== '' &&
-      title.length <= 300 &&
-      artist.length <= 300 &&
-      (artId === undefined || artId === null || (Number.isSafeInteger(artId) && artId >= 0));
-    if (service === 'bandcamp') {
-      if (typeof url !== 'string' && !clientResolved) {
-        res.status(400).json({ error: 'url is required' });
-        return;
-      }
-    } else if (
-      typeof externalId !== 'string' ||
-      typeof title !== 'string' ||
-      typeof artist !== 'string' ||
-      (isrc !== undefined && isrc !== null && typeof isrc !== 'string')
-    ) {
-      res.status(400).json({ error: 'externalId, title, and artist are required' });
-      return;
-    }
 
     const round = await loadRound(deps.pool, req.params.roundId);
     if (!round) {
@@ -150,41 +114,12 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
       return;
     }
 
-    let resolved: { externalId: string; title: string; artist: string; isrc: string | null; artId: number | null; pageUrl: string | null };
-    if (clientResolved) {
-      resolved = { externalId, title, artist, isrc: null, artId: artId ?? null, pageUrl: clientPageUrl ?? null };
-    } else if (service === 'bandcamp') {
-      let submitted;
-      try {
-        submitted = await deps.bandcampAdapter.submit(url as string);
-      } catch (err) {
-        if (err instanceof ServiceUnavailableError) {
-          res.status(503).json({ error: 'bandcamp unavailable' });
-          return;
-        }
-        throw err;
-      }
-      if (!submitted) {
-        res.status(400).json({ error: 'could not resolve that bandcamp url' });
-        return;
-      }
-      resolved = { externalId: submitted.externalId, title: submitted.title, artist: submitted.artist, isrc: null, artId: submitted.artId ?? null, pageUrl: submitted.pageUrl ?? null };
-    } else {
-      try {
-        const matched = await adapterFor(deps, service).match({ title, artist, isrc: isrc ?? undefined });
-        if (!matched) {
-          res.status(400).json({ error: 'track not found in catalog' });
-          return;
-        }
-      } catch (err) {
-        if (err instanceof ServiceUnavailableError) {
-          res.status(503).json({ error: 'search unavailable' });
-          return;
-        }
-        throw err;
-      }
-      resolved = { externalId, title, artist, isrc: isrc ?? null, artId: null, pageUrl: null };
+    const resolution = await adapter.resolveSubmission(body);
+    if (!('track' in resolution)) {
+      res.status(resolution.status).json({ error: resolution.error });
+      return;
     }
+    const { track } = resolution;
 
     // Submitting again replaces your track, up to the deadline checked above and no further --
     // there is no second gate and no "reopen". `DO UPDATE` rather than DELETE + INSERT keeps the
@@ -200,7 +135,18 @@ export function createSubmissionsRouter(deps: SubmissionsDeps): Router {
              title = EXCLUDED.title, artist = EXCLUDED.artist, isrc = EXCLUDED.isrc,
              comment = EXCLUDED.comment, art_id = EXCLUDED.art_id, page_url = EXCLUDED.page_url
        RETURNING id`,
-      [req.params.roundId, accountId, service, resolved.externalId, resolved.title, resolved.artist, resolved.isrc, comment, resolved.artId, resolved.pageUrl],
+      [
+        req.params.roundId,
+        accountId,
+        adapter.service,
+        track.externalId,
+        track.title,
+        track.artist,
+        track.isrc ?? null,
+        comment,
+        track.artId ?? null,
+        track.pageUrl ?? null,
+      ],
     );
     res.status(201).json({ submissionId: submission.rows[0].id });
   });

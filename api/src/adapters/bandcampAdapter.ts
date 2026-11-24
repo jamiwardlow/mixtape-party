@@ -1,7 +1,9 @@
 import {
   ServiceUnavailableError,
-  type EmbedOnlyMusicServiceAdapter,
+  type MusicServiceAdapter,
   type PlaybackLaunchHandle,
+  type SubmissionRequest,
+  type SubmissionResolution,
   type TrackResult,
 } from './types.js';
 
@@ -43,12 +45,68 @@ interface TralbumData {
   trackinfo?: { track_id?: number; track_num?: number; title?: string }[];
 }
 
+const BANDCAMP_ID = /^(track|album)=(\d{1,20})$/;
+
 /**
  * Resolves a pasted Bandcamp track/album URL by reading the page — Bandcamp has no
- * search/discovery API, so submission is link-paste only (no `search`/`match`/playlist ops).
+ * search/discovery API, so submission is link-paste only (no `search`/`match`/playlist ops), and
+ * its tracks stay out of playlist export since there's no catalog id to match elsewhere.
  */
-export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
+export class BandcampAdapter implements MusicServiceAdapter {
   readonly service = 'bandcamp' as const;
+  readonly exportable = false;
+
+  isTrackId(externalId: string): boolean {
+    return BANDCAMP_ID.test(externalId);
+  }
+
+  async resolveSubmission(request: SubmissionRequest): Promise<SubmissionResolution> {
+    const { url, externalId, title, artist, artId } = request;
+    if (typeof url !== 'string') {
+      // Bandcamp bot-walls our server, so a device that read the page itself may send what it found
+      // (externalId/title/artist/artId) instead of the url. Only shape and length are checked: the
+      // worst a lying client can do is put a wrong label on its own submission.
+      const clientResolved =
+        typeof externalId === 'string' &&
+        this.isTrackId(externalId) &&
+        typeof title === 'string' &&
+        typeof artist === 'string' &&
+        title.trim() !== '' &&
+        artist.trim() !== '' &&
+        title.length <= 300 &&
+        artist.length <= 300 &&
+        (artId === undefined || artId === null || (Number.isSafeInteger(artId) && (artId as number) >= 0));
+      if (!clientResolved) return { status: 400, error: 'url is required' };
+      return {
+        track: {
+          externalId,
+          title,
+          artist,
+          service: this.service,
+          artId: (artId as number | null | undefined) ?? undefined,
+          pageUrl: validPageUrl(request.pageUrl),
+        },
+      };
+    }
+    let track: TrackResult | null;
+    try {
+      track = await this.submit(url);
+    } catch (err) {
+      if (err instanceof ServiceUnavailableError) return { status: 503, error: 'bandcamp unavailable' };
+      throw err;
+    }
+    return track ? { track } : { status: 400, error: 'could not resolve that bandcamp url' };
+  }
+
+  /** Needs the art_id stored at submit time, so tracks submitted before that column existed have none. */
+  thumbnailUrl(track: TrackResult): string | null {
+    return track.artId ? `https://f4.bcbits.com/img/a${track.artId}_9.jpg` : null;
+  }
+
+  /** This server is bot-walled, so when it can't resolve a preview the client may read the embed itself. */
+  previewFallback(track: TrackResult): Record<string, string> {
+    return { bandcampEmbedId: track.externalId };
+  }
 
   async submit(url: string): Promise<TrackResult | null> {
     // The track page is bot-walled for datacenter IPs, so also take the Share → Embed iframe code
@@ -154,7 +212,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
   }
 
   async getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle> {
-    const [, kind, id] = track.externalId.match(/^(track|album)=(\d+)$/) ?? [];
+    const [, kind, id] = track.externalId.match(BANDCAMP_ID) ?? [];
     if (!kind || !id) throw new Error(`invalid bandcamp externalId: ${track.externalId}`);
     if (track.pageUrl) return { service: this.service, deepLink: track.pageUrl, webUrl: track.pageUrl };
     const webUrl = `https://player.bandcamp.com/EmbeddedPlayer/${kind}=${id}/size=large/bgcol=333333/linkcol=0f91ff/tracklist=false/artwork=small/transparent=true/`;
@@ -162,7 +220,7 @@ export class BandcampAdapter implements EmbedOnlyMusicServiceAdapter {
   }
 
   async getPreviewUrl(track: TrackResult): Promise<string | null> {
-    const [, kind, id] = track.externalId.match(/^(track|album)=(\d+)$/) ?? [];
+    const [, kind, id] = track.externalId.match(BANDCAMP_ID) ?? [];
     if (!kind || !id) return null;
     try {
       const res = await fetch(`https://bandcamp.com/EmbeddedPlayer/${kind}=${id}`, { signal: AbortSignal.timeout(5000) });

@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { ServiceUnavailableError, type MusicServiceAdapter, type TrackRef, type TrackResult } from './types.js';
+import { ServiceUnavailableError, type PlaylistService, type TrackRef, type TrackResult } from './types.js';
 
 function matchKeyFor(track: TrackRef): string {
   return track.isrc ? `isrc:${track.isrc}` : `ta:${track.title.trim().toLowerCase()}|${track.artist.trim().toLowerCase()}`;
@@ -11,7 +11,7 @@ function matchKeyFor(track: TrackRef): string {
  * A transient {@link ServiceUnavailableError} is treated as "no match for this attempt" but is
  * never written to the cache, so a later export can retry it.
  */
-export async function resolveMatch(pool: Pool, adapter: MusicServiceAdapter, track: TrackRef): Promise<TrackResult | null> {
+export async function resolveMatch(pool: Pool, adapter: PlaylistService, track: TrackRef): Promise<TrackResult | null> {
   const matchKey = matchKeyFor(track);
   const cached = await pool.query<{ external_id: string | null; title: string; artist: string; isrc: string | null }>(
     'SELECT external_id, title, artist, isrc FROM track_matches WHERE match_key = $1 AND service = $2',

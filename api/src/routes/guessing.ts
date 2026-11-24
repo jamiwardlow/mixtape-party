@@ -1,10 +1,17 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
-import { thumbnailUrlOf } from '../adapters/thumbnail.js';
-import { playbackAdapterFor, type AdapterRegistry } from '../adapters/registry.js';
+import type { ServiceName } from '../adapters/types.js';
+import {
+  playbackFor,
+  exportableServiceNames,
+  serviceFor,
+  storedTrack,
+  thumbnailFor,
+  type AdapterRegistry,
+  type StoredTrackRow,
+} from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
-import { PLAYLIST_URL } from './export.js';
 import { blockedIds, maskBlocked } from './blocks.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { guessingOpened, isScored } from '../roundTimeline.js';
@@ -27,31 +34,9 @@ async function guessingGuardError(
   return null;
 }
 
-interface PreviewRow {
-  service: 'youtube_music' | 'bandcamp';
-  external_id: string;
-  title: string;
-  artist: string;
-  isrc: string | null;
-  page_url?: string | null;
-}
-
-const trackOf = (row: PreviewRow) => ({
-  externalId: row.external_id,
-  title: row.title,
-  artist: row.artist,
-  isrc: row.isrc ?? undefined,
-  service: row.service,
-  pageUrl: row.page_url ?? undefined,
-});
-
-/** The link out to a track on its service. */
-export const playbackFor = (deps: AdapterRegistry, row: PreviewRow) =>
-  playbackAdapterFor(deps, row.service).getPlaybackLaunchHandle(trackOf(row));
-
 /** The account's favorites, newest first. The submitter is deliberately not selected: favorites never reveal who submitted a track. */
-export async function loadFavorites(pool: Pool, accountId: string, deps?: AdapterRegistry) {
-  const found = await pool.query(
+export async function loadFavorites(deps: AdapterRegistry & { pool: Pool }, accountId: string, withPlayback = false) {
+  const found = await deps.pool.query(
     `SELECT s.id AS "submissionId", r.id AS "roundId", l.name AS "leagueName", r.theme AS "roundTheme",
             r.round_number AS "roundNumber", s.service, s.title, s.artist, f.created_at AS "favoritedAt",
             s.external_id, s.isrc, s.art_id, s.page_url
@@ -65,24 +50,27 @@ export async function loadFavorites(pool: Pool, accountId: string, deps?: Adapte
     [accountId],
   );
   // The ids only feed the thumbnail and the playback link; they aren't part of the payload.
-  // `deps` is passed only where playback is wanted (not the public profile).
+  // Playback is wanted only on your own favorites, not the public profile.
   return Promise.all(
-    found.rows.map(async ({ external_id, isrc, art_id, page_url, ...row }) => ({
-      ...row,
-      thumbnailUrl: thumbnailUrlOf(row.service, external_id, art_id),
-      ...(deps && { playback: await playbackFor(deps, { ...row, external_id, isrc, page_url }) }),
-    })),
+    found.rows.map(async ({ external_id, isrc, art_id, page_url, ...row }) => {
+      const stored = { ...row, external_id, isrc, art_id, page_url };
+      return {
+        ...row,
+        thumbnailUrl: thumbnailFor(deps, stored),
+        ...(withPlayback && { playback: await playbackFor(deps, stored) }),
+      };
+    }),
   );
 }
 
 export function createGuessingRouter(deps: GuessingDeps): Router {
   const router = Router();
-  const previewUrl = (row: PreviewRow) =>
-    playbackAdapterFor(deps, row.service).getPreviewUrl(trackOf(row));
-  // Bandcamp bot-walls this server, so when it can't resolve a preview the client may read the embed itself.
-  const previewBody = async (row: PreviewRow) => {
-    const url = await previewUrl(row);
-    return url || row.service !== 'bandcamp' ? { url } : { url, bandcampEmbedId: row.external_id };
+  // A service whose preview this server can't resolve may hand the client what it needs to find one itself.
+  const previewBody = async (row: StoredTrackRow) => {
+    const adapter = serviceFor(deps, row.service);
+    const track = storedTrack(row);
+    const url = await adapter.getPreviewUrl(track);
+    return url ? { url } : { url, ...adapter.previewFallback?.(track) };
   };
 
   router.get('/rounds/:roundId/guessing', requireAuth(deps), async (req, res) => {
@@ -110,7 +98,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     const submissions = await deps.pool.query<{
       id: string;
-      service: 'youtube_music' | 'bandcamp';
+      service: ServiceName;
       external_id: string;
       title: string;
       artist: string;
@@ -153,14 +141,14 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
           service: row.service,
           title: row.title,
           artist: row.artist,
-          thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id),
+          thumbnailUrl: thumbnailFor(deps, row),
           playback,
           guessedAccountId: row.guessed_account_id,
           comment: row.comment,
           mine: row.mine,
           favorited: row.favorited,
           reactions: mineBySubmission.get(row.id) ?? [],
-          excludedFromExport: row.service === 'bandcamp',
+          excludedFromExport: !serviceFor(deps, row.service).exportable,
         };
       }),
     );
@@ -176,7 +164,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
   router.get('/rounds/:roundId/submissions/:submissionId/preview', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const found = await deps.pool.query<{
-      service: 'youtube_music' | 'bandcamp';
+      service: ServiceName;
       external_id: string;
       title: string;
       artist: string;
@@ -212,7 +200,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(error.status).json({ error: error.error });
       return;
     }
-    const found = await deps.pool.query<PreviewRow>(
+    const found = await deps.pool.query<StoredTrackRow>(
       'SELECT service, external_id, title, artist, isrc, page_url FROM submissions WHERE id = $1',
       [req.params.id],
     );
@@ -221,13 +209,14 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
   router.get('/favorites', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
-    const favorites = await loadFavorites(deps.pool, accountId, deps);
-    const exported = await deps.pool.query<{ playlist_external_id: string }>(
-      "SELECT playlist_external_id FROM favorite_exports WHERE account_id = $1 AND service = 'youtube_music'",
-      [accountId],
+    const favorites = await loadFavorites(deps, accountId, true);
+    // ponytail: one link, from whichever playlist service has an export; a list once there's a second one.
+    const exported = await deps.pool.query<{ service: ServiceName; playlist_external_id: string }>(
+      'SELECT service, playlist_external_id FROM favorite_exports WHERE account_id = $1 AND service = ANY($2)',
+      [accountId, exportableServiceNames(deps)],
     );
-    const externalId = exported.rows[0]?.playlist_external_id;
-    res.json({ favorites, playlistUrl: externalId ? PLAYLIST_URL.youtube_music(externalId) : null });
+    const row = exported.rows[0];
+    res.json({ favorites, playlistUrl: row ? serviceFor(deps, row.service).playlistUrl?.(row.playlist_external_id) ?? null : null });
   });
 
   router.post('/rounds/:roundId/submissions/:submissionId/guesses', requireAuth(deps), async (req, res) => {

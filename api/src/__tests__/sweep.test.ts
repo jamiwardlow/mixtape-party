@@ -431,7 +431,7 @@ describe('runNotificationSweep', () => {
     }
 
     function playlistDeps() {
-      const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
+      const youtubeMusicAdapter = new FakeMusicServiceAdapter();
       const deps = {
         ...buildDeps(),
         playlists: {

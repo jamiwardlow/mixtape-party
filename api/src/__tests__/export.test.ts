@@ -12,7 +12,7 @@ import {
 } from './testHelpers.js';
 import { FAKE_BANDCAMP_URL } from '../adapters/fakeAdapter.js';
 import { ServiceUnavailableError } from '../adapters/types.js';
-import { PLAYLIST_URL } from '../routes/export.js';
+import { YouTubeMusicAdapter } from '../adapters/youtubeMusicAdapter.js';
 
 let testDb: TestDb;
 
@@ -110,7 +110,7 @@ describe('POST /rounds/:roundId/export', () => {
 
     expect(res.status).toBe(200);
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
-    expect(youtubeMusicExport.playlistUrl).toBe(PLAYLIST_URL.youtube_music(youtubeMusicExport.playlistExternalId));
+    expect(youtubeMusicExport.playlistUrl).toBe(new YouTubeMusicAdapter().playlistUrl(youtubeMusicExport.playlistExternalId));
   });
 
   it('shares one youtube_music playlist across every player', async () => {
@@ -207,12 +207,12 @@ describe('POST /rounds/:roundId/export', () => {
   });
 });
 
-describe('PLAYLIST_URL.youtube_music', () => {
+describe('YouTubeMusicAdapter.playlistUrl', () => {
   it('links an id list as watch_videos and a pre-#215 playlist id as a playlist', () => {
-    expect(PLAYLIST_URL.youtube_music('dQw4w9WgXcQ,9bZkp7q19f0')).toBe(
+    expect(new YouTubeMusicAdapter().playlistUrl('dQw4w9WgXcQ,9bZkp7q19f0')).toBe(
       'https://www.youtube.com/watch_videos?video_ids=dQw4w9WgXcQ,9bZkp7q19f0',
     );
-    expect(PLAYLIST_URL.youtube_music('PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')).toBe(
+    expect(new YouTubeMusicAdapter().playlistUrl('PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')).toBe(
       'https://music.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf',
     );
   });

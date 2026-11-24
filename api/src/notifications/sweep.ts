@@ -1,5 +1,7 @@
 import type { Pool } from 'pg';
-import { buildRoundExports, PLAYLIST_URL, type ExportableService, RoundExportDeps } from '../routes/export.js';
+import { exportableServiceNames, serviceFor } from '../adapters/registry.js';
+import type { ServiceName } from '../adapters/types.js';
+import { buildRoundExports, RoundExportDeps } from '../routes/export.js';
 import { roundSql, seasonConcludedSql } from '../roundTimeline.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
@@ -320,9 +322,9 @@ async function sweepPlaylists(deps: NotificationSweepDeps, now: Date): Promise<v
     `SELECT r.id, l.host_account_id FROM rounds r
      JOIN leagues l ON l.id = r.league_id
      WHERE ${roundSql('r', '$1').guessingOpened}
-       AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.service != 'bandcamp')
+       AND EXISTS (SELECT 1 FROM submissions s WHERE s.round_id = r.id AND s.service = ANY($2))
        AND NOT EXISTS (SELECT 1 FROM round_exports e WHERE e.round_id = r.id)`,
-    [now.toISOString()],
+    [now.toISOString(), exportableServiceNames(deps.playlists)],
   );
   for (const { id, host_account_id } of due.rows) {
     await buildRoundExports({ pool: deps.pool, ...deps.playlists }, id, host_account_id);
@@ -339,7 +341,7 @@ async function sweepGuessingOpen(deps: NotificationSweepDeps, now: Date): Promis
   );
 
   for (const round of dueRounds.rows) {
-    const exported = await deps.pool.query<{ service: ExportableService; playlist_external_id: string }>(
+    const exported = await deps.pool.query<{ service: ServiceName; playlist_external_id: string }>(
       'SELECT service, playlist_external_id FROM round_exports WHERE round_id = $1 AND playlist_external_id IS NOT NULL LIMIT 1',
       [round.id],
     );
@@ -351,7 +353,7 @@ async function sweepGuessingOpen(deps: NotificationSweepDeps, now: Date): Promis
       {
         title: `Round ${round.round_number}: guessing is open`,
         body: `Submissions are in for "${round.theme}". Guess who submitted each track!`,
-        link: playlist ? PLAYLIST_URL[playlist.service](playlist.playlist_external_id) : undefined,
+        link: playlist && deps.playlists ? serviceFor(deps.playlists, playlist.service).playlistUrl?.(playlist.playlist_external_id) : undefined,
         appLink: deps.appBaseUrl ? `${deps.appBaseUrl}/round/${round.id}/guess` : undefined,
         data: { roundId: round.id },
       },

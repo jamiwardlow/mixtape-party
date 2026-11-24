@@ -2,9 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
-import { thumbnailUrlOf } from '../adapters/thumbnail.js';
-import type { AdapterRegistry } from '../adapters/registry.js';
-import { playbackFor } from './guessing.js';
+import { playbackFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
   describeRound,
@@ -90,11 +88,11 @@ interface SubmissionRow {
  * A map of everyone's tracks that gets filtered at serialization time is one careless spread away
  * from shipping the whole playlist with names attached (PRODUCT.md Principle 1).
  */
-const trackOf = (row: SubmissionRow) => ({ service: row.service, title: row.title, artist: row.artist, thumbnailUrl: thumbnailUrlOf(row.service, row.external_id, row.art_id), comment: row.comment ?? null });
+const trackOf = (deps: AdapterRegistry, row: SubmissionRow) => ({ service: row.service, title: row.title, artist: row.artist, thumbnailUrl: thumbnailFor(deps, row), comment: row.comment ?? null });
 
 /** The viewer's own track, plus what they need to preview it: its id and the link out. */
 const ownTrackOf = async (deps: AdapterRegistry, row: SubmissionRow & { id: string; isrc: string | null }) => ({
-  ...trackOf(row),
+  ...trackOf(deps, row),
   submissionId: row.id,
   playback: await playbackFor(deps, row),
 });
