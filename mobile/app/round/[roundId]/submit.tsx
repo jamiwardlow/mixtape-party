@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ScrollView, Platform, Text, View } from 'react-native';
 import { usePreview } from '../../../lib/preview';
 import { resolveBandcampUrl } from '../../../lib/bandcamp';
-import { fetchApi } from '../../../lib/api';
+import { useApi } from '../../../lib/client';
 import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
 import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
@@ -29,6 +29,7 @@ interface TrackResult {
 export default function SubmitTrack() {
   const { roundId, edit } = useLocalSearchParams<{ roundId: string; edit?: string }>();
   const { token } = useSession();
+  const api = useApi();
   const t = useTheme();
   // "Change" on the Your pick card brings the search back.
   const [changing, setChanging] = useState(false);
@@ -53,10 +54,9 @@ export default function SubmitTrack() {
 
   // Editing: show the track already in, and start the comment box from what is saved.
   async function loadCurrent(withTrack = true) {
-    if (!token) return;
-    const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
+    const res = await api<{ round: { theme: string | null; you: { submission: (NonNullable<typeof current> & { comment: string | null }) | null } } }>(`/rounds/${roundId}/overview`);
     if (!res.ok) return;
-    const { round } = await res.json();
+    const { round } = res.data;
     setTheme(round.theme ?? null);
     const mine = round.you.submission;
     if (!withTrack || !mine) return;
@@ -69,7 +69,7 @@ export default function SubmitTrack() {
   }, [edit, token, roundId]);
   // Your own track previews before guessing opens; with no preview it opens in its service.
   const openInService = useCallback(() => current && openPlaybackLink(playbackHref(current.playback)), [current]);
-  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
+  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), openInService);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
 
@@ -89,61 +89,48 @@ export default function SubmitTrack() {
     },
     [results],
   );
-  const resultPreview = usePreview(resultPreviewPath, token, openResult);
+  const resultPreview = usePreview(resultPreviewPath, openResult);
 
   async function search() {
-    if (!token || !service || service === 'bandcamp' || !query.trim()) return;
+    if (!service || service === 'bandcamp' || !query.trim()) return;
     setSearching(true);
     setError(null);
-    try {
-      const res = await fetchApi(`/search?q=${encodeURIComponent(query)}&service=${service}`, { token });
-      if (!res.ok) {
-        setError('Search unavailable right now');
-        return;
-      }
-      setResults((await res.json()).results);
-    } finally {
-      setSearching(false);
-    }
+    const res = await api<{ results: TrackResult[] }>(`/search?q=${encodeURIComponent(query)}&service=${service}`);
+    setSearching(false);
+    if (res.ok) setResults(res.data.results);
+    else setError('Search unavailable right now');
   }
 
   async function saveComment() {
-    if (!token) return;
     setSubmitting(true);
     setError(null);
     setCommentSaved(false);
-    try {
-      const res = await fetchApi(`/rounds/${roundId}/submissions/mine`, { method: 'PATCH', token, body: { comment } });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not save your comment');
-        return;
-      }
-      setCommentSaved(true);
-    } finally {
-      setSubmitting(false);
-    }
+    const res = await api(`/rounds/${roundId}/submissions/mine`, { method: 'PATCH', body: { comment }, fallback: 'Could not save your comment' });
+    setSubmitting(false);
+    if (res.ok) setCommentSaved(true);
+    else setError(res.error);
   }
 
   async function submitTrack(body: Record<string, unknown>) {
-    if (!token || !service) return;
+    if (!service) return;
     setSubmitting(true);
     setError(null);
     try {
       const post = (extra: Record<string, unknown>) =>
-        fetchApi(`/rounds/${roundId}/submissions`, { method: 'POST', token, body: { service, comment, ...extra } });
+        api(`/rounds/${roundId}/submissions`, { method: 'POST', body: { service, comment, ...extra }, fallback: 'Could not submit that track' });
       let res = await post(body);
       // Bandcamp blocks our server's fetch; a native device isn't blocked (web can't: CORS), so read
       // the page here and send what it says.
-      if (res.status === 503 && service === 'bandcamp' && Platform.OS !== 'web' && typeof body.url === 'string') {
+      if (!res.ok && res.status === 503 && service === 'bandcamp' && Platform.OS !== 'web' && typeof body.url === 'string') {
         const resolved = await resolveBandcampUrl(body.url);
         if (resolved) res = await post({ ...resolved });
       }
-      if (res.status === 503 && service === 'bandcamp') {
+      if (!res.ok && res.status === 503 && service === 'bandcamp') {
         setError('Bandcamp blocked that link. On the track page tap Share → Embed, then paste the embed code here instead.');
         return;
       }
       if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not submit that track');
+        setError(res.error);
         return;
       }
       setSubmitted(true);

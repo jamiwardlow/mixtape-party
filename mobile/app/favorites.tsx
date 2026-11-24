@@ -1,12 +1,11 @@
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Linking, View } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../lib/api';
+import { useApi, useResource } from '../lib/client';
 import { FavoritesList, type Favorite } from '../lib/FavoritesList';
 import { usePreview } from '../lib/preview';
 import { playbackHref } from '../lib/rounds';
-import { useSession } from '../lib/session';
 import { BodyText, ErrorNote, JCard, Label, ReelSpinner, Screen, TapeButton } from '../lib/ui';
 
 interface Skipped {
@@ -25,57 +24,36 @@ interface ExportLeg {
 const previewPath = (submissionId: string) => `/submissions/${submissionId}/preview`;
 
 export default function Favorites() {
-  const { token } = useSession();
-  const [favorites, setFavorites] = useState<Favorite[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  const api = useApi();
+  const { data, status, setData } = useResource<{ favorites: Favorite[]; playlistUrl: string | null }>('/favorites', '');
+  const favorites = data?.favorites ?? null;
+  const [actionError, setError] = useState<string | null>(null);
+  const error =
+    actionError ?? (status === null ? null : status === 0 ? "Couldn't reach the server. Try again." : "Couldn't load your favorites.");
+  const [exportedUrl, setExportedUrl] = useState<string | null>(null);
+  const playlistUrl = exportedUrl ?? data?.playlistUrl ?? null;
   const [exportLeg, setExportLeg] = useState<ExportLeg | null>(null);
   const [exporting, setExporting] = useState(false);
   const [noPreview, setNoPreview] = useState<string | null>(null);
   // /favorites carries no playback link, so a track with no preview just says so.
-  const { playingId, toggle } = usePreview(previewPath, token, setNoPreview);
-
-  const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!token) return;
-    setError(null);
-    fetchApi('/favorites', { token })
-      .then(async (res) => {
-        if (!res.ok) return setError("Couldn't load your favorites.");
-        const body = await res.json();
-        setFavorites(body.favorites);
-        setPlaylistUrl(body.playlistUrl);
-      })
-      .catch(() => setError("Couldn't reach the server. Try again."));
-  }, [token, epoch]);
+  const { playingId, toggle } = usePreview(previewPath, setNoPreview);
 
   async function unfavorite(submissionId: string) {
-    if (!token) return;
     setError(null);
-    const ok = await fetchApi(`/submissions/${submissionId}/favorite`, { method: 'POST', token }).then(
-      (res) => res.ok,
-      () => false,
-    );
-    if (ok) setFavorites((prev) => prev?.filter((f) => f.submissionId !== submissionId) ?? null);
+    const { ok } = await api(`/submissions/${submissionId}/favorite`, { method: 'POST' });
+    if (ok) setData((d) => ({ ...d, favorites: d.favorites.filter((f) => f.submissionId !== submissionId) }));
     else setError("Couldn't update your favorite. Try again.");
   }
 
   async function exportFavorites() {
-    if (!token) return;
     setError(null);
     setExporting(true);
-    try {
-      const res = await fetchApi('/favorites/export', { method: 'POST', token });
-      const legs: Array<ExportLeg & { service: string }> = res.ok ? ((await res.json()).services ?? []) : [];
-      const leg = legs.find((l) => l.service === 'youtube_music');
-      if (!leg) return setError("Couldn't export your favorites. Try again.");
-      setExportLeg(leg);
-      if (leg.playlistUrl) setPlaylistUrl(leg.playlistUrl);
-    } catch {
-      setError("Couldn't export your favorites. Try again.");
-    } finally {
-      setExporting(false);
-    }
+    const res = await api<{ services?: Array<ExportLeg & { service: string }> }>('/favorites/export', { method: 'POST' });
+    setExporting(false);
+    const leg = res.ok ? res.data.services?.find((l) => l.service === 'youtube_music') : undefined;
+    if (!leg) return setError("Couldn't export your favorites. Try again.");
+    setExportLeg(leg);
+    if (leg.playlistUrl) setExportedUrl(leg.playlistUrl);
   }
 
   const exportNote =

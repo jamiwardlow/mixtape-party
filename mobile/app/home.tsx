@@ -1,7 +1,7 @@
-import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { fetchApi, onOfflineChange } from "../lib/api";
+import { useApi, useResource } from "../lib/client";
 import { useSession } from "../lib/session";
 import { deviceStorage } from "../lib/storage";
 import { phaseLabel, type RoundPhase } from "../lib/rounds";
@@ -44,7 +44,11 @@ export default function Home() {
   const { profile, token, signOut, refreshProfile, pendingInviteCode, setPendingInviteCode } =
     useSession();
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
-  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
+  const api = useApi();
+  // Refetches on every focus and on reconnect; a failed load leaves the list empty and the
+  // offline banner explains.
+  const { data, reload: loadLeagues } = useResource<{ leagues: LeagueSummary[] }>("/leagues/mine", "");
+  const leagues = data?.leagues ?? [];
   // Magic-link and social signups never see a name field, so ask once here. Skip is remembered.
   const [name, setName] = useState("");
   const [nameSkipped, setNameSkipped] = useState(true);
@@ -66,15 +70,11 @@ export default function Home() {
 
   async function saveName() {
     const trimmed = name.trim();
-    if (!token || !trimmed) return;
+    if (!trimmed) return;
     setNameError(null);
-    try {
-      const res = await fetchApi("/accounts/me", { method: "PATCH", token, body: { displayName: trimmed } });
-      if (!res.ok) return setNameError((await res.json().catch(() => null))?.error ?? "Couldn't save your name. Try again.");
-      await refreshProfile();
-    } catch {
-      setNameError("Couldn't reach the server. Try again.");
-    }
+    const res = await api("/accounts/me", { method: "PATCH", body: { displayName: trimmed }, fallback: "Couldn't save your name. Try again." });
+    if (!res.ok) return setNameError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
+    await refreshProfile();
   }
 
   function skipName() {
@@ -82,57 +82,19 @@ export default function Home() {
     void deviceStorage.set(NAME_SKIPPED_KEY, "1").catch(() => {});
   }
 
-  async function loadLeagues() {
-    if (!token) return;
-    try {
-      const res = await fetchApi("/leagues/mine", { token });
-      if (res.ok) setLeagues((await res.json()).leagues);
-    } catch {
-      // offline: the banner explains; the next focus retries
-    }
-  }
-
-  // Refetch on every focus: home stays mounted under pushed screens, so a one-shot load on token
-  // change never retries after a failed (offline) first load.
-  useFocusEffect(
-    useCallback(() => {
-      loadLeagues();
-    }, [token]),
-  );
-
-  // Reload when connectivity returns while staying on home (focus won't fire). Only the
-  // offline -> online edge, since every successful request notifies false.
-  useEffect(() => {
-    let wasOffline = false;
-    return onOfflineChange((offline) => {
-      if (wasOffline && !offline) loadLeagues();
-      wasOffline = offline;
-    });
-  }, [token]);
-
   useEffect(() => {
     if (!token || !pendingInviteCode) return;
-    const code = pendingInviteCode;
-    (async () => {
-      const res = await fetchApi(`/leagues/invite/${code}/join`, {
-        method: "POST",
-        token,
-      });
+    void api(`/leagues/invite/${pendingInviteCode}/join`, { method: "POST" }).then(async (res) => {
       // Cleared only once the server has answered — the code is persisted now, so a request that
       // never lands (offline, API down) leaves it in place to retry on the next load instead of
       // silently dropping the join the invite link was opened for.
+      if (!res.ok && res.status === 0) {
+        return setJoinMessage("Couldn't reach the server to finish joining. We'll try again next time.");
+      }
       setPendingInviteCode(null);
-      setJoinMessage(
-        res.ok
-          ? "You're in! Check the invite to see your new league."
-          : "Couldn't finish joining that league.",
-      );
+      setJoinMessage(res.ok ? "You're in! Check the invite to see your new league." : "Couldn't finish joining that league.");
       if (res.ok) await loadLeagues();
-    })().catch(() =>
-      setJoinMessage(
-        "Couldn't reach the server to finish joining. We'll try again next time.",
-      ),
-    );
+    });
   }, [token, pendingInviteCode]);
 
   return (

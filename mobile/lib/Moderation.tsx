@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
-import { fetchApi } from './api';
+import { useApi, useResource } from './client';
 import { CONTACT_EMAIL, openContactEmail } from './legal';
 import type { Player } from './rounds';
-import { useSession } from './session';
 import { BodyText, ErrorNote, HandText, Label, TapeButton, TapeInput } from './ui';
 
 const REASONS = [
@@ -30,7 +29,7 @@ export function ReportBlock({
   targetId?: string;
   onBlocked?: () => void;
 }) {
-  const { token } = useSession();
+  const api = useApi();
   const [open, setOpen] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [what, setWhat] = useState<{ type: string; id: string }>(targetType && targetId ? { type: targetType, id: targetId } : { type: 'display_name', id: author.accountId });
@@ -39,12 +38,12 @@ export function ReportBlock({
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
 
   async function send() {
-    const res = await fetchApi('/reports', { method: 'POST', token: token ?? undefined, body: { targetType: what.type, targetId: what.id, reason, note } });
+    const res = await api('/reports', { method: 'POST', body: { targetType: what.type, targetId: what.id, reason, note } });
     setStatus(res.ok ? 'sent' : 'error');
   }
 
   async function block() {
-    const res = await fetchApi(`/blocks/${author.accountId}`, { method: 'PUT', token: token ?? undefined });
+    const res = await api(`/blocks/${author.accountId}`, { method: 'PUT' });
     if (res.ok) onBlocked?.();
     else setStatus('error');
   }
@@ -96,17 +95,10 @@ export function ReportBlock({
 
 /** Who you've blocked, each with an Unblock; renders nothing until there's someone. */
 export function BlockedPlayers() {
-  const { token } = useSession();
-  const [blocked, setBlocked] = useState<Player[]>([]);
+  const api = useApi();
+  const { data, reload } = useResource<{ blocked?: Player[] }>('/blocks', 'Couldn’t load blocked players');
   const [failed, setFailed] = useState(false);
-
-  async function load() {
-    const res = await fetchApi('/blocks', { token: token ?? undefined });
-    if (res.ok) setBlocked((await res.json()).blocked ?? []);
-  }
-  useEffect(() => {
-    if (token) load();
-  }, [token]);
+  const blocked = data?.blocked ?? [];
 
   if (blocked.length === 0) return null;
   return (
@@ -119,9 +111,9 @@ export function BlockedPlayers() {
             title="Unblock"
             variant="secondary"
             onPress={async () => {
-              const res = await fetchApi(`/blocks/${p.accountId}`, { method: 'DELETE', token: token ?? undefined });
+              const res = await api(`/blocks/${p.accountId}`, { method: 'DELETE' });
               setFailed(!res.ok);
-              await load();
+              await reload();
             }}
           />
         </View>

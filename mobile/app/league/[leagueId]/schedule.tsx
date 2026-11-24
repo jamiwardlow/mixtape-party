@@ -1,8 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Platform, ScrollView } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../../lib/api';
-import { useSession } from '../../../lib/session';
+import { useApi, useResource } from '../../../lib/client';
 import { ThemeIdeas } from '../../../lib/ThemeIdeas';
 import {
   DeadlineRows,
@@ -41,31 +40,21 @@ const later = (a: Date, b: Date | undefined) => (b && b > a ? b : a);
 
 export default function LeagueSchedule() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
-  const { token } = useSession();
-  const [rounds, setRounds] = useState<Round[] | null>(null);
-  const [isHost, setIsHost] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const api = useApi();
+  const { data, error: loadError, setData } = useResource<{ rounds: Round[]; isHost: boolean }>(
+    `/leagues/${leagueId}/rounds`,
+    'Could not load this league’s schedule',
+  );
+  const rounds = data?.rounds ?? null;
+  const isHost = data?.isHost ?? false;
+  const setRounds = (update: (prev: Round[]) => Round[]) => setData((d) => ({ ...d, rounds: update(d.rounds) }));
+  const [actionError, setError] = useState<string | null>(null);
+  const error = actionError ?? loadError;
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!token) return;
-    setError(null);
-    (async () => {
-      const res = await fetchApi(`/leagues/${leagueId}/rounds`, { token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not load this league’s schedule');
-        return;
-      }
-      const body = await res.json();
-      setRounds(body.rounds);
-      setIsHost(body.isHost);
-    })();
-  }, [token, leagueId, epoch]);
-
   async function save() {
-    if (!draft || !token) return;
+    if (!draft) return;
     // maximumDate stops the host crossing the two over but still lets them meet, and the API
     // wants strictly ordered deadlines. Say so here instead of spending a round trip on it.
     if (draft.canMoveSubmission && draft.submissionDeadline >= draft.guessingDeadline) {
@@ -77,9 +66,9 @@ export default function LeagueSchedule() {
     const guessingDeadline = draft.guessingDeadline.toISOString();
     setSaving(true);
     try {
-      const res = await fetchApi(`/rounds/${draft.original.id}`, {
+      const res = await api<{ rounds: Round[] }>(`/rounds/${draft.original.id}`, {
         method: 'PATCH',
-        token,
+        fallback: 'Could not save this round',
         // Only what the host actually moved: PATCH validates a deadline only when the body names
         // it, so echoing one back unchanged turns the preset schedule's own resting state into a
         // 400 or a 409. A shut submission window has no field to move, so it can never differ.
@@ -91,13 +80,13 @@ export default function LeagueSchedule() {
         },
       });
       if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not save this round');
+        setError(res.error);
         return;
       }
       // Moving a round's guessing deadline slides every round after it (#79), so the response
       // carries every round the patch actually wrote -- redraw all of them, not just this one.
-      const { rounds: moved } = (await res.json()) as { rounds: Round[] };
-      setRounds((prev) => prev && prev.map((r) => moved.find((m) => m.id === r.id) ?? r));
+      const { rounds: moved } = res.data;
+      setRounds((prev) => prev.map((r) => moved.find((m) => m.id === r.id) ?? r));
       setError(null);
       setDraft(null);
     } finally {
@@ -107,16 +96,15 @@ export default function LeagueSchedule() {
 
   function confirmDelete(round: Round) {
     const remove = async () => {
-      if (!token) return;
       setSaving(true);
       try {
-        const res = await fetchApi(`/rounds/${round.id}`, { method: 'DELETE', token });
+        const res = await api(`/rounds/${round.id}`, { method: 'DELETE', fallback: 'Could not delete this round' });
         if (!res.ok) {
-          setError((await res.json().catch(() => null))?.error ?? 'Could not delete this round');
+          setError(res.error);
           return;
         }
         // The API renumbers the rounds after it; mirror that rather than refetching.
-        setRounds((prev) => prev && prev.filter((r) => r.id !== round.id).map((r, i) => ({ ...r, number: i + 1 })));
+        setRounds((prev) => prev.filter((r) => r.id !== round.id).map((r, i) => ({ ...r, number: i + 1 })));
         setError(null);
         setDraft(null);
       } finally {

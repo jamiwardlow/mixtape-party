@@ -1,45 +1,19 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../../lib/api';
+import { useResource } from '../../../lib/client';
 import { BestieGroup, type Bestie } from '../../../lib/BestieGroup';
 import { type SeasonResult as Overview } from '../../../lib/rounds';
-import { useSession } from '../../../lib/session';
 import { StandingRows, WinnersRow } from '../../../lib/Standings';
 import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, RoundGate, Screen, TapeButton } from '../../../lib/ui';
 
 export default function SeasonWrapUp() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
-  const { token } = useSession();
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [besties, setBesties] = useState<{ guessedMe: Bestie[]; iGuessed: Bestie[] } | null>(null);
-  const [bestiesError, setBestiesError] = useState<string | null>(null);
-
-  const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!token) return;
-    setError(null);
-    let live = true;
-    (async () => {
-      const res = await fetchApi(`/leagues/${leagueId}/overview`, { token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not load this league');
-        return;
-      }
-      const body: Overview = await res.json();
-      if (!live) return;
-      setOverview(body);
-      if (!body.league.concluded) return;
-      fetchApi(`/leagues/${leagueId}/besties`, { token })
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((b) => live && setBesties({ guessedMe: b.guessedMe ?? [], iGuessed: b.iGuessed ?? [] }))
-        .catch(() => live && setBestiesError("Couldn't load your besties."));
-    })().catch(() => live && setError('Could not load this league'));
-    return () => {
-      live = false;
-    };
-  }, [token, leagueId, epoch]);
+  const { data: overview, error } = useResource<Overview>(`/leagues/${leagueId}/overview`, 'Could not load this league');
+  const { data: bestiesBody, error: bestiesError } = useResource<{ guessedMe?: Bestie[]; iGuessed?: Bestie[] }>(
+    overview?.league.concluded ? `/leagues/${leagueId}/besties` : null,
+    "Couldn't load your besties.",
+  );
+  const besties = bestiesBody && { guessedMe: bestiesBody.guessedMe ?? [], iGuessed: bestiesBody.iGuessed ?? [] };
 
   if (!overview) {
     return (
@@ -58,11 +32,11 @@ export default function SeasonWrapUp() {
       <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
         <JCard>
           <Label>Season complete</Label>
-          <WinnersRow winners={winners} token={token} />
+          <WinnersRow winners={winners} />
         </JCard>
         <JCard>
           <HandText>Final standings</HandText>
-          <StandingRows standings={standings} token={token} />
+          <StandingRows standings={standings} />
         </JCard>
         <JCard>
           <HandText>Besties</HandText>

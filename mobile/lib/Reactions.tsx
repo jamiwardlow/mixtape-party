@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { fetchApi } from './api';
+import { useApi } from './client';
 import { useTheme } from './theme';
 import { Chip, TapeInput, focusRing, type WebState } from './ui';
 
@@ -107,7 +107,8 @@ export function FavoriteHeart({ favorited, onPress }: { favorited: boolean; onPr
  * The heart flips at once (via `setFavorited`) and goes back if the call fails. The server flips on
  * every POST, so a tap while one is pending is ignored: it would desync the rollback.
  */
-export function useFavorite(token: string | null | undefined, setFavorited: (submissionId: string, on: boolean) => void) {
+export function useFavorite(setFavorited: (submissionId: string, on: boolean) => void) {
+  const api = useApi();
   const [error, setError] = useState(false);
   const pending = useRef(new Set<string>());
   async function toggle(submissionId: string, was: boolean) {
@@ -115,9 +116,7 @@ export function useFavorite(token: string | null | undefined, setFavorited: (sub
     pending.current.add(submissionId);
     setError(false);
     setFavorited(submissionId, !was);
-    const ok = token
-      ? await fetchApi(`/submissions/${submissionId}/favorite`, { method: 'POST', token }).then((res) => res.ok, () => false)
-      : false;
+    const { ok } = await api(`/submissions/${submissionId}/favorite`, { method: 'POST' });
     if (!ok) {
       setFavorited(submissionId, was);
       setError(true);

@@ -1,8 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../lib/api';
 import { Avatar } from '../../lib/Avatar';
+import { useResource } from '../../lib/client';
 import { BestieGroup, type Bestie } from '../../lib/BestieGroup';
 import { FavoritesList, type Favorite } from '../../lib/FavoritesList';
 import { ReportBlock } from '../../lib/Moderation';
@@ -43,21 +42,10 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
 
 export default function Player() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { token, profile: me } = useSession();
-  const [player, setPlayer] = useState<PlayerProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!token || !id) return;
-    setError(null);
-    fetchApi(`/players/${id}`, { token })
-      .then(async (res) => {
-        if (res.ok) setPlayer(await res.json());
-        else setError(res.status === 404 ? "Couldn't find that player." : "Couldn't load this profile.");
-      })
-      .catch(() => setError("Couldn't reach the server. Try again."));
-  }, [token, id, epoch]);
+  const { profile: me } = useSession();
+  const { data: player, status } = useResource<PlayerProfile>(id ? `/players/${id}` : null, '');
+  const error =
+    status === null ? null : status === 0 ? "Couldn't reach the server. Try again." : status === 404 ? "Couldn't find that player." : "Couldn't load this profile.";
 
   return (
     <Screen label="Player">
@@ -65,7 +53,7 @@ export default function Player() {
         {error ? <ErrorNote>{error}</ErrorNote> : !player ? <ReelSpinner /> : (
           <>
             <JCard>
-              <Avatar url={player.avatarUrl} token={token} label={nameOf(player)} initial={nameOf(player)[0].toUpperCase()} />
+              <Avatar url={player.avatarUrl} label={nameOf(player)} initial={nameOf(player)[0].toUpperCase()} />
               <HandText>{nameOf(player)}</HandText>
               {player.pronouns ? <Label>{player.pronouns}</Label> : null}
               <BodyText>{player.aboutMe || 'Nothing here yet.'}</BodyText>

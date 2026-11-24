@@ -2,8 +2,7 @@ import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { ScrollView, Share, View } from 'react-native';
 import { router } from 'expo-router';
-import { fetchApi } from '../lib/api';
-import { useSession } from '../lib/session';
+import { useApi } from '../lib/client';
 import { ThemeIdeas } from '../lib/ThemeIdeas';
 import { pickIdeas } from '../lib/themeSuggestions';
 import {
@@ -63,7 +62,7 @@ function derivedSchedule(now: Date, submissionDeadline: Date, guessingDeadline: 
 }
 
 export default function CreateLeague() {
-  const { token } = useSession();
+  const api = useApi();
   const [name, setName] = useState('');
   const [seasonLength, setSeasonLength] = useState('8');
   const [theme, setTheme] = useState('');
@@ -105,7 +104,6 @@ export default function CreateLeague() {
   }
 
   async function submit() {
-    if (!token) return;
     // Number('') is 0 and Number('two') is NaN -- both used to be posted straight through.
     const rounds = Number(seasonLength);
     if (!Number.isInteger(rounds) || rounds < 1) {
@@ -122,30 +120,23 @@ export default function CreateLeague() {
     }
     setError(null);
     setCreating(true);
-    try {
-      const res = await fetchApi('/leagues', {
-        method: 'POST',
-        token,
-        body: {
-          name,
-          seasonLength: rounds,
-          theme,
-          // themes[n - 1] is round n's theme; round 1's is the `theme` field above.
-          themes: Array.from({ length: rounds }, (_, i) => laterThemes[i + 1] ?? null),
-          submissionDeadline: submissionDeadline.toISOString(),
-          guessingDeadline: guessingDeadline.toISOString(),
-          now: openedAt.toISOString(),
-        },
-      });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not create the league');
-        return;
-      }
-      const body = await res.json();
-      setCreated({ leagueId: body.leagueId, inviteCode: body.inviteCode });
-    } finally {
-      setCreating(false);
-    }
+    const res = await api<{ leagueId: string; inviteCode: string }>('/leagues', {
+      method: 'POST',
+      fallback: 'Could not create the league',
+      body: {
+        name,
+        seasonLength: rounds,
+        theme,
+        // themes[n - 1] is round n's theme; round 1's is the `theme` field above.
+        themes: Array.from({ length: rounds }, (_, i) => laterThemes[i + 1] ?? null),
+        submissionDeadline: submissionDeadline.toISOString(),
+        guessingDeadline: guessingDeadline.toISOString(),
+        now: openedAt.toISOString(),
+      },
+    });
+    setCreating(false);
+    if (!res.ok) return setError(res.error);
+    setCreated({ leagueId: res.data.leagueId, inviteCode: res.data.inviteCode });
   }
 
   async function shareInvite() {

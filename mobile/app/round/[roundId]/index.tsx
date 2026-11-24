@@ -1,7 +1,7 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../../lib/api';
+import { useResource } from '../../../lib/client';
 import { usePreview } from '../../../lib/preview';
 import {
   PHASE_META,
@@ -13,7 +13,6 @@ import {
   type RoundPhase,
   type ServiceName,
 } from '../../../lib/rounds';
-import { useSession } from '../../../lib/session';
 import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
 import { openPlaybackLink } from '../../../lib/bandcamp';
 
@@ -67,30 +66,12 @@ const PHASE_STATUS: Record<RoundPhase, string> = {
  */
 export default function RoundOverview() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
-  const { token } = useSession();
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Refetches on every focus: this screen stays mounted under submit/guess, so a track just sent
+  // would otherwise show as missing until a remount.
+  const { data: overview, error } = useResource<Overview>(`/rounds/${roundId}/overview`, 'Could not load this round');
   const mine = overview?.round.you.submission;
   const openInService = useCallback(() => mine && openPlaybackLink(playbackHref(mine.playback)), [mine]);
-  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), token, openInService);
-
-  const epoch = useReconnectEpoch();
-  // Refetch on every focus: this screen stays mounted under submit/guess, so a track just sent
-  // would otherwise show as missing until a remount.
-  useFocusEffect(
-    useCallback(() => {
-      if (!token) return;
-      setError(null);
-      (async () => {
-        const res = await fetchApi(`/rounds/${roundId}/overview`, { token });
-        if (!res.ok) {
-          setError((await res.json().catch(() => null))?.error ?? 'Could not load this round');
-          return;
-        }
-        setOverview(await res.json());
-      })();
-    }, [token, roundId, epoch]),
-  );
+  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), openInService);
 
   if (!overview) {
     return (

@@ -3,11 +3,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, ScrollView, Switch, View } from 'react-native';
-import { API_URL, fetchApi, fetchWithTimeout } from '../lib/api';
 import { Avatar } from '../lib/Avatar';
 import { BestieGroup, type Bestie } from '../lib/BestieGroup';
 import { LegalLinks } from '../lib/legal';
 import { BlockedPlayers } from '../lib/Moderation';
+import { useApi, useResource } from '../lib/client';
 import { useSession } from '../lib/session';
 import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
 
@@ -129,7 +129,8 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
 }
 
 export default function Account() {
-  const { token, profile, refreshProfile, signOut } = useSession();
+  const { profile, refreshProfile, signOut } = useSession();
+  const api = useApi();
   const [name, setName] = useState(profile?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -141,7 +142,7 @@ export default function Account() {
   const [cropping, setCropping] = useState<CropAsset | null>(null);
 
   async function pickAvatar() {
-    if (!token || avatarBusy) return;
+    if (avatarBusy) return;
     setAvatarError(null);
     try {
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1] });
@@ -155,7 +156,6 @@ export default function Account() {
   }
 
   async function uploadAvatar(uri: string, actions: ImageManipulator.Action[]) {
-    if (!token) return;
     setCropping(null);
     setAvatarBusy(true);
     try {
@@ -165,20 +165,12 @@ export default function Account() {
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
       const bytes = await (await fetch(small.uri)).blob();
-      // fetchApi JSON-encodes bodies; the avatar endpoint wants the raw bytes.
-      const res = await fetchWithTimeout(
-        `${API_URL}/accounts/me/avatar`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'image/jpeg', Authorization: `Bearer ${token}` },
-          body: bytes,
-        },
-        60_000, // uploads on a slow link legitimately take longer
-      );
-      if (!res.ok) {
-        setAvatarError((await res.json().catch(() => null))?.error ?? "Couldn't upload your photo. Try again.");
-        return;
-      }
+      const res = await api('/accounts/me/avatar', {
+        method: 'PUT',
+        upload: { bytes, contentType: 'image/jpeg' },
+        fallback: "Couldn't upload your photo. Try again.",
+      });
+      if (!res.ok) return setAvatarError(res.error);
       await refreshProfile();
     } catch {
       setAvatarError("Couldn't upload your photo. Try again.");
@@ -188,67 +180,37 @@ export default function Account() {
   }
 
   async function removeAvatar() {
-    if (!token || avatarBusy) return;
+    if (avatarBusy) return;
     setAvatarError(null);
     setAvatarBusy(true);
-    try {
-      const res = await fetchApi('/accounts/me/avatar', { method: 'DELETE', token });
-      if (!res.ok) {
-        setAvatarError("Couldn't remove your photo. Try again.");
-        return;
-      }
-      await refreshProfile();
-    } catch {
-      setAvatarError("Couldn't reach the server. Try again.");
-    } finally {
-      setAvatarBusy(false);
-    }
+    const res = await api('/accounts/me/avatar', { method: 'DELETE' });
+    if (res.ok) await refreshProfile();
+    else setAvatarError(res.status === 0 ? "Couldn't reach the server. Try again." : "Couldn't remove your photo. Try again.");
+    setAvatarBusy(false);
   }
 
-  const [leagues, setLeagues] = useState<LeagueRow[] | null>(null);
-  const [leaguesError, setLeaguesError] = useState<string | null>(null);
+  const { data: leaguesBody, error: leaguesError } = useResource<{ leagues: LeagueRow[] }>('/leagues/mine', "Couldn't load your leagues.");
+  const leagues = leaguesBody?.leagues ?? null;
 
-  useEffect(() => {
-    if (!token) return;
-    fetchApi('/leagues/mine', { token })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((body) => setLeagues(body.leagues))
-      .catch(() => setLeaguesError("Couldn't load your leagues."));
-  }, [token]);
+  const { data: bestiesBody, error: bestiesError } = useResource<{ guessedMe?: Bestie[]; iGuessed?: Bestie[] }>(
+    '/accounts/me/besties',
+    "Couldn't load your besties.",
+  );
+  const besties = bestiesBody && { guessedMe: bestiesBody.guessedMe ?? [], iGuessed: bestiesBody.iGuessed ?? [] };
 
-  const [besties, setBesties] = useState<{ guessedMe: Bestie[]; iGuessed: Bestie[] } | null>(null);
-  const [bestiesError, setBestiesError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    fetchApi('/accounts/me/besties', { token })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((b) => setBesties({ guessedMe: b.guessedMe ?? [], iGuessed: b.iGuessed ?? [] }))
-      .catch(() => setBestiesError("Couldn't load your besties."));
-  }, [token]);
-
-  const [prefs, setPrefs] = useState({ pushEnabled: true, emailEnabled: true });
-  const [prefsError, setPrefsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    fetchApi('/notifications/settings', { token })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((s) => setPrefs({ pushEnabled: s.pushEnabled !== false, emailEnabled: s.emailEnabled !== false }))
-      .catch(() => setPrefsError("Couldn't load your notification settings."));
-  }, [token]);
+  type Prefs = { pushEnabled?: boolean; emailEnabled?: boolean };
+  const prefsResource = useResource<Prefs>('/notifications/settings', "Couldn't load your notification settings.");
+  const prefs = { pushEnabled: prefsResource.data?.pushEnabled !== false, emailEnabled: prefsResource.data?.emailEnabled !== false };
+  const [prefsSaveError, setPrefsError] = useState<string | null>(null);
+  const prefsError = prefsSaveError ?? prefsResource.error;
 
   // Optimistic: flip now, put back the old value if the server says no.
   async function togglePref(key: 'pushEnabled' | 'emailEnabled', value: boolean) {
-    if (!token) return;
     const previous = prefs[key];
     setPrefsError(null);
-    setPrefs((p) => ({ ...p, [key]: value }));
-    try {
-      const res = await fetchApi('/notifications/settings', { method: 'PUT', token, body: { [key]: value } });
-      if (res.ok) return;
-    } catch {}
-    setPrefs((p) => ({ ...p, [key]: previous }));
+    prefsResource.setData((p) => ({ ...p, [key]: value }));
+    if ((await api('/notifications/settings', { method: 'PUT', body: { [key]: value } })).ok) return;
+    prefsResource.setData((p) => ({ ...p, [key]: previous }));
     setPrefsError("Couldn't save that setting. Try again.");
   }
 
@@ -259,7 +221,7 @@ export default function Account() {
   }, [profile?.displayName]);
 
   async function saveName() {
-    if (!token || savingName) return;
+    if (savingName) return;
     const trimmed = name.trim();
     setNameError(null);
     setNameSaved(false);
@@ -268,21 +230,14 @@ export default function Account() {
       return;
     }
     setSavingName(true);
-    try {
-      const res = await fetchApi('/accounts/me', { method: 'PATCH', token, body: { displayName: trimmed } });
-      if (!res.ok) {
-        setNameError((await res.json().catch(() => null))?.error ?? "Couldn't save your name. Try again.");
-        return;
-      }
+    const res = await api('/accounts/me', { method: 'PATCH', body: { displayName: trimmed }, fallback: "Couldn't save your name. Try again." });
+    if (res.ok) {
       // The name shown everywhere else comes off the session profile, so re-read it and the change
       // lands without a sign-out.
       await refreshProfile();
       setNameSaved(true);
-    } catch {
-      setNameError("Couldn't reach the server. Try again.");
-    } finally {
-      setSavingName(false);
-    }
+    } else setNameError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
+    setSavingName(false);
   }
 
   const [pronouns, setPronouns] = useState(profile?.pronouns ?? '');
@@ -297,34 +252,20 @@ export default function Account() {
   }, [profile?.pronouns, profile?.aboutMe]);
 
   async function saveAbout() {
-    if (!token || savingAbout) return;
+    if (savingAbout) return;
     setAboutError(null);
     setAboutSaved(false);
     setSavingAbout(true);
-    try {
-      const res = await fetchApi('/accounts/me', { method: 'PATCH', token, body: { pronouns, aboutMe } });
-      if (!res.ok) {
-        setAboutError((await res.json().catch(() => null))?.error ?? "Couldn't save that. Try again.");
-        return;
-      }
+    const res = await api('/accounts/me', { method: 'PATCH', body: { pronouns, aboutMe }, fallback: "Couldn't save that. Try again." });
+    if (res.ok) {
       await refreshProfile();
       setAboutSaved(true);
-    } catch {
-      setAboutError("Couldn't reach the server. Try again.");
-    } finally {
-      setSavingAbout(false);
-    }
+    } else setAboutError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
+    setSavingAbout(false);
   }
 
-  const [favorites, setFavorites] = useState<{ title: string; artist: string }[] | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    fetchApi('/favorites', { token })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((b) => setFavorites(b.favorites ?? []))
-      .catch(() => {});  // leave the count out rather than claim 0
-  }, [token]);
+  // A failed load leaves the count out rather than claim 0.
+  const favorites = useResource<{ favorites?: { title: string; artist: string }[] }>('/favorites', '').data?.favorites ?? null;
 
   const [confirming, setConfirming] = useState(false);
   const [proof, setProof] = useState('');
@@ -332,23 +273,19 @@ export default function Account() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function deleteAccount() {
-    if (!token || deleting) return;
+    if (deleting) return;
     setDeleteError(null);
     setDeleting(true);
-    try {
-      // One field serves both kinds of account: the server reads the password, or for accounts
-      // without one the email, and ignores the other.
-      const res = await fetchApi('/accounts/me', { method: 'DELETE', token, body: { password: proof, confirmEmail: proof } });
-      if (!res.ok) {
-        setDeleteError((await res.json().catch(() => null))?.error ?? "Couldn't delete your account. Try again.");
-        return;
-      }
-      await signOut();
-    } catch {
-      setDeleteError("Couldn't reach the server. Try again.");
-    } finally {
-      setDeleting(false);
-    }
+    // One field serves both kinds of account: the server reads the password, or for accounts
+    // without one the email, and ignores the other.
+    const res = await api('/accounts/me', {
+      method: 'DELETE',
+      body: { password: proof, confirmEmail: proof },
+      fallback: "Couldn't delete your account. Try again.",
+    });
+    if (res.ok) await signOut();
+    else setDeleteError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
+    setDeleting(false);
   }
 
   return (
@@ -358,7 +295,6 @@ export default function Account() {
       <JCard>
         <Avatar
           url={profile?.avatarUrl}
-          token={token}
           initial={(profile?.displayName?.trim() || profile?.email || '?')[0].toUpperCase()}
         />
         {cropping ? (

@@ -1,9 +1,9 @@
 import * as Linking from 'expo-linking';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { useApi, useResource } from '../../../lib/client';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import {
   PHASE_META,
@@ -104,32 +104,16 @@ function DeleteLeague({ name, roundCount, onDelete }: { name: string; roundCount
 
 export default function LeagueOverview() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
-  const { token, profile } = useSession();
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    const res = await fetchApi(`/leagues/${leagueId}/overview`, { token: token ?? undefined });
-    if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error ?? 'Could not load this league');
-      return;
-    }
-    setOverview(await res.json());
-  }
-  // Refetch on every focus: coming back from submit leaves this screen mounted, so it'd show stale state.
-  const epoch = useReconnectEpoch();
-  useFocusEffect(
-    useCallback(() => {
-      if (token) load();
-    }, [token, leagueId, epoch]),
-  );
+  const { profile } = useSession();
+  const api = useApi();
+  // Refetches on every focus: coming back from submit leaves this screen mounted, so it'd show stale state.
+  const { data: overview, error, reload } = useResource<Overview>(`/leagues/${leagueId}/overview`, 'Could not load this league');
 
   function confirmRemove(member: Player) {
     const name = nameOf(member);
     const remove = async () => {
-      const res = await fetchApi(`/leagues/${leagueId}/members/${member.accountId}`, { method: 'DELETE', token: token! });
-      if (res.ok) load();
-      else setError((await res.json().catch(() => null))?.error ?? 'Could not remove this player');
+      // ponytail: a failure here has no on-screen note (it never had one); add one if hosts hit it.
+      if ((await api(`/leagues/${leagueId}/members/${member.accountId}`, { method: 'DELETE' })).ok) await reload();
     };
     const msg = `${name}'s track and guesses in this league will be deleted.`;
     if (Platform.OS === 'web') {
@@ -170,7 +154,7 @@ export default function LeagueOverview() {
               onPress={() => router.push({ pathname: '/league/[leagueId]/final', params: { leagueId: league.id } })}
             />
           )}
-          {league.concluded && <WinnersRow winners={winners} token={token} />}
+          {league.concluded && <WinnersRow winners={winners} />}
         </JCard>
 
         {current && (
@@ -211,7 +195,7 @@ export default function LeagueOverview() {
               <Label testID="standings-caption">
                 {league.concluded ? 'Final standings' : `After ${scoredRoundCount} of ${league.seasonLength} rounds`}
               </Label>
-              <StandingRows standings={standings} token={token} />
+              <StandingRows standings={standings} />
             </>
           )}
         </JCard>
@@ -232,7 +216,7 @@ export default function LeagueOverview() {
                 <View style={styles.inline}>
                   <PlayerLink accountId={member.accountId}>
                     <View style={styles.inline}>
-                      <Avatar size={28} label="" url={member.avatarUrl} token={token} initial={nameOf(member)[0]} />
+                      <Avatar size={28} label="" url={member.avatarUrl} initial={nameOf(member)[0]} />
                       <BodyText>{nameOf(member)}</BodyText>
                     </View>
                   </PlayerLink>
@@ -330,9 +314,7 @@ export default function LeagueOverview() {
             name={league.name}
             roundCount={rounds.length}
             onDelete={async () => {
-              const res = await fetchApi(`/leagues/${league.id}`, { method: 'DELETE', token: token! });
-              if (res.ok) router.replace('/home');
-              else setError((await res.json().catch(() => null))?.error ?? 'Could not delete this league');
+              if ((await api(`/leagues/${league.id}`, { method: 'DELETE' })).ok) router.replace('/home');
             }}
           />
         )}

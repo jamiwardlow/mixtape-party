@@ -1,6 +1,6 @@
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchApi } from './api';
+import { useApi } from './client';
 import { fetchBandcampPreview } from './bandcamp';
 
 // Bandcamp previews are the full track, so every preview is cut at the length Deezer's are.
@@ -11,7 +11,8 @@ export const PREVIEW_SECONDS = 30;
  * if it's the one playing); when the API has no preview it calls `fallback` -- the existing "open in
  * the service" link. The URL is fetched per play because Bandcamp's expire.
  */
-export function usePreview(previewPath: (submissionId: string) => string, token: string | null, fallback: (submissionId: string) => void) {
+export function usePreview(previewPath: (submissionId: string) => string, fallback: (submissionId: string) => void) {
+  const api = useApi();
   const [playingId, setPlayingId] = useState<string | null>(null);
   const player = useRef<AudioPlayer | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,15 +35,14 @@ export function usePreview(previewPath: (submissionId: string) => string, token:
     async (submissionId: string) => {
       const wasPlaying = playingId === submissionId;
       stop();
-      if (wasPlaying || !token) return;
+      if (wasPlaying) return;
       const mine = request.current;
       let url: string | null = null;
       try {
-        const res = await fetchApi(previewPath(submissionId), { token });
-        if (res.ok) {
-          const body = await res.json();
+        const r = await api<{ url?: string | null; bandcampEmbedId?: string | null }>(previewPath(submissionId));
+        if (r.ok) {
           // Bandcamp bot-walls our server, so the API hands back the embed id for the device to read.
-          url = body.url ?? (body.bandcampEmbedId ? await fetchBandcampPreview(body.bandcampEmbedId) : null);
+          url = r.data.url ?? (r.data.bandcampEmbedId ? await fetchBandcampPreview(r.data.bandcampEmbedId) : null);
         }
       } catch {
         // Treated as "no preview": the link still works.
@@ -59,7 +59,7 @@ export function usePreview(previewPath: (submissionId: string) => string, token:
       timer.current = setTimeout(stop, PREVIEW_SECONDS * 1000);
       setPlayingId(submissionId);
     },
-    [playingId, previewPath, token, stop, fallback],
+    [playingId, previewPath, api, stop, fallback],
   );
 
   return { playingId, toggle };

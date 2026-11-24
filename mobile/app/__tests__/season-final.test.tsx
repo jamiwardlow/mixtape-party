@@ -3,6 +3,7 @@ import SeasonWrapUp from '../league/[leagueId]/final';
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
   useLocalSearchParams: () => ({ leagueId: 'league-1' }),
   Redirect: ({ href }: { href: unknown }) => {
     const { Text } = require('react-native');

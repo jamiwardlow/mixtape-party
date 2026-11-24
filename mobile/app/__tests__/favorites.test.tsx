@@ -7,10 +7,13 @@ let mockFallback: (id: string) => void;
 
 const mockOpenURL = jest.fn();
 jest.spyOn(Linking, 'openURL').mockImplementation((url: string) => mockOpenURL(url));
-jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
+}));
 jest.mock('../../lib/session', () => ({ useSession: () => ({ token: 'tok-1' }) }));
 jest.mock('../../lib/preview', () => ({
-  usePreview: (_path: (id: string) => string, _token: string, fallback: (id: string) => void) => {
+  usePreview: (_path: (id: string) => string, fallback: (id: string) => void) => {
     mockFallback = fallback;
     return { playingId: null, toggle: mockToggle };
   },

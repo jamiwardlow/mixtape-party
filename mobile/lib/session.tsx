@@ -99,7 +99,8 @@ export function SessionProvider({ children, storage = deviceStorage }: PropsWith
   }
 
   async function refreshProfile(): Promise<void> {
-    if (token) await loadProfile(token);
+    // The save it follows already succeeded; a failed re-read just leaves the old profile up.
+    if (token) await loadProfile(token).catch(() => {});
   }
 
   return (

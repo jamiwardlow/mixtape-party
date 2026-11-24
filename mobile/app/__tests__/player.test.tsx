@@ -6,6 +6,7 @@ let mockMe = 'me-id';
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: (...a: unknown[]) => mockPush(...a) },
   useLocalSearchParams: () => ({ id: 'p1' }),
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
 }));
 jest.mock('../../lib/session', () => ({ useSession: () => ({ token: 'tok', profile: { id: mockMe } }) }));
 

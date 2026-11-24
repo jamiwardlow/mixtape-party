@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Image, Platform, View } from 'react-native';
 import { API_URL, fetchWithTimeout } from './api';
+import { useSession } from './session';
 import { useTheme } from './theme';
 import { avatarColor, HandText } from './ui';
 
 // The avatar endpoint is authenticated and an <img> can't send a bearer header, so on web fetch it
 // into an object URL; native Image takes headers directly.
-export function Avatar({ url, token, initial, size = 96, label = 'Your photo' }: { url?: string | null; token: string | null; initial: string; size?: number; label?: string }) {
+export function Avatar({ url, initial, size = 96, label = 'Your photo' }: { url?: string | null; initial: string; size?: number; label?: string }) {
   const t = useTheme();
+  const { token } = useSession();
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 

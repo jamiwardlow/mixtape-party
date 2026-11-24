@@ -4,6 +4,7 @@ import { formatDeadline } from '../../lib/ui';
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
   useLocalSearchParams: () => ({ leagueId: 'league-1' }),
 }));
 

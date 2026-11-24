@@ -1,5 +1,4 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { fetchApi } from '../api';
 import { fetchBandcampPreview } from '../bandcamp';
 import { PREVIEW_SECONDS, usePreview } from '../preview';
 
@@ -9,12 +8,13 @@ jest.mock('expo-audio', () => ({
   createAudioPlayer: (url: string) => mockCreate(url),
   setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../api', () => ({ fetchApi: jest.fn() }));
+const mockApi = jest.fn();
+jest.mock('../client', () => ({ useApi: () => mockApi }));
 jest.mock('../bandcamp', () => ({ fetchBandcampPreview: jest.fn() }));
 
 const path = (id: string) => `/rounds/r1/submissions/${id}/preview`;
 const previewIs = (url: string | null) =>
-  (fetchApi as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ url }) });
+  mockApi.mockResolvedValue({ ok: true, data: { url } });
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -25,11 +25,11 @@ afterEach(() => jest.useRealTimers());
 it('plays the preview in the app, not the link', async () => {
   previewIs('https://cdn/p.mp3');
   const fallback = jest.fn();
-  const { result } = await renderHook(() => usePreview(path, 'tok', fallback));
+  const { result } = await renderHook(() => usePreview(path, fallback));
 
   await act(() => result.current.toggle('s1'));
 
-  expect(fetchApi).toHaveBeenCalledWith('/rounds/r1/submissions/s1/preview', { token: 'tok' });
+  expect(mockApi).toHaveBeenCalledWith('/rounds/r1/submissions/s1/preview');
   expect(mockCreate).toHaveBeenCalledWith('https://cdn/p.mp3');
   expect(mockPlayer.play).toHaveBeenCalled();
   expect(result.current.playingId).toBe('s1');
@@ -39,7 +39,7 @@ it('plays the preview in the app, not the link', async () => {
 it('falls back to the link when there is no preview', async () => {
   previewIs(null);
   const fallback = jest.fn();
-  const { result } = await renderHook(() => usePreview(path, 'tok', fallback));
+  const { result } = await renderHook(() => usePreview(path, fallback));
 
   await act(() => result.current.toggle('s1'));
 
@@ -49,7 +49,7 @@ it('falls back to the link when there is no preview', async () => {
 
 it('pauses before removing when stopped', async () => {
   previewIs('https://cdn/p.mp3');
-  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
+  const { result } = await renderHook(() => usePreview(path, jest.fn()));
   await act(async () => result.current.toggle('s1'));
   await act(async () => result.current.toggle('s1'));
   expect(mockPlayer.pause).toHaveBeenCalled();
@@ -57,7 +57,7 @@ it('pauses before removing when stopped', async () => {
 
 it('stops when toggled again, and cuts a full-length track at the preview length', async () => {
   previewIs('https://cdn/p.mp3');
-  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
+  const { result } = await renderHook(() => usePreview(path, jest.fn()));
 
   await act(() => result.current.toggle('s1'));
   await act(() => result.current.toggle('s1'));
@@ -70,9 +70,9 @@ it('stops when toggled again, and cuts a full-length track at the preview length
 });
 
 it('reads the Bandcamp embed on the device when the server is bot-walled', async () => {
-  (fetchApi as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ url: null, bandcampEmbedId: 'track=9' }) });
+  mockApi.mockResolvedValue({ ok: true, data: { url: null, bandcampEmbedId: 'track=9' } });
   (fetchBandcampPreview as jest.Mock).mockResolvedValue('https://bc/p.mp3');
-  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
+  const { result } = await renderHook(() => usePreview(path, jest.fn()));
 
   await act(() => result.current.toggle('s1'));
 
@@ -82,16 +82,16 @@ it('reads the Bandcamp embed on the device when the server is bot-walled', async
 
 it('ignores a slow lookup that a later tap has superseded', async () => {
   let resolveFirst!: (r: unknown) => void;
-  (fetchApi as jest.Mock)
+  mockApi
     .mockReturnValueOnce(new Promise((r) => (resolveFirst = r)))
-    .mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://cdn/second.mp3' }) });
-  const { result } = await renderHook(() => usePreview(path, 'tok', jest.fn()));
+    .mockResolvedValueOnce({ ok: true, data: { url: 'https://cdn/second.mp3' } });
+  const { result } = await renderHook(() => usePreview(path, jest.fn()));
 
   let first!: Promise<void>;
   act(() => void (first = result.current.toggle('s1')));
   await act(() => result.current.toggle('s2'));
   await act(async () => {
-    resolveFirst({ ok: true, json: async () => ({ url: 'https://cdn/first.mp3' }) });
+    resolveFirst({ ok: true, data: { url: 'https://cdn/first.mp3' } });
     await first;
   });
 

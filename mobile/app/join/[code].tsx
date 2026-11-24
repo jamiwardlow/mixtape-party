@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../lib/api';
+import { useReconnectEpoch } from '../../lib/api';
+import { useApi } from '../../lib/client';
 import { useSession } from '../../lib/session';
 import { BodyText, ErrorNote, HandText, Page, ReelSpinner, TapeButton } from '../../lib/ui';
 
@@ -16,6 +17,7 @@ interface InvitePreview {
 export default function JoinLeague() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { token, setPendingInviteCode } = useSession();
+  const api = useApi();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -28,40 +30,28 @@ export default function JoinLeague() {
     // spinner instead of latching an error: the effect re-runs when `code` arrives.
     if (!code) return;
     setError(null);
-    (async () => {
-      try {
-        const res = await fetchApi(`/leagues/invite/${code}`);
-        if (!res.ok) {
-          // 404 is the API's only answer for "no such code" — an invite has no expiry to hit
-          // (schema.sql has no expires_at/used_at/revoked), so every other status is us failing,
-          // not the invite. One message for both is how a routing bug looked like an invite bug.
-          setError(res.status === 404 ? 'This invite is not valid' : "Couldn't load this invite. Try again.");
-          return;
-        }
-        setPreview(await res.json());
-      } catch {
-        setError("Couldn't reach the server. Try again.");
-      }
-    })();
+    void api<InvitePreview>(`/leagues/invite/${code}`).then((r) => {
+      if (r.ok) return setPreview(r.data);
+      // 404 is the API's only answer for "no such code" — an invite has no expiry to hit
+      // (schema.sql has no expires_at/used_at/revoked), so every other status is us failing,
+      // not the invite. One message for both is how a routing bug looked like an invite bug.
+      setError(
+        r.status === 404 ? 'This invite is not valid' : r.status === 0 ? "Couldn't reach the server. Try again." : "Couldn't load this invite. Try again.",
+      );
+    });
+    // Not on `api`: its identity follows the session's.
   }, [code, epoch]);
 
   const canJoin = token !== null;
   const over = preview !== null && preview.currentRound === null;
 
   async function join() {
-    if (!token) return;
     setJoining(true);
     setError(null);
-    try {
-      const res = await fetchApi(`/leagues/invite/${code}/join`, { method: 'POST', token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Could not join the league');
-        return;
-      }
-      setJoined(true);
-    } finally {
-      setJoining(false);
-    }
+    const res = await api(`/leagues/invite/${code}/join`, { method: 'POST', fallback: 'Could not join the league' });
+    setJoining(false);
+    if (res.ok) setJoined(true);
+    else setError(res.error);
   }
 
   function continueToJoin() {

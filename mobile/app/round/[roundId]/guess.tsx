@@ -2,11 +2,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { FlatList, Linking, View } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../../lib/api';
+import { useReconnectEpoch } from '../../../lib/api';
+import { useApi, useResource } from '../../../lib/client';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import { usePreview } from '../../../lib/preview';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
-import { useSession } from '../../../lib/session';
 import { BodyText, Chip, ErrorNote, JCard, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 import { openPlaybackLink } from '../../../lib/bandcamp';
 
@@ -28,100 +28,86 @@ interface Track {
 
 export default function GuessRound() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
-  const { token } = useSession();
-  const [tracks, setTracks] = useState<Track[] | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const api = useApi();
+  const { data, error, setData } = useResource<{ tracks: Track[]; players: Player[] }>(
+    `/rounds/${roundId}/guessing`,
+    'Guessing is not available for this round',
+  );
+  const tracks = data?.tracks ?? null;
+  const players = data?.players ?? [];
+  const setTracks = (update: (prev: Track[]) => Track[]) => setData((d) => ({ ...d, tracks: update(d.tracks) }));
   const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
-  // Per-track comment drafts, sent with the guess and editable (saved separately) after it.
+  // Per-track comment drafts, sent with the guess and editable (saved separately) after it. A
+  // refetch seeds new tracks only: what's typed in a box survives it.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (tracks) setDrafts((d) => ({ ...Object.fromEntries(tracks.map((t) => [t.submissionId, t.comment ?? ''])), ...d }));
+  }, [tracks]);
 
+  const loaded = data !== null;
   const epoch = useReconnectEpoch();
   useEffect(() => {
-    if (!token) return;
-    setError(null);
-    (async () => {
-      const res = await fetchApi(`/rounds/${roundId}/guessing`, { token });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? 'Guessing is not available for this round');
-        return;
-      }
-      const body = await res.json();
-      setTracks(body.tracks);
-      setDrafts(Object.fromEntries(body.tracks.map((t: Track) => [t.submissionId, t.comment ?? ''])));
-      setPlayers(body.players);
-
-      // The sweep builds the playlist when submissions close; this reads its url back (the route
-      // builds it if the sweep hasn't yet). A failure or a Bandcamp-only round leaves no link.
-      try {
-        const exported = await fetchApi(`/rounds/${roundId}/export`, { method: 'POST', token });
-        if (!exported.ok) return;
-        const { services } = (await exported.json()) as { services: { playlistUrl: string | null }[] };
-        setPlaylistUrl(services.find((s) => s.playlistUrl)?.playlistUrl ?? null);
-      } catch {
-        // The link is a convenience; the guessing screen already works without it.
-      }
-    })();
-  }, [token, roundId, epoch]);
+    if (!loaded) return;
+    // The sweep builds the playlist when submissions close; this reads its url back (the route
+    // builds it if the sweep hasn't yet). A failure or a Bandcamp-only round leaves no link.
+    void api<{ services: { playlistUrl: string | null }[] }>(`/rounds/${roundId}/export`, { method: 'POST' }).then((r) => {
+      if (r.ok) setPlaylistUrl(r.data.services.find((s) => s.playlistUrl)?.playlistUrl ?? null);
+    });
+    // Not on `api`: its identity follows the session's.
+  }, [loaded, roundId, epoch]);
 
   async function guess(submissionId: string, guessedAccountId: string) {
-    if (!token) return;
     // Changing a guess leaves the saved comment alone (Save comment owns it); a first guess carries the draft.
     const changing = tracks?.find((t) => t.submissionId === submissionId)?.guessedAccountId != null;
-    const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses`, {
+    const res = await api(`/rounds/${roundId}/submissions/${submissionId}/guesses`, {
       method: 'POST',
-      token,
       body: changing ? { guessedAccountId } : { guessedAccountId, comment: drafts[submissionId] },
     });
     if (res.ok) {
       setTracks((prev) =>
-        prev?.map((t) =>
+        prev.map((t) =>
           t.submissionId !== submissionId
             ? t
             : { ...t, guessedAccountId, comment: changing ? t.comment : drafts[submissionId]?.trim() || null },
-        ) ?? null,
+        ),
       );
     }
   }
 
   async function unguess(submissionId: string) {
-    if (!token) return;
-    const res = await fetchApi(`/rounds/${roundId}/submissions/${submissionId}/guesses`, { method: 'DELETE', token });
+    const res = await api(`/rounds/${roundId}/submissions/${submissionId}/guesses`, { method: 'DELETE' });
     if (res.ok) {
       // The server drops the comment with the guess; the draft stays in the box to re-send with the next guess.
-      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId: null, comment: null } : t)) ?? null);
+      setTracks((prev) => prev.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId: null, comment: null } : t)));
     }
   }
 
   async function saveComment(submissionId: string) {
-    if (!token) return;
     const mine = tracks?.find((t) => t.submissionId === submissionId)?.mine;
-    const res = await fetchApi(
+    const res = await api<{ note?: string | null; comment?: string | null }>(
       mine ? `/rounds/${roundId}/submissions/mine/note` : `/rounds/${roundId}/submissions/${submissionId}/guesses/comment`,
-      { method: 'PUT', token, body: mine ? { note: drafts[submissionId] } : { comment: drafts[submissionId] } },
+      { method: 'PUT', body: mine ? { note: drafts[submissionId] } : { comment: drafts[submissionId] } },
     );
     if (res.ok) {
-      const body = await res.json();
-      const comment = mine ? body.note : body.comment;
-      setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, comment } : t)) ?? null);
+      const comment = (mine ? res.data.note : res.data.comment) ?? null;
+      setTracks((prev) => prev.map((t) => (t.submissionId === submissionId ? { ...t, comment } : t)));
     }
   }
 
   // Same reactions and favorites as the results screen: a track you react to or heart here shows there too.
-  const favorite = useFavorite(token, (submissionId, on) =>
-    setTracks((prev) => prev?.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) ?? null),
+  const favorite = useFavorite((submissionId, on) =>
+    setTracks((prev) => prev.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t))),
   );
   async function react(submissionId: string, emoji: string) {
-    if (!token) return;
-    const res = await fetchApi(`/submissions/${submissionId}/reactions`, { method: 'POST', token, body: { emoji } });
+    const res = await api<{ reacted: boolean }>(`/submissions/${submissionId}/reactions`, { method: 'POST', body: { emoji } });
     if (!res.ok) return;
-    const { reacted } = await res.json();
+    const { reacted } = res.data;
     setTracks((prev) =>
-      prev?.map((t) =>
+      prev.map((t) =>
         t.submissionId !== submissionId
           ? t
           : { ...t, reactions: reacted ? [...t.reactions, { emoji, count: 1, mine: true }] : t.reactions.filter((r) => r.emoji !== emoji) },
-      ) ?? null,
+      ),
     );
   }
 
@@ -134,7 +120,7 @@ export default function GuessRound() {
     [tracks],
   );
   const previewPath = useCallback((id: string) => `/rounds/${roundId}/submissions/${id}/preview`, [roundId]);
-  const { playingId, toggle } = usePreview(previewPath, token, openInService);
+  const { playingId, toggle } = usePreview(previewPath, openInService);
 
   // Each player can be guessed on one track only.
   const guessedIds = new Set((tracks ?? []).map((t) => t.guessedAccountId).filter(Boolean));

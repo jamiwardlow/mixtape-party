@@ -2,14 +2,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
-import { fetchApi, useReconnectEpoch } from '../../../lib/api';
+import { useReconnectEpoch } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
+import { useApi, useResource } from '../../../lib/client';
 import { ReportBlock } from '../../../lib/Moderation';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import { usePreview } from '../../../lib/preview';
 import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
 import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
-import { useSession } from '../../../lib/session';
 import { SERVICE_META, useTheme } from '../../../lib/theme';
 import {
   BodyText,
@@ -131,8 +131,6 @@ function ReplyNode({
   actions: ThreadActions;
   depth: number;
 }) {
-  const { token } = useSession();
-
   const [mode, setMode] = useState<'view' | 'reply' | 'edit'>('view');
   const [draft, setDraft] = useState('');
   const children = replies.filter((r) => r.parentReplyId === reply.replyId);
@@ -160,7 +158,7 @@ function ReplyNode({
         ) : (
           <PlayerLink accountId={reply.author.accountId}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Avatar size={20} label="" url={reply.author.avatarUrl} token={token} initial={(reply.author.displayName ?? '?')[0]} />
+              <Avatar size={20} label="" url={reply.author.avatarUrl} initial={(reply.author.displayName ?? '?')[0]} />
               <HandText>{reply.author.displayName ?? 'A player'}</HandText>
             </View>
           </PlayerLink>
@@ -193,7 +191,6 @@ function ReplyNode({
 }
 
 function CommentThread({ comment, actions }: { comment: Comment; actions: ThreadActions }) {
-  const { token } = useSession();
   const [reply, setReply] = useState('');
   return (
     <View style={{ gap: 6, ...(actions.focus === comment.guessId && { borderLeftWidth: 3, paddingLeft: 6 }) }}>
@@ -202,7 +199,7 @@ function CommentThread({ comment, actions }: { comment: Comment; actions: Thread
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           <PlayerLink accountId={comment.guesser.accountId}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Avatar size={20} label="" url={comment.guesser.avatarUrl} token={token} initial={(comment.guesser.displayName ?? '?')[0]} />
+              <Avatar size={20} label="" url={comment.guesser.avatarUrl} initial={(comment.guesser.displayName ?? '?')[0]} />
               <HandText>{comment.guesser.displayName ?? 'A player'}</HandText>
             </View>
           </PlayerLink>
@@ -263,7 +260,6 @@ function TrackCard({
   favorite: ReturnType<typeof useFavorite>;
   onSaveComment: (comment: string) => Promise<void>;
 }) {
-  const { token } = useSession();
   const [open, setOpen] = useState(hasFocus(item, actions.focus));
   const n = item.comments.length;
   return (
@@ -290,7 +286,7 @@ function TrackCard({
       <Sprocket />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Label>Submitted by</Label>
-        <Avatar size={20} label="" url={item.submitter.avatarUrl} token={token} initial={(item.submitter.displayName ?? '?')[0]} />
+        <Avatar size={20} label="" url={item.submitter.avatarUrl} initial={(item.submitter.displayName ?? '?')[0]} />
         <HandText>{item.submitter.displayName ?? 'a player'}</HandText>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
@@ -320,7 +316,7 @@ function TrackCard({
 const PODIUM_HEIGHT = [140, 116, 96];
 
 /** Top 3 as blocks (1st centred and tallest); ties share a height. Everyone past 3rd gets a row below. */
-function Podium({ results, token }: { results: Results; token: string | null }) {
+function Podium({ results }: { results: Results }) {
   const t = useTheme();
   const podiumColor = [t.mint, t.tangerine, t.accent];
   const { scores, winners } = results;
@@ -350,7 +346,7 @@ function Podium({ results, token }: { results: Results; token: string | null }) 
                   backgroundColor: podiumColor[rank(s)],
                 }}
               >
-                <Avatar size={28} label="" url={s.avatarUrl} token={token} initial={(s.displayName ?? '?')[0]} />
+                <Avatar size={28} label="" url={s.avatarUrl} initial={(s.displayName ?? '?')[0]} />
                 <BodyText numberOfLines={1} style={{ fontSize: 13, color: t.accentInk }}>{s.displayName ?? 'A player'}</BodyText>
                 <BodyText style={{ fontSize: 13, color: t.accentInk }}>{s.score} pts</BodyText>
               </View>
@@ -364,7 +360,7 @@ function Podium({ results, token }: { results: Results; token: string | null }) 
             rank={i + 4}
             name={s.displayName ?? 'A player'}
             points={s.score}
-            avatar={<Avatar size={28} label="" url={s.avatarUrl} token={token} initial={(s.displayName ?? '?')[0]} />}
+            avatar={<Avatar size={28} label="" url={s.avatarUrl} initial={(s.displayName ?? '?')[0]} />}
           />
         </PlayerLink>
       ))}
@@ -375,27 +371,17 @@ function Podium({ results, token }: { results: Results; token: string | null }) 
 export default function RoundResults() {
   const { roundId, focus } = useLocalSearchParams<{ roundId: string; focus?: string }>();
   const scroller = useRef<ScrollView>(null);
-  const { token } = useSession();
-  const [results, setResults] = useState<Results | null>(null);
+  const api = useApi();
+  const { data: results, error, reload, setData: setResults } = useResource<Results>(
+    `/rounds/${roundId}/results`,
+    'Results are not available for this round',
+  );
   const [exports, setExports] = useState<ServiceExport[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  async function loadResults(): Promise<boolean> {
-    if (!token) return false;
-    const res = await fetchApi(`/rounds/${roundId}/results`, { token });
-    if (!res.ok) {
-      setError((await res.json().catch(() => null))?.error ?? 'Results are not available for this round');
-      return false;
-    }
-    setResults(await res.json());
-    return true;
-  }
 
   // Each comment action posts, then re-reads the results so counts and threads match the server.
   async function act(path: string, method: string, body?: object) {
-    if (!token) return;
-    await fetchApi(path, { method, token, body });
-    await loadResults();
+    await api(path, { method, body });
+    await reload();
   }
 
   const openInService = useCallback(
@@ -405,9 +391,9 @@ export default function RoundResults() {
     },
     [results],
   );
-  const { playingId, toggle } = usePreview(previewPath, token, openInService);
-  const favorite = useFavorite(token, (submissionId, on) =>
-    setResults((r) => r && { ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) }),
+  const { playingId, toggle } = usePreview(previewPath, openInService);
+  const favorite = useFavorite((submissionId, on) =>
+    setResults((r) => ({ ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) })),
   );
   const saveComment = (submissionId: string, comment: string) =>
     act(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, 'PUT', { comment });
@@ -428,11 +414,11 @@ export default function RoundResults() {
     scroller.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
   };
 
+  const loaded = results !== null;
   const epoch = useReconnectEpoch();
   useEffect(() => {
-    if (!token) return;
+    if (!loaded) return;
     (async () => {
-      if (!(await loadResults())) return;
 
       // First view of the results is what triggers the export; the route builds each playlist once
       // per round, so a revisit -- or another player's first view -- reads back the same one. It can
@@ -441,12 +427,11 @@ export default function RoundResults() {
       //
       // The route settles each service on its own now (#73), so a non-2xx here means the request
       // itself died -- nothing per-service to report, and still not a reason to gate the scores.
-      const exported = await fetchApi(`/rounds/${roundId}/export`, { method: 'POST', token });
-      if (!exported.ok) return;
-      const { services } = (await exported.json()) as { services: ServiceExport[] };
-      setExports(services);
+      const exported = await api<{ services: ServiceExport[] }>(`/rounds/${roundId}/export`, { method: 'POST' });
+      if (exported.ok) setExports(exported.data.services);
     })();
-  }, [token, roundId, epoch]);
+    // Not on `api`: its identity follows the session's, and one export per load is the point.
+  }, [loaded, roundId, epoch]);
 
   const playlists = exports.flatMap((e) => (e.playlistUrl ? [{ ...e, playlistUrl: e.playlistUrl }] : []));
   const problems = exports.flatMap((e) => {
@@ -464,7 +449,7 @@ export default function RoundResults() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ gap: 12, padding: 6 }}
         >
-        {results ? <Podium results={results} token={token} /> : null}
+        {results ? <Podium results={results} /> : null}
         {playlists.length > 0 ? (
           <JCard>
             <Label>Playlists</Label>

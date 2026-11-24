@@ -15,7 +15,10 @@ jest.mock('expo-image-manipulator', () => ({
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), push: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
+}));
 
 jest.mock('../../lib/session', () => ({
   useSession: () => ({ token: 'session-tok', profile: mockProfile, refreshProfile: mockRefreshProfile, signOut: mockSignOut }),
@@ -91,8 +94,11 @@ describe('display name', () => {
   });
 
   it('surfaces the error the API sends back', async () => {
-    (fetch as jest.Mock).mockResolvedValue(
-      new Response(JSON.stringify({ error: 'displayName must be 1-40 characters' }), { status: 400 }),
+    const load = (fetch as jest.Mock).getMockImplementation()!;
+    (fetch as jest.Mock).mockImplementation(async (url: string, init?: RequestInit) =>
+      init?.method === 'PATCH'
+        ? new Response(JSON.stringify({ error: 'displayName must be 1-40 characters' }), { status: 400 })
+        : load(url),
     );
     await render(<Account />);
     await fireEvent.changeText(screen.getByPlaceholderText('Display name'), 'x'.repeat(41));

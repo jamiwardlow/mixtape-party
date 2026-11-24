@@ -34,18 +34,29 @@ export function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 15_00
   return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
+/** Raw bytes sent as-is instead of a JSON body (the avatar endpoint). */
+export interface Upload {
+  bytes: Blob;
+  contentType: string;
+}
+
 export function fetchApi(
   path: string,
-  opts: { method?: string; body?: unknown; token?: string } = {},
+  opts: { method?: string; body?: unknown; token?: string; upload?: Upload } = {},
 ): Promise<Response> {
-  return fetchWithTimeout(`${API_URL}${path}`, {
-    method: opts.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+  const { upload } = opts;
+  return fetchWithTimeout(
+    `${API_URL}${path}`,
+    {
+      method: opts.method ?? 'GET',
+      headers: {
+        'Content-Type': upload ? upload.contentType : 'application/json',
+        ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      },
+      body: upload ? upload.bytes : opts.body ? JSON.stringify(opts.body) : undefined,
     },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  }).then(
+    upload ? 60_000 : undefined, // uploads on a slow link legitimately take longer
+  ).then(
     (res) => {
       notify(false);
       return res;

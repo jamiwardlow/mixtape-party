@@ -10,6 +10,7 @@ let mockFocus: string | undefined;
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
   useLocalSearchParams: () => ({ roundId: 'round-1', focus: mockFocus }),
 }));
 
