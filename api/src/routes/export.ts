@@ -4,8 +4,8 @@ import { exportableServiceNames, playbackFor, playlistServices, type AdapterRegi
 import { resolveMatch } from '../adapters/matchCache.js';
 import type { PlaybackLaunchHandle, PlaylistService, ServiceName, TrackResult } from '../adapters/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadRound } from './rounds.js';
-import { guessingOpened } from '../roundTimeline.js';
+import { loadRound } from './rounds.js';
+import { gateError } from '../visibility.js';
 
 /** What building a round's playlists needs; the sweep builds them too (#99), with no request behind it. */
 export interface RoundExportDeps extends AdapterRegistry {
@@ -241,12 +241,9 @@ export function createExportRouter(deps: ExportDeps): Router {
       res.status(404).json({ error: 'round not found' });
       return;
     }
-    if (!(await isLeagueMember(deps.pool, round.leagueId, accountId))) {
-      res.status(403).json({ error: 'join the league before exporting this round' });
-      return;
-    }
-    if (!guessingOpened(round, new Date())) {
-      res.status(403).json({ error: 'export is not available until the submission deadline passes' });
+    const guardError = await gateError(deps.pool, accountId, round, 'guessing');
+    if (guardError) {
+      res.status(guardError.status).json({ error: guardError.error });
       return;
     }
 

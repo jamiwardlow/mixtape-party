@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { EmailChannel } from '../notifications/types.js';
 import { requireAuth, avatarUrlOf, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isUuid, sharesLeague } from './blocks.js';
-import { guardError, REACTION_TARGETS } from './comments.js';
+import { targetGateError } from '../visibility.js';
 
 export interface ModerationDeps extends AccountsDeps {
   emailChannel: EmailChannel;
@@ -17,7 +17,7 @@ const REPORTS_PER_HOUR = 20;
 const TARGET_TYPES = ['comment', 'reply', 'avatar', 'display_name'];
 
 // Who wrote the reported thing, and what it said. Membership and "results are open" are checked
-// separately by comments.guardError against the same target.
+// separately by targetGateError against the same target.
 const OFFENDERS = {
   comment: `SELECT guesser_account_id AS account_id, comment AS text FROM guesses WHERE id = $1`,
   reply: `SELECT account_id, body AS text FROM guess_replies WHERE id = $1`,
@@ -51,8 +51,7 @@ export function createModerationRouter(deps: ModerationDeps): Router {
 
     let offender: { account_id: string; text: string | null } | undefined;
     if (targetType === 'comment' || targetType === 'reply') {
-      const column = targetType === 'comment' ? 'guess_id' : 'reply_id';
-      const error = await guardError(deps.pool, REACTION_TARGETS[column], targetId, reporter);
+      const error = await targetGateError(deps.pool, reporter, targetType, targetId);
       if (error) {
         res.status(error.status).json({ error: error.error });
         return;

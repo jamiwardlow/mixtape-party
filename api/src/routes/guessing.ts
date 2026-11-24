@@ -11,28 +11,12 @@ import {
   type StoredTrackRow,
 } from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { guardError as resultsGuardError, REACTION_TARGETS } from './comments.js';
-import { blockedIds, maskBlocked } from './blocks.js';
+import { asPlayer, gateError, rosterFor, targetGateError } from '../visibility.js';
 import { isLeagueMember, loadRound } from './rounds.js';
 import { guessingOpened, isScored } from '../roundTimeline.js';
 import { parseComment } from './submissions.js';
 
 export interface GuessingDeps extends AccountsDeps, AdapterRegistry {}
-
-async function guessingGuardError(
-  pool: Pool,
-  leagueId: string,
-  accountId: string,
-  submissionDeadline: string,
-): Promise<{ status: number; error: string } | null> {
-  if (!(await isLeagueMember(pool, leagueId, accountId))) {
-    return { status: 403, error: 'join the league before guessing on this round' };
-  }
-  if (!guessingOpened({ submissionDeadline }, new Date())) {
-    return { status: 403, error: 'guessing has not opened yet for this round' };
-  }
-  return null;
-}
 
 /** The account's favorites, newest first. The submitter is deliberately not selected: favorites never reveal who submitted a track. */
 export async function loadFavorites(deps: AdapterRegistry & { pool: Pool }, accountId: string, withPlayback = false) {
@@ -80,21 +64,11 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(404).json({ error: 'round not found' });
       return;
     }
-    const guardError = await guessingGuardError(deps.pool, round.leagueId, accountId, round.submissionDeadline);
+    const guardError = await gateError(deps.pool, accountId, round, 'guessing');
     if (guardError) {
       res.status(guardError.status).json({ error: guardError.error });
       return;
     }
-
-    const playersResult = await deps.pool.query<{ account_id: string; display_name: string | null }>(
-      `SELECT a.id AS account_id, a.display_name FROM league_members lm
-       JOIN accounts a ON a.id = lm.account_id
-       WHERE lm.league_id = $1 AND lm.account_id != $2
-       ORDER BY a.display_name`,
-      [round.leagueId, accountId],
-    );
-
-    const blocked = await blockedIds(deps.pool, accountId);
 
     const submissions = await deps.pool.query<{
       id: string;
@@ -155,7 +129,11 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
 
     res.json({
       tracks,
-      players: playersResult.rows.map((row) => maskBlocked({ accountId: row.account_id, displayName: row.display_name }, blocked)),
+      // Sorted by the name the viewer sees, so a blocked player's real name can't place them in the list.
+      players: (await rosterFor(deps.pool, round.leagueId, accountId))
+        .filter((p) => p.accountId !== accountId)
+        .map(asPlayer)
+        .sort((a, b) => (a.displayName ?? '\uffff').localeCompare(b.displayName ?? '\uffff')),
     });
   });
 
@@ -171,8 +149,9 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       isrc: string | null;
       league_id: string;
       submission_deadline: string;
+      guessing_deadline: string;
     }>(
-      `SELECT s.service, s.external_id, s.title, s.artist, s.isrc, r.league_id, r.submission_deadline
+      `SELECT s.service, s.external_id, s.title, s.artist, s.isrc, r.league_id, r.submission_deadline, r.guessing_deadline
        FROM submissions s JOIN rounds r ON r.id = s.round_id
        WHERE s.id = $1 AND s.round_id = $2`,
       [req.params.submissionId, req.params.roundId],
@@ -182,7 +161,12 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       res.status(404).json({ error: 'submission not found' });
       return;
     }
-    const guardError = await guessingGuardError(deps.pool, row.league_id, accountId, row.submission_deadline);
+    const guardError = await gateError(
+      deps.pool,
+      accountId,
+      { leagueId: row.league_id, submissionDeadline: row.submission_deadline, guessingDeadline: row.guessing_deadline },
+      'guessing',
+    );
     if (guardError) {
       res.status(guardError.status).json({ error: guardError.error });
       return;
@@ -195,7 +179,7 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
     const accountId = (req as unknown as AuthedRequest).accountId;
     // Your own track is previewable before guessing opens; everyone else's waits for the guard.
     const mine = await deps.pool.query('SELECT 1 FROM submissions WHERE id = $1 AND account_id = $2', [req.params.id, accountId]);
-    const error = mine.rowCount ? null : await resultsGuardError(deps.pool, REACTION_TARGETS.submission_id, req.params.id, accountId);
+    const error = mine.rowCount ? null : await targetGateError(deps.pool, accountId, 'submission', req.params.id);
     if (error) {
       res.status(error.status).json({ error: error.error });
       return;
@@ -251,7 +235,12 @@ export function createGuessingRouter(deps: GuessingDeps): Router {
       return;
     }
 
-    const guardError = await guessingGuardError(deps.pool, row.league_id, accountId, row.submission_deadline);
+    const guardError = await gateError(
+      deps.pool,
+      accountId,
+      { leagueId: row.league_id, submissionDeadline: row.submission_deadline, guessingDeadline: row.guessing_deadline },
+      'guessing',
+    );
     if (guardError) {
       res.status(guardError.status).json({ error: guardError.error });
       return;

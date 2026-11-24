@@ -2,11 +2,12 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
 import { playbackFor, serviceFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
-import { blockedIds, isUuid, maskBlocked } from './blocks.js';
+import { blockedIds, isUuid } from './blocks.js';
+import { asPlayer, gateError, maskBlocked, rosterFor } from '../visibility.js';
 import { loadFavorites } from './guessing.js';
 import { listLeagues } from './leagues.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isScored, isSeasonConcluded, roundSql } from '../roundTimeline.js';
+import { isSeasonConcluded, roundSql } from '../roundTimeline.js';
 import {
   isLeagueMember,
   loadCurrentRound,
@@ -169,30 +170,16 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       res.status(404).json({ error: 'round not found' });
       return;
     }
-    if (!(await isLeagueMember(deps.pool, round.leagueId, accountId))) {
-      res.status(403).json({ error: 'join the league before viewing this round\'s results' });
-      return;
-    }
-    if (!isScored(round, new Date())) {
-      res.status(403).json({ error: 'results are not available until the guessing deadline passes' });
+    const guardError = await gateError(deps.pool, accountId, round, 'results');
+    if (guardError) {
+      res.status(guardError.status).json({ error: guardError.error });
       return;
     }
 
-    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null }>(
-      `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at FROM league_members lm
-       JOIN accounts a ON a.id = lm.account_id
-       WHERE lm.league_id = $1`,
-      [round.leagueId],
-    );
     // Blocked players' comments, replies and reactions are left out and their name and photo are
     // masked; their guesses still score.
-    const blocked = await blockedIds(deps.pool, accountId);
-    const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [
-        row.account_id,
-        maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked),
-      ]),
-    );
+    const [roster, blocked] = await Promise.all([rosterFor(deps.pool, round.leagueId, accountId), blockedIds(deps.pool, accountId)]);
+    const players = new Map<string, Player>(roster.map((p) => [p.accountId, asPlayer(p)]));
 
     const submissionsResult = await deps.pool.query<{
       id: string;
@@ -225,7 +212,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     );
 
     const correctGuessersBySubmission = new Map<string, Player[]>();
-    const scores = new Map<string, number>(membersResult.rows.map((row) => [row.account_id, 0]));
+    const scores = new Map<string, number>(roster.map((p) => [p.accountId, 0]));
     for (const guess of guessesResult.rows) {
       if (!guess.correct) continue;
       scores.set(guess.guesser_account_id, (scores.get(guess.guesser_account_id) ?? 0) + 1);
@@ -335,17 +322,7 @@ export function createResultsRouter(deps: ResultsDeps): Router {
       return;
     }
 
-    const membersResult = await deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null }>(
-      `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at FROM league_members lm
-       JOIN accounts a ON a.id = lm.account_id
-       WHERE lm.league_id = $1`,
-      [req.params.leagueId],
-    );
-
-    const blocked = await blockedIds(deps.pool, accountId);
-    const members = membersResult.rows.map((row) =>
-      maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked),
-    );
+    const members = (await rosterFor(deps.pool, req.params.leagueId, accountId)).map(asPlayer);
 
     res.json(scoreboard(members, await correctGuessCounts(deps.pool, req.params.leagueId)));
   });

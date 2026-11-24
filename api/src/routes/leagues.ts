@@ -3,19 +3,16 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
 import { playbackFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
-import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import {
-  describeRound,
-  emptyRoundActivity,
   isLeagueMember,
   loadCurrentRound,
   loadLeague,
   loadRound,
   type Player,
-  type RoundActivity,
 } from './rounds.js';
 import { CURRENT_ROUND_CLAUSE, guessingOpened, isScored, isSeasonConcluded, roundPhase, roundSql } from '../roundTimeline.js';
-import { blockedIds, maskBlocked } from './blocks.js';
+import { asPlayer, describeRound, emptyRoundActivity, rosterFor, type RoundActivity } from '../visibility.js';
 import { correctGuessCounts, scoreboard } from './results.js';
 
 export type LeaguesDeps = AccountsDeps & AdapterRegistry;
@@ -436,17 +433,10 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
-    const [membersResult, roundsResult, submissionsResult, guessesResult, correctGuesses, current] = await Promise.all([
+    const [roster, roundsResult, submissionsResult, guessesResult, correctGuesses, current] = await Promise.all([
       // Driven off league_members rather than off guesses, so a player who has done nothing is
-      // still on the roster and still in the standings on zero. Ordered by joined_at so the list
-      // is stable between loads.
-      deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null; joined_at: string }>(
-        `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at, lm.joined_at FROM league_members lm
-         JOIN accounts a ON a.id = lm.account_id
-         WHERE lm.league_id = $1
-         ORDER BY lm.joined_at ASC`,
-        [leagueId],
-      ),
+      // still on the roster and still in the standings on zero.
+      rosterFor(deps.pool, leagueId, accountId),
       deps.pool.query<RoundRow & { scored: boolean }>(
         // `scored` comes from Postgres's clock, not the app's: correctGuessCounts filters on the
         // same now(), so "after 3 of 8 rounds" can never disagree with the standings beside it.
@@ -475,11 +465,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       loadCurrentRound(deps.pool, leagueId),
     ]);
 
-    const blocked = await blockedIds(deps.pool, accountId);
     const now = new Date();
-    const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked)]),
-    );
+    const players = new Map<string, Player>(roster.map((p) => [p.accountId, asPlayer(p)]));
 
     const activity = new Map<string, RoundActivity>(roundsResult.rows.map((row) => [row.id, emptyRoundActivity()]));
     for (const row of submissionsResult.rows) {
@@ -505,10 +492,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
         concluded,
       },
       host: players.get(league.hostAccountId) ?? { accountId: league.hostAccountId, displayName: null },
-      members: membersResult.rows.map((row) => ({
-        ...maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked),
-        joinedAt: row.joined_at,
-      })),
+      members: roster,
       standings: scores,
       scoredRoundCount: roundsResult.rows.filter((row) => row.scored).length,
       winners: concluded ? winners : [],
@@ -546,14 +530,8 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
-    const [membersResult, submissionsResult, guessesResult] = await Promise.all([
-      deps.pool.query<{ account_id: string; display_name: string | null; avatar_updated_at: Date | null }>(
-        `SELECT a.id AS account_id, a.display_name, a.avatar_updated_at FROM league_members lm
-         JOIN accounts a ON a.id = lm.account_id
-         WHERE lm.league_id = $1
-         ORDER BY lm.joined_at ASC`,
-        [round.leagueId],
-      ),
+    const [roster, submissionsResult, guessesResult] = await Promise.all([
+      rosterFor(deps.pool, round.leagueId, accountId),
       // Same order as the league overview's, so the submitter list is the same list.
       deps.pool.query<SubmissionRow & { id: string; isrc: string | null }>(
         'SELECT id, account_id, service, external_id, art_id, page_url, title, artist, isrc, comment FROM submissions WHERE round_id = $1 ORDER BY created_at, id',
@@ -569,10 +547,7 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       ),
     ]);
 
-    const blocked = await blockedIds(deps.pool, accountId);
-    const players = new Map<string, Player>(
-      membersResult.rows.map((row) => [row.account_id, maskBlocked({ accountId: row.account_id, displayName: row.display_name, avatarUrl: avatarUrlOf(row.account_id, row.avatar_updated_at) }, blocked)]),
-    );
+    const players = new Map<string, Player>(roster.map((p) => [p.accountId, asPlayer(p)]));
     const mine = submissionsResult.rows.find((row) => row.account_id === accountId);
     const activity: RoundActivity = {
       submitterIds: submissionsResult.rows.map((row) => row.account_id),
