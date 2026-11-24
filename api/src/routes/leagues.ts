@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
 import { playbackFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
@@ -11,7 +11,8 @@ import {
   loadRound,
   type Player,
 } from './rounds.js';
-import { CURRENT_ROUND_CLAUSE, guessingOpened, isScored, isSeasonConcluded, roundPhase, roundSql } from '../roundTimeline.js';
+import { CURRENT_ROUND_CLAUSE, isSeasonConcluded, roundPhase, roundSql } from '../roundTimeline.js';
+import { checkDeadlineOrder, deleteRound, editRound, insertSeason, planSeason, type Refusal, type RoundRow } from '../seasonSchedule.js';
 import { asPlayer, describeRound, emptyRoundActivity, rosterFor, type RoundActivity } from '../visibility.js';
 import { correctGuessCounts, scoreboard } from './results.js';
 
@@ -59,15 +60,6 @@ interface LeagueRow {
   invite_code: string;
 }
 
-interface RoundRow {
-  id: string;
-  round_number: number;
-  theme: string | null;
-  submission_opens_at: string | null;
-  submission_deadline: string;
-  guessing_deadline: string;
-}
-
 interface SubmissionRow {
   account_id: string;
   service: ServiceName;
@@ -113,23 +105,12 @@ function serializeRound(round: RoundRow) {
   };
 }
 
-/**
- * The one definition of a well-formed round window, shared by league creation and the round
- * PATCH -- which reaches it with the stored value standing in for whichever deadline the patch
- * left out. Returns the message to 400 with, or null when the pair is fine.
- */
 // Generous: the client sends the moment it opened the form, which may be a while ago.
 const MAX_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
 
-function checkDeadlineOrder(submissionAt: Date, guessingAt: Date): string | null {
-  if (Number.isNaN(submissionAt.getTime()) || Number.isNaN(guessingAt.getTime())) {
-    return 'submissionDeadline and guessingDeadline must be valid dates';
-  }
-  if (guessingAt <= submissionAt) {
-    return 'guessingDeadline must be after submissionDeadline';
-  }
-  return null;
-}
+const REFUSAL_STATUS = { invalid: 400, conflict: 409, missing: 404 } as const;
+const refuse = (res: Response, r: Refusal) =>
+  res.status(REFUSAL_STATUS[r.refused]).json({ error: r.error });
 
 function parseRoundInput(
   body: unknown,
@@ -229,13 +210,6 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(400).json({ error: 'now must be within a day of the server clock' });
       return;
     }
-    // Guessing period for rounds 2..N: creation -> round 1's submission deadline. A deadline that
-    // is already past leaves no interval to copy, so fall back to round 1's guessing length.
-    const guessLengthMs = Math.max(
-      submissionAt.getTime() - createdAt.getTime(),
-      guessingAt.getTime() - submissionAt.getTime(),
-    );
-
     // Rounds 2..N can be named at creation too: themes[n] is round n's theme. Anything
     // missing or blank stays null, for the schedule screen's PATCH to name later.
     const { themes } = req.body ?? {};
@@ -259,39 +233,14 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       const leagueId = league.rows[0].id;
       const inviteCode = league.rows[0].invite_code;
 
-      // The whole season is scheduled here, from round 1's two deadlines, and no round's phases
-      // overlap. Round 1 is as entered. With W = G1 - S1 (round 1's guessing length, reused as
-      // every later submission period) and I = S1 - creation time (reused as every later guessing
-      // period), round N >= 2 is submissions G(N-1) -> S(N) = G(N-1) + W, then guessing
-      // S(N) -> G(N) = S(N) + I. Round 1's theme is its own field; the rest come from `themes`.
-      //
-      // submission_opens_at is the previous round's guessing deadline: submissions for round N
-      // open as round N-1's guessing closes.
-      const rounds = await client.query<RoundRow>(
-        `INSERT INTO rounds (league_id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline)
-         SELECT $1, n,
-                CASE WHEN n = 1 THEN $2 ELSE ($6::text[])[n] END,
-                CASE WHEN n = 1 THEN $7::timestamptz
-                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 2) END,
-                CASE WHEN n = 1 THEN $3::timestamptz
-                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 1)
-                          - $8::bigint * interval '1 millisecond' END,
-                CASE WHEN n = 1 THEN $4::timestamptz
-                     ELSE $4::timestamptz + ($4::timestamptz - $3::timestamptz + $8::bigint * interval '1 millisecond') * (n - 1) END
-         FROM generate_series(1, $5::int) AS n
-         RETURNING id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline`,
-        [
-          leagueId,
-          theme,
-          submissionAt.toISOString(),
-          guessingAt.toISOString(),
-          seasonLength,
-          seasonThemes,
-          createdAt.toISOString(),
-          guessLengthMs,
-        ],
+      // Round 1's theme is its own field; the rest come from `themes`.
+      const rounds = await insertSeason(
+        client,
+        leagueId,
+        planSeason({ createdAt, submissionDeadline: submissionAt, guessingDeadline: guessingAt, seasonLength }),
+        [theme, ...seasonThemes.slice(1)],
       );
-      const firstRound = rounds.rows.find((row) => row.round_number === 1)!;
+      const firstRound = rounds.find((row) => row.round_number === 1)!;
 
       await client.query('INSERT INTO league_members (league_id, account_id) VALUES ($1, $2)', [
         leagueId,
@@ -596,15 +545,6 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       return;
     }
 
-    // A finished round's results are published and its playlist export already ran at that
-    // guessing-deadline checkpoint (#7); moving it now would mean re-running or invalidating that
-    // export, so the schedule only flexes forward of now.
-    const now = new Date();
-    if (isScored(round, now)) {
-      res.status(409).json({ error: 'this round is over and can no longer be changed' });
-      return;
-    }
-
     const { theme, submissionDeadline, guessingDeadline } = (req.body ?? {}) as Record<string, unknown>;
     if (theme !== undefined && (typeof theme !== 'string' || theme.trim().length === 0)) {
       res.status(400).json({ error: 'theme must be a non-empty string' });
@@ -617,156 +557,27 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(400).json({ error: 'submissionDeadline and guessingDeadline must be ISO date strings' });
       return;
     }
-    // An absent deadline falls back to the stored one rather than being skipped, so a one-sided
-    // patch is still checked against the side it is not touching.
-    const submissionAt =
-      submissionDeadline === undefined ? new Date(round.submissionDeadline) : new Date(submissionDeadline as string);
-    const guessingAt =
-      guessingDeadline === undefined ? new Date(round.guessingDeadline) : new Date(guessingDeadline as string);
-    const orderError = checkDeadlineOrder(submissionAt, guessingAt);
-    if (orderError) {
-      res.status(400).json({ error: orderError });
-      return;
-    }
-
-    // A shut submission window is as unrepairable as a finished round: guessing is already
-    // underway on the set of tracks that made it in, so moving the deadline would reopen
-    // submissions mid-guessing. Only checked when the patch names that deadline -- naming a
-    // mid-guessing round is the whole point of this route and stays allowed.
-    if (submissionDeadline !== undefined && guessingOpened(round, now)) {
-      res.status(409).json({ error: "this round's submission window has closed and can no longer be moved" });
-      return;
-    }
-    // A deadline the host names has to be in the future. In the past it retro-closes a phase
-    // people were still playing -- and a past *guessing* deadline concludes the round on the
-    // spot, publishing results and firing the playlist export (#7) at a checkpoint nobody
-    // reached, after which the 409 above freezes the round for good.
-    if (
-      (submissionDeadline !== undefined && submissionAt <= now) ||
-      (guessingDeadline !== undefined && guessingAt <= now)
-    ) {
-      res.status(400).json({ error: 'a new deadline must be in the future' });
-      return;
-    }
-
-    const bounds = await deps.pool.query<{
-      previous_guessing_deadline: string | null;
-      earliest_later_deadline: string | null;
-    }>(
-      `SELECT min(guessing_deadline) FILTER (WHERE round_number = $2) AS previous_guessing_deadline,
-              min(guessing_deadline) FILTER (WHERE round_number > $3) AS earliest_later_deadline
-       FROM rounds WHERE league_id = $1 AND (round_number = $2 OR round_number > $3)`,
-      [round.leagueId, round.roundNumber - 1, round.roundNumber],
+    const updated = await editRound(
+      deps.pool,
+      round.leagueId,
+      req.params.roundId,
+      {
+        theme: theme === undefined ? undefined : (theme as string).trim(),
+        submissionDeadline: submissionDeadline === undefined ? undefined : new Date(submissionDeadline as string),
+        guessingDeadline: guessingDeadline === undefined ? undefined : new Date(guessingDeadline as string),
+      },
+      new Date(),
     );
-    const { previous_guessing_deadline: previousGuessing, earliest_later_deadline: earliestLater } = bounds.rows[0];
-
-    // submissionDeadline is the split point *inside* this round, so it is the only deadline with
-    // a neighbour it can collide with: backing it past round N-1's guessing deadline would put
-    // the schedule out of order, and out of order CURRENT_ROUND_CLAUSE names a nonsense round.
-    // Merely *touching* the neighbour is the preset schedule's own resting state, so only a
-    // genuine crossing is refused -- and the check is gated on the patch naming that deadline, so
-    // a deadline the host is not moving can never make the request fail for where it already sits.
-    // Its upper bound is this round's own guessing deadline, which checkDeadlineOrder covers.
-    if (submissionDeadline !== undefined && previousGuessing && submissionAt < new Date(previousGuessing)) {
-      res.status(400).json({
-        error: `submissionDeadline must not precede round ${round.roundNumber - 1}'s guessing deadline`,
-      });
+    if ('refused' in updated) {
+      refuse(res, updated);
       return;
     }
-
-    // guessingDeadline is the boundary *between* round N and round N+1, so moving it by delta
-    // slides the whole rest of the season by delta rather than being refused for crossing round
-    // N+1 (#79). Every later round keeps its window lengths and the season's end date moves with
-    // it: the host is moving the season, not squeezing one round. Stretching round N by shrinking
-    // round N+1 was rejected -- it silently squeezes a round the host said nothing about.
-    const shiftMs =
-      guessingDeadline === undefined ? 0 : guessingAt.getTime() - new Date(round.guessingDeadline).getTime();
-    // Nothing already played may move. A slide only ever touches rounds after N, and N is not
-    // over, so monotonicity already implies every slid round is in the future -- but a legacy or
-    // hand-edited league need not be monotonic, so assert it rather than assume it.
-    if (shiftMs !== 0 && earliestLater && isScored({ guessingDeadline: earliestLater }, now)) {
-      res.status(409).json({ error: 'a later round of this season is already over and cannot be moved' });
-      return;
-    }
-
-    // One data-modifying CTE so the round and every round it slides move in the same statement: a
-    // half-applied slide is a non-monotonic schedule, which is exactly what CURRENT_ROUND_CLAUSE
-    // cannot survive.
-    //
-    // Every later round slides whole, submission_opens_at included: round N+1 opens as round N's
-    // guessing closes (see POST /leagues above), so it moves with the boundary and keeps its
-    // window length. Moving only round N's submission deadline touches no other round. The CTE
-    // matches no row when this is the last round of the season or nothing slid.
-    //
-    // Every moved window also clears the reminder the sweep already sent against it, which is
-    // one-shot per round (`... IS NULL` in sweep.ts) and so would never fire again for the new
-    // time. The CASE arms compare the new value against the *old* row, so a window that did not
-    // actually move keeps its flag rather than re-notifying everyone.
-    const updated = await deps.pool.query<RoundRow>(
-      `WITH slid AS (
-         UPDATE rounds r
-         SET submission_opens_at = n.submission_opens_at,
-             submission_deadline = n.submission_deadline,
-             guessing_deadline = n.guessing_deadline,
-             submission_reminder_sent_at =
-               CASE WHEN (n.submission_opens_at, n.submission_deadline)
-                         = (r.submission_opens_at, r.submission_deadline)
-                    THEN r.submission_reminder_sent_at END,
-             submission_last_call_sent_at =
-               CASE WHEN n.submission_deadline = r.submission_deadline THEN r.submission_last_call_sent_at END,
-             guessing_reminder_sent_at =
-               CASE WHEN (n.submission_deadline, n.guessing_deadline)
-                         = (r.submission_deadline, r.guessing_deadline)
-                    THEN r.guessing_reminder_sent_at END,
-             guessing_last_call_sent_at =
-               CASE WHEN n.guessing_deadline = r.guessing_deadline THEN r.guessing_last_call_sent_at END
-         FROM (
-           SELECT id,
-                  submission_opens_at + $7::interval AS submission_opens_at,
-                  submission_deadline + $7::interval AS submission_deadline,
-                  guessing_deadline + $7::interval AS guessing_deadline
-           FROM rounds
-           WHERE league_id = $5
-             AND round_number >= $6 AND $7::interval <> interval '0'
-         ) n
-         WHERE r.id = n.id
-         RETURNING r.id, r.round_number, r.theme, r.submission_opens_at, r.submission_deadline, r.guessing_deadline
-       ), patched AS (
-         UPDATE rounds
-         SET theme = COALESCE($2::text, theme), submission_deadline = $3::timestamptz,
-             guessing_deadline = $4::timestamptz,
-             submission_reminder_sent_at =
-               CASE WHEN submission_deadline = $3::timestamptz THEN submission_reminder_sent_at END,
-             submission_last_call_sent_at =
-               CASE WHEN submission_deadline = $3::timestamptz THEN submission_last_call_sent_at END,
-             guessing_reminder_sent_at =
-               CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_reminder_sent_at END,
-             guessing_last_call_sent_at =
-               CASE WHEN guessing_deadline = $4::timestamptz THEN guessing_last_call_sent_at END
-         WHERE id = $1
-         RETURNING id, round_number, theme, submission_opens_at, submission_deadline, guessing_deadline
-       )
-       SELECT * FROM patched UNION ALL SELECT * FROM slid ORDER BY round_number`,
-      [
-        req.params.roundId,
-        theme === undefined ? null : (theme as string).trim(),
-        submissionAt.toISOString(),
-        guessingAt.toISOString(),
-        round.leagueId,
-        round.roundNumber + 1,
-        `${shiftMs} milliseconds`,
-      ],
-    );
-
     // Every round this wrote, not just the patched one: a one-round patch that silently moves the
-    // season's end date is a surprise, and the schedule screen has to redraw all of them. The
-    // patched round is always the first, since a slide only ever reaches forwards.
-    res.json({ rounds: updated.rows.map(serializeRound) });
+    // season's end date is a surprise, and the schedule screen has to redraw all of them.
+    res.json({ rounds: updated.map(serializeRound) });
   });
 
-  // Host drops a round from the season. Later rounds renumber to close the gap and keep their
-  // deadlines (ponytail: no slide back in time -- the host can pull the next round forward with
-  // PATCH). Same freeze as PATCH: a finished round's results are published, so it stays.
+  // Host drops a round from the season; the rules live in seasonSchedule.ts.
   router.delete('/rounds/:roundId', requireAuth(deps), async (req, res) => {
     const accountId = (req as unknown as AuthedRequest).accountId;
     const round = await loadRound(deps.pool, req.params.roundId);
@@ -779,40 +590,12 @@ export function createLeaguesRouter(deps: LeaguesDeps): Router {
       res.status(403).json({ error: 'only the league host can delete a round' });
       return;
     }
-    if (isScored(round, new Date())) {
-      res.status(409).json({ error: 'this round is over and can no longer be deleted' });
+    const refusal = await deleteRound(deps.pool, round.leagueId, req.params.roundId, new Date());
+    if (refusal) {
+      refuse(res, refusal);
       return;
     }
-    const client = await deps.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const left = await client.query('SELECT count(*)::int AS n FROM rounds WHERE league_id = $1', [round.leagueId]);
-      if (left.rows[0].n <= 1) {
-        await client.query('ROLLBACK');
-        res.status(409).json({ error: 'a season needs at least one round; delete the league instead' });
-        return;
-      }
-      // Submissions, guesses and exports cascade off the round.
-      await client.query('DELETE FROM rounds WHERE id = $1', [req.params.roundId]);
-      // Round N+1 opens as round N's guessing closes, so with N gone it would sit closed until
-      // N's old deadline while N-1 is long over. Inherit N's open time; deadlines stay put.
-      await client.query(
-        'UPDATE rounds SET submission_opens_at = $1 WHERE league_id = $2 AND round_number = $3',
-        [round.submissionOpensAt, round.leagueId, round.roundNumber + 1],
-      );
-      // UNIQUE (league_id, round_number) is checked per row, so a straight decrement can collide
-      // mid-statement; park the renumbered rounds on negatives first.
-      await client.query('UPDATE rounds SET round_number = -round_number WHERE league_id = $1 AND round_number > $2', [round.leagueId, round.roundNumber]);
-      await client.query('UPDATE rounds SET round_number = -round_number - 1 WHERE league_id = $1 AND round_number < 0', [round.leagueId]);
-      await client.query('UPDATE leagues SET season_length = season_length - 1 WHERE id = $1', [round.leagueId]);
-      await client.query('COMMIT');
-      res.status(204).end();
-    } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw err;
-    } finally {
-      client.release();
-    }
+    res.status(204).end();
   });
 
   // Rounds, memberships, submissions, guesses and notifications all hang off the league with

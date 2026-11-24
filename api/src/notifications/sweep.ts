@@ -3,6 +3,7 @@ import { exportableServiceNames, serviceFor } from '../adapters/registry.js';
 import type { ServiceName } from '../adapters/types.js';
 import { buildRoundExports, RoundExportDeps } from '../routes/export.js';
 import { roundSql, seasonConcludedSql } from '../roundTimeline.js';
+import { WINDOW_REMINDERS, type Window } from '../seasonSchedule.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
 export interface NotificationSweepDeps {
@@ -126,12 +127,26 @@ async function unfinishedGuesserIds(pool: Pool, round: DueRound): Promise<string
 /** The round timeline against the sweep's clock, bound as $1 in every query below. */
 const AT_SWEEP = roundSql('', '$1');
 
+const { submission: SUBMISSION, guessing: GUESSING } = WINDOW_REMINDERS;
+
+/** A last call also marks its window's reminder sent, so the reminder never lands after it. */
+async function markLastCallSent(pool: Pool, w: Window, roundId: string, now: Date) {
+  await pool.query(
+    `UPDATE rounds SET ${w.lastCall} = $1, ${w.reminder} = COALESCE(${w.reminder}, $1) WHERE id = $2`,
+    [now.toISOString(), roundId],
+  );
+}
+
+async function markReminderSent(pool: Pool, w: Window, roundId: string, now: Date) {
+  await pool.query(`UPDATE rounds SET ${w.reminder} = $1 WHERE id = $2`, [now.toISOString(), roundId]);
+}
+
 // Last calls (#208) fire 3h before each deadline. Each also marks the matching 20% reminder sent:
 // on a window under 15h that reminder would otherwise land *after* the last call.
 async function sweepSubmissionLastCalls(deps: NotificationSweepDeps, now: Date): Promise<void> {
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
-     WHERE submission_last_call_sent_at IS NULL
+     WHERE ${SUBMISSION.lastCall} IS NULL
        AND NOT ${AT_SWEEP.guessingOpened}
        AND submission_deadline - make_interval(hours => $2) <= $1
        AND ${AT_SWEEP.submissionOpened}`,
@@ -151,19 +166,14 @@ async function sweepSubmissionLastCalls(deps: NotificationSweepDeps, now: Date):
       },
       { roundId: round.id, leagueId: round.league_id },
     );
-    await deps.pool.query(
-      `UPDATE rounds SET submission_last_call_sent_at = $1,
-         submission_reminder_sent_at = COALESCE(submission_reminder_sent_at, $1)
-       WHERE id = $2`,
-      [now.toISOString(), round.id],
-    );
+    await markLastCallSent(deps.pool, SUBMISSION, round.id, now);
   }
 }
 
 async function sweepGuessingLastCalls(deps: NotificationSweepDeps, now: Date): Promise<void> {
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
-     WHERE guessing_last_call_sent_at IS NULL
+     WHERE ${GUESSING.lastCall} IS NULL
        AND ${AT_SWEEP.unscored}
        AND guessing_deadline - make_interval(hours => $2) <= $1
        AND ${AT_SWEEP.guessingOpened}`,
@@ -183,12 +193,7 @@ async function sweepGuessingLastCalls(deps: NotificationSweepDeps, now: Date): P
       },
       { roundId: round.id, leagueId: round.league_id },
     );
-    await deps.pool.query(
-      `UPDATE rounds SET guessing_last_call_sent_at = $1,
-         guessing_reminder_sent_at = COALESCE(guessing_reminder_sent_at, $1)
-       WHERE id = $2`,
-      [now.toISOString(), round.id],
-    );
+    await markLastCallSent(deps.pool, GUESSING, round.id, now);
   }
 }
 
@@ -199,7 +204,7 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
     // reminder due on the first sweep. created_at is the fallback for rounds predating the
     // column, where the two were the same instant.
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
-     WHERE submission_reminder_sent_at IS NULL
+     WHERE ${SUBMISSION.reminder} IS NULL
        AND NOT ${AT_SWEEP.guessingOpened}
        AND submission_deadline - (submission_deadline - COALESCE(submission_opens_at, created_at)) * $2 <= $1`,
     [now.toISOString(), REMINDER_REMAINING_FRACTION],
@@ -218,17 +223,14 @@ async function sweepSubmissionReminders(deps: NotificationSweepDeps, now: Date):
       },
       { roundId: round.id, leagueId: round.league_id },
     );
-    await deps.pool.query('UPDATE rounds SET submission_reminder_sent_at = $1 WHERE id = $2', [
-      now.toISOString(),
-      round.id,
-    ]);
+    await markReminderSent(deps.pool, SUBMISSION, round.id, now);
   }
 }
 
 async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): Promise<void> {
   const dueRounds = await deps.pool.query<DueRound>(
     `SELECT id, league_id, round_number, ${THEME_OR_ROUND} FROM rounds
-     WHERE guessing_reminder_sent_at IS NULL
+     WHERE ${GUESSING.reminder} IS NULL
        AND ${AT_SWEEP.unscored}
        AND guessing_deadline - (guessing_deadline - submission_deadline) * $2 <= $1`,
     [now.toISOString(), REMINDER_REMAINING_FRACTION],
@@ -247,10 +249,7 @@ async function sweepGuessingReminders(deps: NotificationSweepDeps, now: Date): P
       },
       { roundId: round.id, leagueId: round.league_id },
     );
-    await deps.pool.query('UPDATE rounds SET guessing_reminder_sent_at = $1 WHERE id = $2', [
-      now.toISOString(),
-      round.id,
-    ]);
+    await markReminderSent(deps.pool, GUESSING, round.id, now);
   }
 }
 
