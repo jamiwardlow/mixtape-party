@@ -12,6 +12,7 @@ import {
 } from './testHelpers.js';
 import { FAKE_BANDCAMP_URL } from '../adapters/fakeAdapter.js';
 import { ServiceUnavailableError } from '../adapters/types.js';
+import { PLAYLIST_URL } from '../routes/export.js';
 
 let testDb: TestDb;
 
@@ -27,8 +28,8 @@ afterAll(async () => {
   await testDb.teardown();
 });
 
-function buildApp(options?: { youtubeMusicCookie?: string }) {
-  return buildTestApp(testDb.pool, options);
+function buildApp() {
+  return buildTestApp(testDb.pool);
 }
 
 async function closeSubmissionWindow(roundId: string) {
@@ -81,8 +82,8 @@ describe('POST /rounds/:roundId/export', () => {
     expect(res.body.services[0].status).toBe('ok');
   });
 
-  it('builds a youtube_music playlist on the shared server-held account, matching every non-bandcamp submission', async () => {
-    const { app, youtubeMusicAdapter } = buildApp();
+  it('builds a youtube_music playlist matching every non-bandcamp submission', async () => {
+    const { app } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
@@ -96,11 +97,11 @@ describe('POST /rounds/:roundId/export', () => {
     expect(youtubeMusicExport.status).toBe('ok');
     expect(youtubeMusicExport.matchedCount).toBe(4);
     expect(youtubeMusicExport.skipped).toEqual([]);
-    expect(youtubeMusicAdapter.playlists.get(youtubeMusicExport.playlistExternalId)).toHaveLength(4);
+    expect(youtubeMusicExport.playlistExternalId.split(',')).toHaveLength(4);
   });
 
   it('returns a playlist link built from the playlist id', async () => {
-    const { app } = buildApp({ youtubeMusicCookie: 'fake-cookie' });
+    const { app } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
@@ -109,13 +110,11 @@ describe('POST /rounds/:roundId/export', () => {
 
     expect(res.status).toBe(200);
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
-    expect(youtubeMusicExport.playlistUrl).toBe(
-      `https://music.youtube.com/playlist?list=${youtubeMusicExport.playlistExternalId}`,
-    );
+    expect(youtubeMusicExport.playlistUrl).toBe(PLAYLIST_URL.youtube_music(youtubeMusicExport.playlistExternalId));
   });
 
-  it('shares one youtube_music playlist across every player, since they all export through the same server-held account', async () => {
-    const { app, youtubeMusicAdapter } = buildApp();
+  it('shares one youtube_music playlist across every player', async () => {
+    const { app } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
@@ -127,23 +126,10 @@ describe('POST /rounds/:roundId/export', () => {
       res.body.services.find((s) => s.service === 'youtube_music')!.playlistUrl;
     expect(youtubeMusicLink(first)).toBeTruthy();
     expect(youtubeMusicLink(second)).toBe(youtubeMusicLink(first));
-    expect(youtubeMusicAdapter.playlists.size).toBe(1);
-  });
-
-  it('excludes youtube_music from export when no server-held cookie is configured', async () => {
-    const { app } = buildApp({ youtubeMusicCookie: '' });
-    const { roundId, members } = await createLeagueWithPlayers(app, 4);
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, members[0].token);
-
-    expect(res.status).toBe(200);
-    expect(res.body.services).toEqual([]);
   });
 
   it('never includes a bandcamp submission in an exported playlist', async () => {
-    const { app, youtubeMusicAdapter } = buildApp();
+    const { app } = buildApp();
     const host = await signUp(app, `host-${Date.now()}@example.com`);
     const created = await request(app)
       .post('/leagues')
@@ -172,18 +158,13 @@ describe('POST /rounds/:roundId/export', () => {
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(youtubeMusicExport.matchedCount).toBe(1);
     expect(youtubeMusicExport.skipped).toEqual([]); // bandcamp submission is excluded entirely, not skipped-with-fallback
-    const appendedTitles: string[] = youtubeMusicAdapter.playlists
-      .get(youtubeMusicExport.playlistExternalId)!
-      .map((t: { title: string }) => t.title);
-    expect(appendedTitles).toEqual(['A Fine Song']);
+    expect(youtubeMusicExport.playlistExternalId).toBe('track-host');
   });
 
-  // youtube_music runs on one server-held account, so its outage is app-wide -- still a failure, but
-  // not one the requester can act on.
   it('reports an unreachable service as failed', async () => {
     const { app, youtubeMusicAdapter } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);
-    youtubeMusicAdapter.createPlaylist = async () => {
+    youtubeMusicAdapter.isTrackId = () => {
       throw new ServiceUnavailableError('youtube_music', 'youtube music is unreachable');
     };
     await closeSubmissionWindow(roundId);
@@ -195,21 +176,6 @@ describe('POST /rounds/:roundId/export', () => {
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(youtubeMusicExport.status).toBe('failed');
     expect(youtubeMusicExport.playlistUrl).toBeNull();
-  });
-
-  it('deletes the new playlist when filling it fails, so a retry does not leave an empty one behind', async () => {
-    const { app, youtubeMusicAdapter } = buildApp();
-    const { roundId, members } = await createLeagueWithPlayers(app, 4);
-    youtubeMusicAdapter.appendToPlaylist = async () => {
-      throw new ServiceUnavailableError('youtube_music', 'youtube music browse/edit_playlist failed: 400');
-    };
-    await closeSubmissionWindow(roundId);
-    await closeGuessingWindow(roundId);
-
-    const res = await exportRound(app, roundId, members[0].token);
-
-    expect(res.body.services.find((s: { service: string }) => s.service === 'youtube_music').status).toBe('failed');
-    expect(youtubeMusicAdapter.playlists.size).toBe(0);
   });
 
   it('skips a same-service submission whose id the service would reject, instead of failing the playlist', async () => {
@@ -224,11 +190,10 @@ describe('POST /rounds/:roundId/export', () => {
     const youtubeMusicExport = res.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(youtubeMusicExport.status).toBe('no_matches');
     expect(youtubeMusicExport.skipped).toHaveLength(4);
-    expect(youtubeMusicAdapter.playlists.size).toBe(0);
   });
 
   it('runs the export once per round, reusing the same playlist on a repeat request', async () => {
-    const { app, youtubeMusicAdapter } = buildApp();
+    const { app } = buildApp();
     const { roundId, members } = await createLeagueWithPlayers(app, 4);
     await closeSubmissionWindow(roundId);
     await closeGuessingWindow(roundId);
@@ -239,6 +204,16 @@ describe('POST /rounds/:roundId/export', () => {
     const firstExport = first.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     const secondExport = second.body.services.find((s: { service: string }) => s.service === 'youtube_music');
     expect(secondExport.playlistExternalId).toBe(firstExport.playlistExternalId);
-    expect(youtubeMusicAdapter.playlists.size).toBe(1);
+  });
+});
+
+describe('PLAYLIST_URL.youtube_music', () => {
+  it('links an id list as watch_videos and a pre-#215 playlist id as a playlist', () => {
+    expect(PLAYLIST_URL.youtube_music('dQw4w9WgXcQ,9bZkp7q19f0')).toBe(
+      'https://www.youtube.com/watch_videos?video_ids=dQw4w9WgXcQ,9bZkp7q19f0',
+    );
+    expect(PLAYLIST_URL.youtube_music('PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')).toBe(
+      'https://music.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf',
+    );
   });
 });

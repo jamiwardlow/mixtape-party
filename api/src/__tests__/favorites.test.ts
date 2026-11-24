@@ -120,62 +120,51 @@ describe('POST /favorites/export (#109)', () => {
   const exportFavorites = (app: Parameters<typeof request>[0], m: { token: string }) =>
     request(app).post('/favorites/export').set(auth(m));
 
-  it('creates the playlist on the first call and appends only new favorites after', async () => {
-    const { app, youtubeMusicAdapter, roundId, a, submissions, favorite } = await setup();
+  const ids = (r: { playlistUrl: string }) => new URL(r.playlistUrl).searchParams.get('video_ids')!.split(',');
+
+  it('links every favorite, rebuilding the link as favorites change', async () => {
+    const { app, roundId, a, submissions, favorite } = await setup();
     await closeGuessingWindow(testDb.pool, roundId);
     await favorite(a, submissions[0].submissionId);
     const first = (await exportFavorites(app, a)).body.services[0];
-    const titles = () => [...youtubeMusicAdapter.playlists.values()].map((p) => p.map((t) => t.title));
-    expect(titles()).toHaveLength(1);
-    const firstTitles = titles()[0];
-    expect(firstTitles).toHaveLength(1);
     expect(first).toMatchObject({ service: 'youtube_music', status: 'ok', matchedCount: 1, skipped: [] });
-    expect(first.playlistUrl).toMatch(/^https:\/\/music\.youtube\.com\/playlist\?list=/);
+    expect(first.playlistUrl).toMatch(/^https:\/\/www\.youtube\.com\/watch_videos\?video_ids=/);
+    expect(ids(first)).toHaveLength(1);
 
     await favorite(a, submissions[1].submissionId);
     const second = (await exportFavorites(app, a)).body.services[0];
-    expect(second.playlistUrl).toBe(first.playlistUrl);
     expect(second.matchedCount).toBe(2);
-    expect(titles()).toHaveLength(1);
-    expect(titles()[0]).toHaveLength(2);
-    expect(titles()[0][0]).toBe(firstTitles[0]);
+    expect(ids(second)).toHaveLength(2);
+    expect(ids(second)[0]).toBe(ids(first)[0]);
     const rows = await testDb.pool.query('SELECT exported_submission_ids FROM favorite_exports');
     expect(rows.rows).toHaveLength(1);
     expect(rows.rows[0].exported_submission_ids).toHaveLength(2);
 
-    expect((await request(app).get('/favorites').set(auth(a))).body.playlistUrl).toBe(first.playlistUrl);
+    expect((await request(app).get('/favorites').set(auth(a))).body.playlistUrl).toBe(second.playlistUrl);
   });
 
-  it('appends nothing when there is nothing new', async () => {
-    const { app, youtubeMusicAdapter, roundId, a, submissions, favorite } = await setup();
+  it('gives the same link when nothing changed', async () => {
+    const { app, roundId, a, submissions, favorite } = await setup();
     await closeGuessingWindow(testDb.pool, roundId);
     await favorite(a, submissions[0].submissionId);
-    await exportFavorites(app, a);
+    const first = (await exportFavorites(app, a)).body.services[0];
     const again = (await exportFavorites(app, a)).body.services[0];
-    expect(again).toMatchObject({ status: 'ok', matchedCount: 1 });
-    expect([...youtubeMusicAdapter.playlists.values()].map((p) => p.length)).toEqual([1]);
+    expect(again).toMatchObject({ status: 'ok', matchedCount: 1, playlistUrl: first.playlistUrl });
   });
 
   it('skips bandcamp favorites, and reports no_matches without a playlist', async () => {
-    const { app, youtubeMusicAdapter, roundId, a, submissions, favorite } = await setup();
+    const { app, roundId, a, submissions, favorite } = await setup();
     await closeGuessingWindow(testDb.pool, roundId);
     await testDb.pool.query("UPDATE submissions SET service = 'bandcamp' WHERE id = $1", [submissions[0].submissionId]);
     await favorite(a, submissions[0].submissionId);
     const res = (await exportFavorites(app, a)).body.services[0];
     expect(res).toMatchObject({ status: 'no_matches', playlistUrl: null, matchedCount: 0, skipped: [] });
-    expect(youtubeMusicAdapter.playlists.size).toBe(0);
     expect((await request(app).get('/favorites').set(auth(a))).body.playlistUrl).toBeNull();
 
     await favorite(a, submissions[1].submissionId);
     const mixed = (await exportFavorites(app, a)).body.services[0];
     expect(mixed).toMatchObject({ status: 'ok', matchedCount: 1 });
-    expect([...youtubeMusicAdapter.playlists.values()].map((p) => p.length)).toEqual([1]);
-  });
-
-  it('leaves the service out when no cookie is configured', async () => {
-    const { app } = buildApp(testDb.pool, { youtubeMusicCookie: '' });
-    const a = await signUp(app, `nocookie-${Date.now()}@example.com`);
-    expect((await exportFavorites(app, a)).body).toEqual({ services: [] });
+    expect(ids(mixed)).toHaveLength(1);
   });
 
   it('reports an adapter failure as failed rather than a 500', async () => {
@@ -185,7 +174,7 @@ describe('POST /favorites/export (#109)', () => {
     await closeGuessingWindow(testDb.pool, league.roundId);
     const a = league.members[0];
     await request(app).post(`/submissions/${league.submissions[1].submissionId}/favorite`).set(auth(a));
-    youtubeMusicAdapter.createPlaylist = async () => {
+    youtubeMusicAdapter.isTrackId = () => {
       throw new Error('boom');
     };
     const res = await exportFavorites(app, a);

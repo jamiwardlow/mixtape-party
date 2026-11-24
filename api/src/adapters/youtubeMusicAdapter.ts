@@ -1,10 +1,8 @@
-import { createHash } from 'node:crypto';
 import { findDeezerPreview } from './deezerPreview.js';
 import {
   ServiceUnavailableError,
   type MusicServiceAdapter,
   type PlaybackLaunchHandle,
-  type PlaylistRef,
   type TrackRef,
   type TrackResult,
 } from './types.js';
@@ -15,14 +13,6 @@ const API_BASE = `${ORIGIN}/youtubei/v1`;
 const INNERTUBE_KEY = 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30';
 const CLIENT_CONTEXT = { client: { clientName: 'WEB_REMIX', clientVersion: '1.20240101.01.00' } };
 const REQUEST_TIMEOUT_MS = 5000;
-
-function sapisidHashAuth(cookie: string): string {
-  const match = cookie.match(/(?:^|;\s*)(?:__Secure-3PAPISID|SAPISID)=([^;]+)/);
-  if (!match) throw new ServiceUnavailableError('youtube_music', 'cookie is missing a SAPISID value');
-  const timestamp = Math.floor(Date.now() / 1000);
-  const hash = createHash('sha1').update(`${timestamp} ${match[1]} ${ORIGIN}`).digest('hex');
-  return `SAPISIDHASH ${timestamp}_${hash}`;
-}
 
 interface SongRun {
   text: string;
@@ -54,18 +44,11 @@ interface SearchResponseShape {
 }
 
 /**
- * Every innertube call routes through here: it attaches the SAPISIDHASH auth the API expects and
- * normalizes any failure (network error, bad status, unparseable body) into a
- * {@link ServiceUnavailableError}. Exported because the contract-playlist sweep
- * (src/scripts/sweepContractPlaylists.ts) needs a `browse` call the adapter itself has no use for.
+ * Every innertube call routes through here: it normalizes any failure (network error, bad status,
+ * unparseable body) into a {@link ServiceUnavailableError}.
  */
-export async function innertubePost(endpoint: string, body: Record<string, unknown>, cookie?: string): Promise<unknown> {
+async function innertubePost(endpoint: string, body: Record<string, unknown>): Promise<unknown> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (cookie) {
-    headers.Cookie = cookie;
-    headers.Authorization = sapisidHashAuth(cookie);
-    headers['X-Origin'] = ORIGIN;
-  }
 
   let res: Response;
   try {
@@ -96,7 +79,7 @@ export async function innertubePost(endpoint: string, body: Record<string, unkno
 
 /**
  * Real YouTube Music integration via its unofficial "innertube" web-client API — there is no
- * official Google API for YouTube Music search/playlists. Unauthenticated and undocumented, so
+ * official Google API for YouTube Music search. Unauthenticated and undocumented, so
  * every request routes through {@link innertubePost}, and a response that doesn't match the shape
  * this adapter expects is raised as a {@link ServiceUnavailableError} rather than left to produce
  * garbage results or a hung request.
@@ -133,39 +116,6 @@ export class YouTubeMusicAdapter implements MusicServiceAdapter {
   async match(track: TrackRef): Promise<TrackResult | null> {
     const results = await this.search(track.isrc ?? `${track.title} ${track.artist}`);
     return results[0] ?? null;
-  }
-
-  async createPlaylist(accessToken: string, name: string): Promise<PlaylistRef> {
-    // UNLISTED, not PRIVATE: this playlist is built under one shared, server-held account (see
-    // createPlaylist's accessToken) and shared to arbitrary listeners via its watch link.
-    const body = (await innertubePost('playlist/create', { title: name, privacyStatus: 'UNLISTED' }, accessToken)) as {
-      playlistId?: string;
-    };
-    if (!body.playlistId) {
-      // responseContext is ~2KB of tracking noise that would push the useful part past the slice.
-      const { responseContext: _ignored, ...rest } = body as Record<string, unknown>;
-      throw new ServiceUnavailableError(
-        'youtube_music',
-        `youtube music playlist/create returned no playlistId: ${JSON.stringify(rest).slice(0, 600)}`,
-      );
-    }
-    return { externalId: body.playlistId, service: this.service };
-  }
-
-  async appendToPlaylist(accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void> {
-    await innertubePost(
-      'browse/edit_playlist',
-      {
-        playlistId: playlist.externalId,
-        actions: tracks.map((t) => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: t.externalId })),
-      },
-      accessToken,
-    );
-  }
-
-  /** Undoes a createPlaylist whose append failed, and cleans up after the contract test. */
-  async deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void> {
-    await innertubePost('playlist/delete', { playlistId: playlist.externalId }, accessToken);
   }
 
   /** A video id is 11 url-safe base64 characters; anything else (e.g. the fake demo-league picks) makes browse/edit_playlist 400 the whole batch. */

@@ -3,7 +3,6 @@ import {
   type EmbedOnlyMusicServiceAdapter,
   type MusicServiceAdapter,
   type PlaybackLaunchHandle,
-  type PlaylistRef,
   type ServiceName,
   type TrackRef,
   type TrackResult,
@@ -21,8 +20,6 @@ export const SEARCH_UNAVAILABLE_QUERY = 'SEARCH_UNAVAILABLE';
  */
 export class FakeMusicServiceAdapter implements MusicServiceAdapter {
   private nextTrackId = 1;
-  private nextPlaylistId = 1;
-  readonly playlists = new Map<string, TrackResult[]>();
 
   constructor(readonly service: ServiceName = 'youtube_music') {}
 
@@ -52,22 +49,6 @@ export class FakeMusicServiceAdapter implements MusicServiceAdapter {
       isrc: track.isrc,
       service: this.service,
     };
-  }
-
-  async createPlaylist(_accessToken: string, name: string): Promise<PlaylistRef> {
-    const externalId = `fake-playlist-${this.nextPlaylistId++}`;
-    this.playlists.set(externalId, []);
-    return { externalId, service: this.service };
-  }
-
-  async appendToPlaylist(_accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void> {
-    const existing = this.playlists.get(playlist.externalId);
-    if (!existing) throw new Error(`unknown fake playlist ${playlist.externalId}`);
-    existing.push(...tracks);
-  }
-
-  async deletePlaylist(_accessToken: string, playlist: PlaylistRef): Promise<void> {
-    this.playlists.delete(playlist.externalId);
   }
 
   isTrackId(_externalId: string): boolean {

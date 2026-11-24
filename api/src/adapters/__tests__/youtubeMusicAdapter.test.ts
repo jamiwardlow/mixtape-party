@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { YouTubeMusicAdapter } from '../youtubeMusicAdapter.js';
 import searchResponse from './fixtures/ytmSearchResponse.json' with { type: 'json' };
 
-// The contract test next door hits the real innertube API, but it needs a session cookie and so
-// runs only under `npm run test:integration`. That gap let a response-shape change ship: videoId
+// The contract test next door hits the real innertube API, so it runs only under
+// `npm run test:integration`. That gap let a response-shape change ship: videoId
 // moved under playlistItemData, every result was filtered out, and search silently returned [].
 // This parses a captured real response so the default suite catches the next such drift.
 function stubFetch(body: unknown) {
@@ -37,32 +37,6 @@ describe('YouTubeMusicAdapter.search', () => {
     // The fixture holds three rows; the third is an artist row with no playlistItemData.
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.externalId)).toBe(true);
-  });
-});
-
-describe('YouTubeMusicAdapter.deletePlaylist', () => {
-  it('posts the playlist id to the innertube delete endpoint', async () => {
-    stubFetch({});
-
-    await new YouTubeMusicAdapter().deletePlaylist('SAPISID=abc123', {
-      externalId: 'PL_contract_test',
-      service: 'youtube_music',
-    });
-
-    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
-    expect(url).toContain('/youtubei/v1/playlist/delete');
-    expect(JSON.parse(init!.body as string)).toMatchObject({ playlistId: 'PL_contract_test' });
-  });
-
-  it('surfaces a refused delete as a service outage rather than resolving quietly', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"unauthenticated"}', { status: 401 })));
-
-    await expect(
-      new YouTubeMusicAdapter().deletePlaylist('SAPISID=abc123', {
-        externalId: 'PL_contract_test',
-        service: 'youtube_music',
-      }),
-    ).rejects.toThrow(/youtube music playlist\/delete failed: 401 \{"error":"unauthenticated"\}/);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { EmbedOnlyMusicServiceAdapter, MusicServiceAdapter, PlaylistRef } from './types.js';
+import type { EmbedOnlyMusicServiceAdapter, MusicServiceAdapter } from './types.js';
 
 /**
  * Shared conformance checks for any MusicServiceAdapter implementation (Seam 2).
@@ -8,13 +8,6 @@ import type { EmbedOnlyMusicServiceAdapter, MusicServiceAdapter, PlaylistRef } f
 export function runMusicServiceAdapterContractTests(
   label: string,
   makeAdapter: () => MusicServiceAdapter,
-  makeAccessToken: () => Promise<string> | string,
-  /**
-   * Deletes the playlist the createPlaylist check just made, so a daily scheduled run against a
-   * real account doesn't accumulate one playlist per run. Not awaited defensively: if deletion
-   * breaks, that's upstream drift this suite exists to catch.
-   */
-  cleanupPlaylist?: (accessToken: string, playlist: PlaylistRef) => Promise<void>,
 ) {
   describe(`MusicServiceAdapter contract: ${label}`, () => {
     it('search returns results shaped as TrackResult for this service', async () => {
@@ -29,24 +22,6 @@ export function runMusicServiceAdapterContractTests(
         expect(typeof result.externalId).toBe('string');
         expect(typeof result.title).toBe('string');
         expect(typeof result.artist).toBe('string');
-      }
-    });
-
-    it('createPlaylist then appendToPlaylist succeeds without throwing', async () => {
-      const adapter = makeAdapter();
-      const accessToken = await makeAccessToken();
-      const playlist = await adapter.createPlaylist(accessToken, `contract-test-${Date.now()}`);
-      expect(playlist.service).toBe(adapter.service);
-      // `service` is hardcoded by the adapter, so it proves nothing about the response. The id is
-      // the only field that comes from upstream: a rejected credential or a renamed field that
-      // still answers 200 leaves it undefined, and the drift would otherwise pass unnoticed.
-      expect(typeof playlist.externalId).toBe('string');
-      try {
-        const [track] = await adapter.search('test query');
-        expect(track, 'search returned no tracks to append').toBeDefined();
-        await expect(adapter.appendToPlaylist(accessToken, playlist, [track])).resolves.not.toThrow();
-      } finally {
-        await cleanupPlaylist?.(accessToken, playlist);
       }
     });
 

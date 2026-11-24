@@ -437,7 +437,6 @@ describe('runNotificationSweep', () => {
         playlists: {
           youtubeMusicAdapter,
           bandcampAdapter: new FakeBandcampAdapter(),
-          youtubeMusicCookie: 'cookie',
         },
       };
       return { deps, youtubeMusicAdapter };
@@ -451,7 +450,7 @@ describe('runNotificationSweep', () => {
 
     it('builds the playlist once after the submission deadline, while guessing is open', async () => {
       const roundId = await closedRound('youtube_music');
-      const { deps, youtubeMusicAdapter } = playlistDeps();
+      const { deps } = playlistDeps();
 
       await runNotificationSweep(deps);
       await runNotificationSweep(deps);
@@ -459,24 +458,22 @@ describe('runNotificationSweep', () => {
       const rows = await exportRows(roundId);
       expect(rows.rows).toHaveLength(1);
       expect(rows.rows[0].playlist_external_id).toBeTruthy();
-      expect(youtubeMusicAdapter.playlists.size).toBe(1);
     });
 
     it('builds nothing for a bandcamp-only round', async () => {
       const roundId = await closedRound('bandcamp');
-      const { deps, youtubeMusicAdapter } = playlistDeps();
+      const { deps } = playlistDeps();
 
       await runNotificationSweep(deps);
 
       expect((await exportRows(roundId)).rows).toHaveLength(0);
-      expect(youtubeMusicAdapter.playlists.size).toBe(0);
     });
 
     it('retries on the next sweep when a build fails', async () => {
       const roundId = await closedRound('youtube_music');
       const { deps, youtubeMusicAdapter } = playlistDeps();
-      const createPlaylist = youtubeMusicAdapter.createPlaylist.bind(youtubeMusicAdapter);
-      youtubeMusicAdapter.createPlaylist = async () => {
+      const isTrackId = youtubeMusicAdapter.isTrackId.bind(youtubeMusicAdapter);
+      youtubeMusicAdapter.isTrackId = () => {
         throw new Error('boom');
       };
       const log = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -484,7 +481,7 @@ describe('runNotificationSweep', () => {
       await runNotificationSweep(deps);
       expect((await exportRows(roundId)).rows).toHaveLength(0);
 
-      youtubeMusicAdapter.createPlaylist = createPlaylist;
+      youtubeMusicAdapter.isTrackId = isTrackId;
       await runNotificationSweep(deps);
       expect((await exportRows(roundId)).rows).toHaveLength(1);
       log.mockRestore();
@@ -507,7 +504,7 @@ describe('runNotificationSweep', () => {
 
         expect((await openRows()).rowCount).toBe(2);
         expect(openEmails(deps)).toHaveLength(2);
-        expect(openEmails(deps)[0].payload.link).toMatch(/^https:\/\/music\.youtube\.com\/playlist\?list=/);
+        expect(openEmails(deps)[0].payload.link).toMatch(/^https:\/\/www\.youtube\.com\/watch_videos\?video_ids=/);
         expect(openEmails(deps)[0].payload.data).toEqual({ roundId });
         expect(openEmails(deps)[0].payload.appLink).toBe(`https://app.test/round/${roundId}/guess`);
       });

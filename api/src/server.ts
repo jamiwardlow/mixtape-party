@@ -67,7 +67,6 @@ const app = createApp({
   appleTokenExchange,
   appleIdentityVerifier,
   youtubeMusicAdapter,
-  youtubeMusicCookie: process.env.YOUTUBE_MUSIC_COOKIE,
   bandcampAdapter,
   pushChannel,
   emailChannel,

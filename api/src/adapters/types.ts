@@ -15,11 +15,6 @@ export interface TrackResult extends TrackRef {
   pageUrl?: string;
 }
 
-export interface PlaylistRef {
-  externalId: string;
-  service: ServiceName;
-}
-
 export interface PlaybackLaunchHandle {
   service: ServiceName;
   deepLink: string;
@@ -31,9 +26,6 @@ export interface MusicServiceAdapter {
   readonly service: ServiceName;
   search(query: string, accessToken?: string): Promise<TrackResult[]>;
   match(track: TrackRef, accessToken?: string): Promise<TrackResult | null>;
-  createPlaylist(accessToken: string, name: string): Promise<PlaylistRef>;
-  appendToPlaylist(accessToken: string, playlist: PlaylistRef, tracks: TrackResult[]): Promise<void>;
-  deletePlaylist(accessToken: string, playlist: PlaylistRef): Promise<void>;
   /** Whether `externalId` is shaped like a real track id here; export skips one that isn't rather than sink the whole playlist. */
   isTrackId(externalId: string): boolean;
   getPlaybackLaunchHandle(track: TrackResult): Promise<PlaybackLaunchHandle>;

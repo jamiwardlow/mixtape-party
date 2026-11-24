@@ -6,7 +6,6 @@ import type { AdapterRegistry } from '../adapters/registry.js';
 import type { EmailChannel, PushChannel } from '../notifications/types.js';
 
 export interface SweepDeps extends AdapterRegistry {
-  youtubeMusicCookie?: string;
   pool: Pool;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;

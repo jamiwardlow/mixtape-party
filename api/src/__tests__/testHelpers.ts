@@ -27,11 +27,10 @@ export const FakeAppleTokenExchange = FakeGoogleTokenExchange;
 export function buildApp(
   pool: Pool,
   {
-    youtubeMusicCookie = 'fake-youtube-music-cookie',
     googleConfigured = true,
     appBaseUrl = 'https://app.test',
     sweepSecret = 'test-sweep-secret',
-  }: { youtubeMusicCookie?: string; googleConfigured?: boolean; appBaseUrl?: string; sweepSecret?: string | null } = {},
+  }: { googleConfigured?: boolean; appBaseUrl?: string; sweepSecret?: string | null } = {},
 ) {
   const youtubeMusicAdapter = new FakeMusicServiceAdapter('youtube_music');
   const bandcampAdapter = new FakeBandcampAdapter();
@@ -53,7 +52,6 @@ export function buildApp(
     // Stands in for the signature check; the real one is covered in appleAuth.test.ts. The "token" is just a registered code.
     appleIdentityVerifier: appleTokenExchange.exchange,
     youtubeMusicAdapter,
-    youtubeMusicCookie,
     bandcampAdapter,
     pushChannel,
     emailChannel,

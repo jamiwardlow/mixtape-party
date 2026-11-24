@@ -90,8 +90,8 @@ interface ServiceExport {
 /**
  * A line explaining a leg that produced no playlist, or null where there is nothing worth saying.
  *
- * YouTube Music runs on one app-owned account, so there is nothing for a user to fix and the copy
- * does not pretend otherwise.
+ * The YouTube Music link needs no account (#215), so there is nothing for a user to fix and the
+ * copy does not pretend otherwise.
  */
 function exportProblem({ service, status }: ServiceExport): string | null {
   const name = SERVICE_META[service]?.label ?? service;

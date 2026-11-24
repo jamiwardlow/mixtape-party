@@ -3,17 +3,13 @@ import type { Pool } from 'pg';
 import { hashPassword } from '../auth.js';
 import { migrate } from '../db/migrate.js';
 import { createPool } from '../db/pool.js';
-import { YouTubeMusicAdapter } from '../adapters/youtubeMusicAdapter.js';
 
 /**
  * Seeds the demo accounts and leagues for App Store review and screenshots (#135 section 5).
  * Every player is invented. Songs are invented unless listed in REAL below. Re-running wipes and rebuilds the demo data, and only the
  * demo data: it deletes exactly the accounts and invite codes named below, nothing else.
  *
- *   DEMO_PASSWORD='...' DATABASE_URL=... YOUTUBE_MUSIC_COOKIE='...' npx tsx src/scripts/seedDemoLeague.ts
- *
- * With YOUTUBE_MUSIC_COOKIE set (the app account the API exports under), it also deletes the playlists the old demo
- * rounds were exported to.
+ *   DEMO_PASSWORD='...' DATABASE_URL=... npx tsx src/scripts/seedDemoLeague.ts
  *
  * Live rounds run LIVE_DAYS from now, so re-run before a review submission or a screenshot session.
  *
@@ -263,28 +259,17 @@ const EMOJI = ['🔥', '😂', '❤️', '👏', '🎧'];
 
 const DAY = 86_400_000;
 
-/**
- * `deletePlaylist` removes the YouTube Music playlists exported for the demo rounds being wiped. Every re-seed gives
- * the rounds new ids, so without it each re-seed leaves a fresh copy of every demo playlist in the app account.
- */
 export async function seedDemo(
   pool: Pool,
   password: string,
   now = new Date(),
   useReal = false,
-  deletePlaylist?: (playlistId: string) => Promise<void>,
 ): Promise<{ email: string; inviteCodes: string[] }> {
   if (password.length < 8) throw new Error('DEMO_PASSWORD must be at least 8 characters');
   const at = (days: number) => new Date(now.getTime() + days * DAY);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const stale = await client.query<{ playlist_external_id: string }>(
-      `SELECT DISTINCT e.playlist_external_id FROM round_exports e
-       JOIN rounds r ON r.id = e.round_id JOIN leagues l ON l.id = r.league_id
-       WHERE l.invite_code = ANY($1) AND e.service = 'youtube_music' AND e.playlist_external_id IS NOT NULL`,
-      [LEAGUES.map((l) => l.code)],
-    );
     // Leagues first, then accounts: a demo account can host only demo leagues, so this is the whole set.
     await client.query('DELETE FROM leagues WHERE invite_code = ANY($1)', [LEAGUES.map((l) => l.code)]);
     await client.query('DELETE FROM accounts WHERE email = ANY($1)', [Object.keys(PEOPLE).map(emailOf)]);
@@ -404,11 +389,6 @@ export async function seedDemo(
     );
 
     await client.query('COMMIT');
-    // After COMMIT, so a seed that rolls back never deletes playlists its rounds still point at. A failed delete only
-    // leaves one stray playlist behind, so it warns rather than failing a seed that already succeeded.
-    for (const { playlist_external_id: id } of stale.rows) {
-      await deletePlaylist?.(id).catch((err) => console.warn(`Could not delete old demo playlist ${id}: ${err}`));
-    }
     return { email: DEMO_EMAIL, inviteCodes: LEAGUES.map((l) => l.code) };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -425,15 +405,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
   const pool = createPool();
-  const cookie = process.env.YOUTUBE_MUSIC_COOKIE;
-  if (!cookie) console.warn('YOUTUBE_MUSIC_COOKIE is unset: old demo playlists will be left in the app account.');
-  const adapter = new YouTubeMusicAdapter();
-  const deletePlaylist = cookie
-    ? (id: string) => adapter.deletePlaylist(cookie, { externalId: id, service: 'youtube_music' })
-    : undefined;
   console.log(`Seeding demo data into ${new URL(process.env.DATABASE_URL!).host}`);
   migrate(pool)
-    .then(() => seedDemo(pool, password, new Date(), process.env.DEMO_TRACKS === 'real', deletePlaylist))
+    .then(() => seedDemo(pool, password, new Date(), process.env.DEMO_TRACKS === 'real'))
     .then((r) => console.log(`Seeded. Sign in as ${r.email}. Invite codes: ${r.inviteCodes.join(', ')}`))
     .finally(() => pool.end());
 }

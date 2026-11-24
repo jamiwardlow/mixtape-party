@@ -161,8 +161,9 @@ CREATE TABLE IF NOT EXISTS track_matches (
 
 -- Tracks that a round's cross-service export has already run for a given player+service, so it
 -- runs at most once per round rather than re-matching/re-appending on every request. A
--- youtube_music export is read back per round+service, ignoring account_id: it runs through one
--- server-held account, so the first player's row is the playlist every player in the round links to.
+-- youtube_music export is read back per round+service, ignoring account_id: the playlist is the same
+-- for everyone, so the first player's row is the link every player in the round gets.
+-- playlist_external_id holds the matched video ids, comma-joined (#215); older rows hold a PL... id.
 CREATE TABLE IF NOT EXISTS round_exports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id UUID NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,

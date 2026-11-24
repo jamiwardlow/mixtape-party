@@ -1,13 +1,12 @@
 import type { Pool } from 'pg';
 import { buildRoundExports, PLAYLIST_URL, type ExportableService, RoundExportDeps } from '../routes/export.js';
-import { loadRound } from '../routes/rounds.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
 export interface NotificationSweepDeps {
   pool: Pool;
   pushChannel: PushChannel;
   emailChannel: EmailChannel;
-  /** Adapters and cookie for building playlists (#99). Unset skips that step. */
+  /** Adapters for building playlists (#99). Unset skips that step. */
   playlists?: Omit<RoundExportDeps, 'pool'>;
   /** Origin of the web client; emailed links to the app start here. Unset omits them. */
   appBaseUrl?: string;
@@ -323,8 +322,7 @@ async function sweepPlaylists(deps: NotificationSweepDeps, now: Date): Promise<v
     [now.toISOString()],
   );
   for (const { id, host_account_id } of due.rows) {
-    const round = await loadRound(deps.pool, id);
-    if (round) await buildRoundExports({ pool: deps.pool, ...deps.playlists }, id, round, host_account_id);
+    await buildRoundExports({ pool: deps.pool, ...deps.playlists }, id, host_account_id);
   }
 }
 
