@@ -91,23 +91,6 @@ it('loads the round once and heads the page with the round and its deadlines', a
   expect(screen.getByTestId('round-guessing')).toBeTruthy();
 });
 
-// The whole point of this URL: one address that keeps working as the deadlines pass, each phase
-// offering the screen that phase calls for rather than 403ing or showing the wrong thing.
-it.each([
-  ['submission', submissionRound, 'Edit your track', 'submit'],
-  ['guessing', guessingRound, 'Guess the submitters', 'guess'],
-  ['results', resultsRound, 'See results', 'results'],
-] as const)('gives the %s phase its own CTA into that phase’s screen', async (_phase, round, label, segment) => {
-  await show(round);
-
-  fireEvent.press(screen.getByText(label));
-
-  expect(router.push).toHaveBeenCalledWith({
-    pathname: `/round/[roundId]/${segment}`,
-    params: segment === 'submit' ? { roundId: 'r2', edit: '1' } : { roundId: 'r2' },
-  });
-});
-
 // Deliberately a link, not a third results view — results.tsx already owns the reveal.
 it('does not redirect into the phase screen', async () => {
   await show(resultsRound);

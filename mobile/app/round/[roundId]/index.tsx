@@ -3,60 +3,9 @@ import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useResource } from '../../../lib/client';
 import { usePreview } from '../../../lib/preview';
-import {
-  PHASE_META,
-  phaseLabel,
-  nameOf,
-  playbackHref,
-  type Playback,
-  type Player,
-  type RoundPhase,
-  type ServiceName,
-} from '../../../lib/rounds';
+import { guessesLine, nameOf, nextStep, playbackHref, roundStatus, submitterNames, type RoundOverview } from '../../../lib/rounds';
 import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
 import { openPlaybackLink } from '../../../lib/bandcamp';
-
-/** The one round, as `GET /rounds/:roundId/overview` describes it — the season page's entry. */
-interface RoundDetail {
-  id: string;
-  number: number;
-  /** Null until someone names it — #74 schedules the season before its themes exist. */
-  theme: string | null;
-  submissionDeadline: string;
-  guessingDeadline: string;
-  phase: RoundPhase;
-  submittedCount: number;
-  /** False while the league is too small to guess in, even though the clock says guessing. */
-  /**
-   * Optional because the server *omits* it while guessing is open: naming who has not submitted
-   * narrows the pool. Its absence is the only signal this screen may branch on — the phase is
-   * derived from clocks that can disagree, and a field rendered "only in the right phase" leaks
-   * the first time those two drift.
-   */
-  submitters?: Player[];
-  /** Who has answered, never what they answered — safe to name in every phase. */
-  guessedPlayers: Player[];
-  you: {
-    submitted: boolean;
-    guessesRemaining: number;
-    /** Your own track, in every phase. Yours only: the server never sends anyone else's. */
-    submission: { submissionId: string; playback: Playback; service: ServiceName; title: string; artist: string; thumbnailUrl: string | null } | null;
-  };
-}
-
-interface Overview {
-  leagueId: string;
-  leagueName: string;
-  round: RoundDetail;
-}
-
-/** What the round is doing right now, in words. The CTA below says what to do about it. */
-const PHASE_STATUS: Record<RoundPhase, string> = {
-  upcoming: 'Submissions open later',
-  submission: 'Submissions are open',
-  guessing: 'Guessing is open',
-  results: 'This round is over',
-};
 
 /**
  * The canonical URL for a round, in any phase. Every other round screen is a phase — a link to
@@ -68,7 +17,7 @@ export default function RoundOverview() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   // Refetches on every focus: this screen stays mounted under submit/guess, so a track just sent
   // would otherwise show as missing until a remount.
-  const { data: overview, error } = useResource<Overview>(`/rounds/${roundId}/overview`, 'Could not load this round');
+  const { data: overview, error } = useResource<RoundOverview>(`/rounds/${roundId}/overview`, 'Could not load this round');
   const mine = overview?.round.you.submission;
   const openInService = useCallback(() => mine && openPlaybackLink(playbackHref(mine.playback)), [mine]);
   const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), openInService);
@@ -82,6 +31,9 @@ export default function RoundOverview() {
   }
 
   const { leagueId, leagueName, round } = overview;
+  const step = nextStep(round, !!round.you.submission);
+  const guesses = guessesLine(round);
+  const submitted = submitterNames(round);
 
   return (
     <Screen label={leagueName}>
@@ -104,15 +56,7 @@ export default function RoundOverview() {
           ) : (
             <BodyText testID="your-submission">You have not submitted a track</BodyText>
           )}
-          {/* Only while guesses are being made: before then it counts tracks nobody can guess yet,
-              and afterwards it is a leftover from a window that has shut. */}
-          {round.phase === 'guessing' && (
-            <BodyText testID="your-guesses">
-              {round.you.guessesRemaining === 0
-                ? 'You have made all your guesses'
-                : `${round.you.guessesRemaining} guess${round.you.guessesRemaining === 1 ? '' : 'es'} to go`}
-            </BodyText>
-          )}
+          {guesses && <BodyText testID="your-guesses">{guesses}</BodyText>}
         </JCard>
 
         <JCard>
@@ -123,9 +67,7 @@ export default function RoundOverview() {
             guessingDeadline={new Date(round.guessingDeadline)}
             testID="round"
           />
-          <Label testID="round-phase">
-            {PHASE_STATUS[round.phase]}
-          </Label>
+          <Label testID="round-phase">{roundStatus(round.phase)}</Label>
         </JCard>
 
         <JCard>
@@ -133,12 +75,10 @@ export default function RoundOverview() {
           <Label testID="submitted-count">
             {`${round.submittedCount} track${round.submittedCount === 1 ? '' : 's'} in`}
           </Label>
-          {/* Named only when the server hands over the names. During guessing it withholds them,
-              and naming the stragglers then is the leak itself. */}
-          {round.submitters && round.submitters.length > 0 && (
+          {submitted && (
             <View style={styles.row}>
               <Label>Submitted</Label>
-              <Label testID="submitters">{round.submitters.map(nameOf).join(', ')}</Label>
+              <Label testID="submitters">{submitted}</Label>
             </View>
           )}
           {round.guessedPlayers.length > 0 && (
@@ -149,17 +89,7 @@ export default function RoundOverview() {
           )}
         </JCard>
 
-        {round.phase !== 'upcoming' && (
-          <TapeButton
-            title={phaseLabel(round.phase, !!round.you.submission)}
-            onPress={() =>
-              router.push({
-                pathname: `/round/[roundId]/${PHASE_META[round.phase].segment}`,
-                params: round.phase === 'submission' && round.you.submission ? { roundId: round.id, edit: '1' } : { roundId: round.id },
-              })
-            }
-          />
-        )}
+        {step && <TapeButton title={step.label} onPress={() => router.push(step.href)} />}
       </ScrollView>
       <TapeButton
         title={`Back to ${leagueName}`}

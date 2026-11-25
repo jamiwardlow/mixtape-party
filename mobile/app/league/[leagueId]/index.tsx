@@ -5,14 +5,7 @@ import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View }
 import { Avatar } from '../../../lib/Avatar';
 import { useApi, useResource } from '../../../lib/client';
 import { PlayerLink } from '../../../lib/PlayerLink';
-import {
-  PHASE_META,
-  phaseLabel,
-  nameOf,
-  type Player,
-  type SeasonResult,
-  type RoundPhase,
-} from '../../../lib/rounds';
+import { hasSubmitted, nameOf, nextStep, seasonEntry, submissionMark, type Player, type RoundSummary, type SeasonResult } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
 import { StandingRows, WinnersRow } from '../../../lib/Standings';
@@ -31,25 +24,7 @@ import {
 } from '../../../lib/ui';
 
 /** One round of the season, as `GET /leagues/:leagueId/overview` describes it. */
-interface OverviewRound {
-  id: string;
-  number: number;
-  /** Null until someone names it — #74 schedules the season before its themes exist. */
-  theme: string | null;
-  submissionDeadline: string;
-  guessingDeadline: string;
-  phase: RoundPhase;
-  submittedCount: number;
-  /** False while the league is too small to guess in, even though the clock says guessing. */
-  /**
-   * Optional because the server *omits* it while guessing is open: naming who has not submitted
-   * narrows the pool. Its absence is the only signal this screen is allowed to branch on — the
-   * phase is derived from clocks that can disagree, and a field we render "only in the right
-   * phase" is a field that leaks the first time those two drift.
-   */
-  submitters?: Player[];
-  /** Who has answered, never what they answered — safe to name in every phase. */
-  guessedPlayers: Player[];
+interface OverviewRound extends RoundSummary {
   isCurrent: boolean;
 }
 
@@ -137,7 +112,7 @@ export default function LeagueOverview() {
   const { league, members, standings, scoredRoundCount, winners, rounds } = overview;
   // The API marks exactly one round current, and keeps marking the last one between seasons.
   const current = rounds.find((round) => round.isCurrent);
-  const iSubmitted = !!current?.submitters?.some((s) => s.accountId === profile?.id);
+  const step = current && nextStep(current, hasSubmitted(current, profile?.id));
 
   return (
     <Screen label={league.name} wide>
@@ -170,17 +145,7 @@ export default function LeagueOverview() {
               guessingDeadline={new Date(current.guessingDeadline)}
               testID="current-round"
             />
-            {current.phase !== 'upcoming' && (
-              <TapeButton
-                title={phaseLabel(current.phase, iSubmitted)}
-                onPress={() =>
-                  router.push({
-                    pathname: `/round/[roundId]/${PHASE_META[current.phase].segment}`,
-                    params: current.phase === 'submission' && iSubmitted ? { roundId: current.id, edit: '1' } : { roundId: current.id },
-                  })
-                }
-              />
-            )}
+            {step && <TapeButton title={step.label} onPress={() => router.push(step.href)} />}
           </JCard>
         )}
 
@@ -208,8 +173,7 @@ export default function LeagueOverview() {
             <Label testID="submitted-count">{`${current.submittedCount} of ${members.length} submitted`}</Label>
           )}
           {members.map((member) => {
-            const submitters = current?.submitters;
-            const submitted = submitters?.some((s) => s.accountId === member.accountId);
+            const mark = current && submissionMark(current, member.accountId);
             const guessed = current?.guessedPlayers.some((g) => g.accountId === member.accountId);
             return (
               <View key={member.accountId} testID={`roster-${member.accountId}`} style={styles.row}>
@@ -223,9 +187,7 @@ export default function LeagueOverview() {
                   {member.accountId === overview.host.accountId && <Label>host</Label>}
                 </View>
                 <View style={styles.inline}>
-                  {/* Named only when the server hands over the names. During guessing it withholds
-                      them, and a roster that names the stragglers then is the leak itself. */}
-                  {submitters && <Label>{submitted ? 'Submitted' : 'No track yet'}</Label>}
+                  {mark && <Label>{mark}</Label>}
                   {guessed && <Label>Guessed</Label>}
                   {league.isHost && member.accountId !== overview.host.accountId && (
                     <Pressable
@@ -246,44 +208,38 @@ export default function LeagueOverview() {
 
         <Sprocket />
         <HandText>The season</HandText>
-        {rounds.map((round) => (
-          <JCard key={round.id}>
-            <HandText>{`Round ${round.number}`}</HandText>
-            {/* The current round has its own card above — theme, deadlines and the CTA. Printing
-                all three again here would just be that card twice; the list only keeps its place. */}
-            {round.isCurrent && round.phase !== 'results' ? (
-              <Label>In progress — see above</Label>
-            ) : (
-              <>
-                {round.theme ? (
-                  <BodyText>{round.theme}</BodyText>
-                ) : (
-                  <Label>{league.isHost ? 'Set a theme' : 'Theme not set yet'}</Label>
-                )}
-                <DeadlineRows
-                  submissionDeadline={new Date(round.submissionDeadline)}
-                  guessingDeadline={new Date(round.guessingDeadline)}
-                  testID={`round-${round.number}`}
-                />
-                {/* Only a round that is over has results to read — and the server's phase, not this
-                    device's clock, is what decides that. A skewed phone would otherwise link into a
-                    round the standings above still count as unscored. */}
-                {round.phase === 'results' &&
-                  (round.submittedCount === 0 ? (
-                    <Label>No tracks were submitted</Label>
+        {rounds.map((round) => {
+          const entry = seasonEntry(round);
+          return (
+            <JCard key={round.id}>
+              <HandText>{`Round ${round.number}`}</HandText>
+              {entry === 'see above' ? (
+                <Label>In progress — see above</Label>
+              ) : (
+                <>
+                  {round.theme ? (
+                    <BodyText>{round.theme}</BodyText>
                   ) : (
+                    <Label>{league.isHost ? 'Set a theme' : 'Theme not set yet'}</Label>
+                  )}
+                  <DeadlineRows
+                    submissionDeadline={new Date(round.submissionDeadline)}
+                    guessingDeadline={new Date(round.guessingDeadline)}
+                    testID={`round-${round.number}`}
+                  />
+                  {entry === 'no tracks' && <Label>No tracks were submitted</Label>}
+                  {entry === 'results' && (
                     <TapeButton
                       title={`Round ${round.number} results`}
                       variant="secondary"
-                      onPress={() =>
-                        router.push({ pathname: '/round/[roundId]/results', params: { roundId: round.id } })
-                      }
+                      onPress={() => router.push({ pathname: '/round/[roundId]/results', params: { roundId: round.id } })}
                     />
-                  ))}
-              </>
-            )}
-          </JCard>
-        ))}
+                  )}
+                </>
+              )}
+            </JCard>
+          );
+        })}
 
         <Sprocket />
         <JCard>

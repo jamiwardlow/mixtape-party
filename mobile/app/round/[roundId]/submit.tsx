@@ -6,7 +6,7 @@ import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { useApi } from '../../../lib/client';
 import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
-import { playbackHref, type Playback, type ServiceName } from '../../../lib/rounds';
+import { playbackHref, type MySubmission, type Playback, type RoundOverview, type ServiceName } from '../../../lib/rounds';
 import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 import { openPlaybackLink } from '../../../lib/bandcamp';
 
@@ -48,13 +48,13 @@ export default function SubmitTrack() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [current, setCurrent] = useState<{ submissionId: string; playback: Playback; service: ServiceName; title: string; artist: string; thumbnailUrl?: string | null } | null>(null);
+  const [current, setCurrent] = useState<MySubmission | null>(null);
   const [commentSaved, setCommentSaved] = useState(false);
   const [theme, setTheme] = useState<string | null>(null);
 
   // Editing: show the track already in, and start the comment box from what is saved.
   async function loadCurrent(withTrack = true) {
-    const res = await api<{ round: { theme: string | null; you: { submission: (NonNullable<typeof current> & { comment: string | null }) | null } } }>(`/rounds/${roundId}/overview`);
+    const res = await api<RoundOverview>(`/rounds/${roundId}/overview`);
     if (!res.ok) return;
     const { round } = res.data;
     setTheme(round.theme ?? null);
