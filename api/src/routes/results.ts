@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import type { Pool } from 'pg';
 import type { ServiceName } from '../adapters/types.js';
 import { playbackFor, serviceFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
 import { blockedIds, isUuid } from './blocks.js';
@@ -7,7 +6,8 @@ import { asPlayer, gateError, maskBlocked, rosterFor } from '../visibility.js';
 import { loadFavorites } from './guessing.js';
 import { listLeagues } from './leagues.js';
 import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isSeasonConcluded, roundSql } from '../roundTimeline.js';
+import { isSeasonConcluded } from '../roundTimeline.js';
+import { correctGuessCounts, countCorrectGuesses, isCorrectGuess, scoreboard, topBesties } from '../scoring.js';
 import {
   isLeagueMember,
   loadCurrentRound,
@@ -17,67 +17,6 @@ import {
 } from './rounds.js';
 
 export interface ResultsDeps extends AccountsDeps, AdapterRegistry {}
-
-/**
- * The one scoring rule, shared by a round's results, final standings and the league overview:
- * 1 point per correct guess, submitters never score for their own track, and `winners` is
- * everyone tied at the top -- no tiebreak, and nobody wins a scoreless board. Ranked by score
- * then name so ties come back in a stable order rather than whatever the roster query returned.
- */
-export function scoreboard(
-  members: Player[],
-  correctGuesses: Map<string, number>,
-): { scores: Array<Player & { score: number }>; winners: Array<Player & { score: number }> } {
-  const scores = members
-    .map((member) => ({ ...member, score: correctGuesses.get(member.accountId) ?? 0 }))
-    .sort((a, b) => b.score - a.score || (a.displayName ?? '').localeCompare(b.displayName ?? ''));
-  const topScore = Math.max(0, ...scores.map((s) => s.score));
-  return { scores, winners: topScore > 0 ? scores.filter((s) => s.score === topScore) : [] };
-}
-
-/**
- * Correct guesses per player across a league's *scored* rounds. A round still being guessed is
- * excluded: a running correct-guess count mid-round narrows what is left to guess, which is the
- * same leak the submitter list is withheld for.
- */
-export async function correctGuessCounts(pool: Pool, leagueId: string): Promise<Map<string, number>> {
-  const result = await pool.query<{ guesser_account_id: string; correct_count: string }>(
-    `SELECT g.guesser_account_id, count(*) AS correct_count
-     FROM guesses g
-     JOIN submissions s ON s.id = g.submission_id
-     JOIN rounds r ON r.id = s.round_id
-     WHERE r.league_id = $1 AND g.guessed_account_id = s.account_id
-       AND ${roundSql('r').scored}
-     GROUP BY g.guesser_account_id`,
-    [leagueId],
-  );
-  return new Map(result.rows.map((row) => [row.guesser_account_id, Number(row.correct_count)]));
-}
-
-type Bestie = Player & { count: number };
-
-/**
- * The top 3 players paired with `accountId` by correct guesses across every league's scored
- * rounds, or just `leagueId`'s when given (same deadline rule as `correctGuessCounts`). `guessedMe` = people who guessed my tracks;
- * `iGuessed` = people whose tracks I guessed.
- */
-export async function topBesties(pool: Pool, accountId: string, direction: 'guessedMe' | 'iGuessed', leagueId?: string): Promise<Bestie[]> {
-  const [meCol, themCol] = direction === 'guessedMe' ? ['s.account_id', 'g.guesser_account_id'] : ['g.guesser_account_id', 's.account_id'];
-  const result = await pool.query<{ account_id: string; display_name: string | null; count: string }>(
-    `SELECT a.id AS account_id, a.display_name, count(*) AS count
-     FROM guesses g
-     JOIN submissions s ON s.id = g.submission_id
-     JOIN rounds r ON r.id = s.round_id
-     JOIN accounts a ON a.id = ${themCol}
-     WHERE ${meCol} = $1 AND ${themCol} <> $1 AND g.guessed_account_id = s.account_id
-       AND ${roundSql('r').scored}${leagueId ? ' AND r.league_id = $2' : ''}
-     GROUP BY a.id, a.display_name
-     ORDER BY count(*) DESC, a.display_name, a.id
-     LIMIT 3`,
-    leagueId ? [accountId, leagueId] : [accountId],
-  );
-  return result.rows.map((row) => ({ accountId: row.account_id, displayName: row.display_name, count: Number(row.count) }));
-}
 
 export function createResultsRouter(deps: ResultsDeps): Router {
   const router = Router();
@@ -200,22 +139,24 @@ export function createResultsRouter(deps: ResultsDeps): Router {
     const guessesResult = await deps.pool.query<{
       submission_id: string;
       guesser_account_id: string;
-      correct: boolean;
+      guesserId: string;
+      guessedId: string;
+      submitterId: string;
       id: string;
       comment: string | null;
     }>(
-      `SELECT g.id, g.comment, g.submission_id, g.guesser_account_id, (g.guessed_account_id = s.account_id) AS correct
+      `SELECT g.id, g.comment, g.submission_id, g.guesser_account_id, g.guesser_account_id AS "guesserId", g.guessed_account_id AS "guessedId", s.account_id AS "submitterId"
        FROM guesses g
        JOIN submissions s ON s.id = g.submission_id
        WHERE s.round_id = $1`,
       [req.params.roundId],
     );
 
+    const guesses = guessesResult.rows;
+    const scores = countCorrectGuesses(guesses);
     const correctGuessersBySubmission = new Map<string, Player[]>();
-    const scores = new Map<string, number>(roster.map((p) => [p.accountId, 0]));
-    for (const guess of guessesResult.rows) {
-      if (!guess.correct) continue;
-      scores.set(guess.guesser_account_id, (scores.get(guess.guesser_account_id) ?? 0) + 1);
+    for (const guess of guesses) {
+      if (!isCorrectGuess(guess)) continue;
       const guesser = players.get(guess.guesser_account_id);
       if (!guesser) continue;
       const existing = correctGuessersBySubmission.get(guess.submission_id) ?? [];

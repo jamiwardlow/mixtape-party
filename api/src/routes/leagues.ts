@@ -14,7 +14,7 @@ import {
 import { CURRENT_ROUND_CLAUSE, isSeasonConcluded, roundPhase, roundSql } from '../roundTimeline.js';
 import { checkDeadlineOrder, deleteRound, editRound, insertSeason, planSeason, type Refusal, type RoundRow } from '../seasonSchedule.js';
 import { asPlayer, describeRound, emptyRoundActivity, rosterFor, type RoundActivity } from '../visibility.js';
-import { correctGuessCounts, scoreboard } from './results.js';
+import { correctGuessCounts, scoreboard } from '../scoring.js';
 
 export type LeaguesDeps = AccountsDeps & AdapterRegistry;
 

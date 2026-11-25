@@ -5,6 +5,7 @@ import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.j
 import { hasBlocked } from './blocks.js';
 import { targetGateError, type Target } from '../visibility.js';
 import { roundSql } from '../roundTimeline.js';
+import { owesGuessesSql } from '../scoring.js';
 
 export interface CommentsDeps extends AccountsDeps {
   pushChannel: PushChannel;
@@ -198,9 +199,7 @@ export function createCommentsRouter(deps: CommentsDeps): Router {
         if (recent.rowCount) return;
         const unfinished = (
           await deps.pool.query(
-            `SELECT (SELECT count(*) FROM guesses g JOIN submissions s ON s.id = g.submission_id
-                     WHERE s.round_id = $1 AND g.guesser_account_id = $2)
-                  < (SELECT count(*) FROM submissions WHERE round_id = $1 AND account_id != $2) AS unfinished`,
+            `SELECT ${owesGuessesSql('$1', '$2')} AS unfinished`,
             [owner.round_id, owner.recipient],
           )
         ).rows[0].unfinished;

@@ -3,6 +3,7 @@ import { exportableServiceNames, serviceFor } from '../adapters/registry.js';
 import type { ServiceName } from '../adapters/types.js';
 import { buildRoundExports, RoundExportDeps } from '../routes/export.js';
 import { roundSql, seasonConcludedSql } from '../roundTimeline.js';
+import { owesGuessesSql } from '../scoring.js';
 import { WINDOW_REMINDERS, type Window } from '../seasonSchedule.js';
 import type { EmailChannel, NotificationPayload, NotificationType, PushChannel, PushToken } from './types.js';
 
@@ -112,13 +113,7 @@ async function unfinishedGuesserIds(pool: Pool, round: DueRound): Promise<string
     `SELECT lm.account_id FROM league_members lm
      WHERE lm.league_id = $1
        AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = lm.account_id AND a.deleted_at IS NOT NULL)
-       AND (
-         SELECT count(*) FROM guesses g
-         JOIN submissions s ON s.id = g.submission_id
-         WHERE s.round_id = $2 AND g.guesser_account_id = lm.account_id
-       ) < (
-         SELECT count(*) FROM submissions s WHERE s.round_id = $2 AND s.account_id != lm.account_id
-       )`,
+       AND ${owesGuessesSql('$2', 'lm.account_id')}`,
     [round.league_id, round.id],
   );
   return result.rows.map((r) => r.account_id);

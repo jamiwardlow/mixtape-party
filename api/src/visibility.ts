@@ -4,6 +4,7 @@ import { avatarUrlOf } from './routes/accounts.js';
 import { blockedIds } from './routes/blocks.js';
 import { isLeagueMember, type Player } from './routes/rounds.js';
 import { guessingOpened, isScored, roundPhase, type RoundSchedule } from './roundTimeline.js';
+import { finishedGuessing, guessesRemaining } from './scoring.js';
 
 /**
  * Who can see and act on what in a league -- PRODUCT.md Principle 1 in one place. Routes ask this
@@ -132,9 +133,6 @@ export function describeRound(
 ) {
   const phase = roundPhase(round, now);
   const submitters = new Set(activity.submitterIds);
-  // Everything in the round except your own track; a player who never submitted owes a guess on
-  // all of them.
-  const owedCount = (accountId: string) => submitters.size - (submitters.has(accountId) ? 1 : 0);
   const guessesMade = (accountId: string) => activity.guessCounts.get(accountId) ?? 0;
 
   return {
@@ -148,12 +146,10 @@ export function describeRound(
             (id) => players.get(id) ?? { accountId: id, displayName: null },
           ),
         }),
-    guessedPlayers: [...players.values()].filter(
-      (p) => guessesMade(p.accountId) > 0 && guessesMade(p.accountId) >= owedCount(p.accountId),
-    ),
+    guessedPlayers: [...players.values()].filter((p) => finishedGuessing(submitters, p.accountId, guessesMade(p.accountId))),
     you: {
       submitted: submitters.has(viewerAccountId),
-      guessesRemaining: Math.max(0, owedCount(viewerAccountId) - guessesMade(viewerAccountId)),
+      guessesRemaining: guessesRemaining(submitters, viewerAccountId, guessesMade(viewerAccountId)),
       // Unconditional, on purpose: your own track is not a hint about anyone, in any phase, so it
       // sits outside the anonymity branch above. There is exactly one phase branch in here.
       submission: activity.yourSubmission,
