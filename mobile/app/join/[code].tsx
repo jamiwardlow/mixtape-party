@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { useReconnectEpoch } from '../../lib/api';
 import { useApi } from '../../lib/client';
+import { useProfile } from '../../lib/profile';
 import { useSession } from '../../lib/session';
 import { BodyText, ErrorNote, HandText, Page, ReelSpinner, TapeButton } from '../../lib/ui';
 
@@ -18,6 +19,7 @@ export default function JoinLeague() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { token, setPendingInviteCode } = useSession();
   const api = useApi();
+  const { joinInvite } = useProfile();
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -48,7 +50,7 @@ export default function JoinLeague() {
   async function join() {
     setJoining(true);
     setError(null);
-    const res = await api(`/leagues/invite/${code}/join`, { method: 'POST', fallback: 'Could not join the league' });
+    const res = await joinInvite(code);
     setJoining(false);
     if (res.ok) setJoined(true);
     else setError(res.error);

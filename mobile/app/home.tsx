@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import { useApi, useResource } from "../lib/client";
+import { useResource } from "../lib/client";
+import { useProfile } from "../lib/profile";
 import { useSession } from "../lib/session";
 import { deviceStorage } from "../lib/storage";
 import { phaseLabel, type RoundPhase } from "../lib/rounds";
@@ -41,10 +42,9 @@ const NAME_SKIPPED_KEY = "name_prompt_skipped";
 
 export default function Home() {
   const t = useTheme();
-  const { profile, token, signOut, refreshProfile, pendingInviteCode, setPendingInviteCode } =
-    useSession();
+  const { token, signOut, pendingInviteCode } = useSession();
+  const { profile, update, joinInvite } = useProfile();
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
-  const api = useApi();
   // Refetches on every focus and on reconnect; a failed load leaves the list empty and the
   // offline banner explains.
   const { data, reload: loadLeagues } = useResource<{ leagues: LeagueSummary[] }>("/leagues/mine", "");
@@ -72,9 +72,8 @@ export default function Home() {
     const trimmed = name.trim();
     if (!trimmed) return;
     setNameError(null);
-    const res = await api("/accounts/me", { method: "PATCH", body: { displayName: trimmed }, fallback: "Couldn't save your name. Try again." });
-    if (!res.ok) return setNameError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
-    await refreshProfile();
+    const res = await update({ displayName: trimmed }, "Couldn't save your name. Try again.");
+    if (!res.ok) setNameError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
   }
 
   function skipName() {
@@ -84,14 +83,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!token || !pendingInviteCode) return;
-    void api(`/leagues/invite/${pendingInviteCode}/join`, { method: "POST" }).then(async (res) => {
-      // Cleared only once the server has answered — the code is persisted now, so a request that
-      // never lands (offline, API down) leaves it in place to retry on the next load instead of
-      // silently dropping the join the invite link was opened for.
+    void joinInvite(pendingInviteCode).then(async (res) => {
+      // joinInvite keeps the code when offline, so the next load retries.
       if (!res.ok && res.status === 0) {
         return setJoinMessage("Couldn't reach the server to finish joining. We'll try again next time.");
       }
-      setPendingInviteCode(null);
       setJoinMessage(res.ok ? "You're in! Check the invite to see your new league." : "Couldn't finish joining that league.");
       if (res.ok) await loadLeagues();
     });

@@ -8,6 +8,7 @@ import { BestieGroup, type Bestie } from '../lib/BestieGroup';
 import { LegalLinks } from '../lib/legal';
 import { BlockedPlayers } from '../lib/Moderation';
 import { useApi, useResource } from '../lib/client';
+import { useProfile } from '../lib/profile';
 import { useSession } from '../lib/session';
 import { BodyText, ErrorNote, HandText, JCard, Label, PressScale, ReelSpinner, Screen, TapeButton, TapeInput } from '../lib/ui';
 
@@ -129,7 +130,9 @@ function LeagueGroup({ title, empty, leagues }: { title: string; empty: string; 
 }
 
 export default function Account() {
-  const { profile, refreshProfile, signOut } = useSession();
+  const { signOut } = useSession();
+  const profileActions = useProfile();
+  const { profile, update } = profileActions;
   const api = useApi();
   const [name, setName] = useState(profile?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
@@ -165,13 +168,8 @@ export default function Account() {
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
       const bytes = await (await fetch(small.uri)).blob();
-      const res = await api('/accounts/me/avatar', {
-        method: 'PUT',
-        upload: { bytes, contentType: 'image/jpeg' },
-        fallback: "Couldn't upload your photo. Try again.",
-      });
-      if (!res.ok) return setAvatarError(res.error);
-      await refreshProfile();
+      const res = await profileActions.uploadAvatar(bytes, "Couldn't upload your photo. Try again.");
+      if (!res.ok) setAvatarError(res.error);
     } catch {
       setAvatarError("Couldn't upload your photo. Try again.");
     } finally {
@@ -183,9 +181,8 @@ export default function Account() {
     if (avatarBusy) return;
     setAvatarError(null);
     setAvatarBusy(true);
-    const res = await api('/accounts/me/avatar', { method: 'DELETE' });
-    if (res.ok) await refreshProfile();
-    else setAvatarError(res.status === 0 ? "Couldn't reach the server. Try again." : "Couldn't remove your photo. Try again.");
+    const res = await profileActions.removeAvatar();
+    if (!res.ok) setAvatarError(res.status === 0 ? "Couldn't reach the server. Try again." : "Couldn't remove your photo. Try again.");
     setAvatarBusy(false);
   }
 
@@ -230,13 +227,9 @@ export default function Account() {
       return;
     }
     setSavingName(true);
-    const res = await api('/accounts/me', { method: 'PATCH', body: { displayName: trimmed }, fallback: "Couldn't save your name. Try again." });
-    if (res.ok) {
-      // The name shown everywhere else comes off the session profile, so re-read it and the change
-      // lands without a sign-out.
-      await refreshProfile();
-      setNameSaved(true);
-    } else setNameError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
+    const res = await update({ displayName: trimmed }, "Couldn't save your name. Try again.");
+    if (res.ok) setNameSaved(true);
+    else setNameError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
     setSavingName(false);
   }
 
@@ -256,11 +249,9 @@ export default function Account() {
     setAboutError(null);
     setAboutSaved(false);
     setSavingAbout(true);
-    const res = await api('/accounts/me', { method: 'PATCH', body: { pronouns, aboutMe }, fallback: "Couldn't save that. Try again." });
-    if (res.ok) {
-      await refreshProfile();
-      setAboutSaved(true);
-    } else setAboutError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
+    const res = await update({ pronouns, aboutMe }, "Couldn't save that. Try again.");
+    if (res.ok) setAboutSaved(true);
+    else setAboutError(res.status === 0 ? "Couldn't reach the server. Try again." : res.error);
     setSavingAbout(false);
   }
 
