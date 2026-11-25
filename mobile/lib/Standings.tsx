@@ -25,13 +25,13 @@ export function WinnersRow({ winners }: { winners: Score[] }) {
   );
 }
 
-export function StandingRows({ standings }: { standings: Score[] }) {
+export function StandingRows({ standings, firstRank = 1 }: { standings: Score[]; firstRank?: number }) {
   return (
     <>
       {standings.map((player, i) => (
         <PlayerLink key={player.accountId} accountId={player.accountId}>
         <LeaderboardRow
-          rank={i + 1}
+          rank={i + firstRank}
           name={nameOf(player)}
           points={player.score}
           pointsTestID={`standings-${player.accountId}`}

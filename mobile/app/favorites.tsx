@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Linking, View } from 'react-native';
 import { useApi, useResource } from '../lib/client';
 import { FavoritesList, type Favorite } from '../lib/FavoritesList';
-import { usePreview } from '../lib/preview';
+import { submissionPreviewPath, usePreview } from '../lib/preview';
 import { playbackHref } from '../lib/rounds';
 import { BodyText, ErrorNote, JCard, Label, ReelSpinner, Screen, TapeButton } from '../lib/ui';
 
@@ -21,8 +21,6 @@ interface ExportLeg {
   skipped: Skipped[];
 }
 
-const previewPath = (submissionId: string) => `/submissions/${submissionId}/preview`;
-
 export default function Favorites() {
   const api = useApi();
   const { data, status, setData } = useResource<{ favorites: Favorite[]; playlistUrl: string | null }>('/favorites', '');
@@ -34,9 +32,8 @@ export default function Favorites() {
   const playlistUrl = exportedUrl ?? data?.playlistUrl ?? null;
   const [exportLeg, setExportLeg] = useState<ExportLeg | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [noPreview, setNoPreview] = useState<string | null>(null);
   // /favorites carries no playback link, so a track with no preview just says so.
-  const { playingId, toggle } = usePreview(previewPath, setNoPreview);
+  const { playingId, unavailableId: noPreview, toggle } = usePreview(submissionPreviewPath, null);
 
   async function unfavorite(submissionId: string) {
     setError(null);
@@ -101,10 +98,7 @@ export default function Favorites() {
           empty="No favorites yet. Tap the heart on a track on a round's results screen to save it here."
           playingId={playingId}
           noPreview={noPreview}
-          onPlay={(id) => {
-            setNoPreview(null);
-            toggle(id);
-          }}
+          onPlay={toggle}
           onUnfavorite={unfavorite}
         />
       )}

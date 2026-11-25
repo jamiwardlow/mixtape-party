@@ -1,15 +1,16 @@
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
-import { useReconnectEpoch } from '../../../lib/api';
 import { Avatar } from '../../../lib/Avatar';
 import { useApi, useResource } from '../../../lib/client';
-import { ReportBlock } from '../../../lib/Moderation';
+import { CommentThread, type Comment, type ThreadActions } from '../../../lib/CommentThread';
 import { PlayerLink } from '../../../lib/PlayerLink';
-import { usePreview } from '../../../lib/preview';
-import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
-import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
+import { submissionPreviewPath, usePreview } from '../../../lib/preview';
+import { FavoriteHeart, Reactions, type Reaction } from '../../../lib/Reactions';
+import { useRoundExport, useTrackReactions, type ServiceExport } from '../../../lib/roundTracks';
+import { nameOf, playbackHref, type Playback, type Player, type Score, type ServiceName } from '../../../lib/rounds';
+import { StandingRows } from '../../../lib/Standings';
 import { SERVICE_META, useTheme } from '../../../lib/theme';
 import {
   BodyText,
@@ -17,7 +18,6 @@ import {
   HandText,
   JCard,
   Label,
-  LeaderboardRow,
   RoundGate,
   Screen,
   ServiceBadge,
@@ -26,28 +26,8 @@ import {
   TapeButton,
   TapeInput,
 } from '../../../lib/ui';
-import { openPlaybackLink } from '../../../lib/bandcamp';
-
-interface Reply {
-  replyId: string;
-  parentReplyId: string | null;
-  mine: boolean;
-  author: Player;
-  body: string;
-  reactions: Reaction[];
-}
-
-interface Comment {
-  guessId: string;
-  guesser: Player;
-  mine: boolean;
-  comment: string;
-  reactions: Reaction[];
-  replies: Reply[];
-}
 
 // Not round-scoped: results are open to every member, so this skips the guessing-phase gate.
-const previewPath = (id: string) => `/submissions/${id}/preview`;
 
 interface Track {
   submissionId: string;
@@ -66,25 +46,10 @@ interface Track {
   yourGuess: { comment: string | null } | null;
 }
 
-interface Score extends Player {
-  score: number;
-}
-
 interface Results {
   tracks: Track[];
   scores: Score[];
   winners: Player[];
-}
-
-/**
- * One service's leg of this round's export, as the API reports it (#73). `playlistUrl` is null for
- * every status but `ok`, so the status is the only thing that tells a missing playlist apart from
- * a broken one.
- */
-interface ServiceExport {
-  service: ServiceName;
-  status: 'ok' | 'no_matches' | 'failed';
-  playlistUrl: string | null;
 }
 
 /**
@@ -105,127 +70,6 @@ function exportProblem({ service, status }: ServiceExport): string | null {
     default:
       return null;
   }
-}
-
-interface ThreadActions {
-  reply: (guessId: string, body: string, parentReplyId?: string) => Promise<void>;
-  editReply: (replyId: string, body: string) => Promise<void>;
-  deleteReply: (replyId: string) => Promise<void>;
-  react: (path: string, emoji: string) => Promise<void>;
-  /** Re-reads the results, e.g. after blocking someone. */
-  /** Comment or reply a link or push pointed at; drawn with a marker. */
-  focus?: string;
-}
-
-/** A reply, the replies under it, and the controls its viewer is allowed: anyone replies, only its author edits or deletes. */
-function ReplyNode({
-  reply,
-  guessId,
-  replies,
-  actions,
-  depth,
-}: {
-  reply: Reply;
-  guessId: string;
-  replies: Reply[];
-  actions: ThreadActions;
-  depth: number;
-}) {
-  const [mode, setMode] = useState<'view' | 'reply' | 'edit'>('view');
-  const [draft, setDraft] = useState('');
-  const children = replies.filter((r) => r.parentReplyId === reply.replyId);
-
-  async function submit() {
-    if (!draft.trim()) return;
-    if (mode === 'edit') await actions.editReply(reply.replyId, draft);
-    else await actions.reply(guessId, draft, reply.replyId);
-    setMode('view');
-    setDraft('');
-  }
-
-  return (
-    // Indent stops growing after a few levels so a long back-and-forth stays on screen.
-    <View
-      style={{
-        marginLeft: depth < 4 ? 16 : 0,
-        gap: 6,
-        ...(actions.focus === reply.replyId && { borderLeftWidth: 3, paddingLeft: 6 }),
-      }}
-    >
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-        {reply.mine ? (
-          <HandText>You</HandText>
-        ) : (
-          <PlayerLink accountId={reply.author.accountId}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Avatar size={20} label="" url={reply.author.avatarUrl} initial={(reply.author.displayName ?? '?')[0]} />
-              <HandText>{reply.author.displayName ?? 'A player'}</HandText>
-            </View>
-          </PlayerLink>
-        )}
-        <BodyText>{reply.body}</BodyText>
-      </View>
-      <Reactions reactions={reply.reactions} onToggle={(e) => actions.react(`/replies/${reply.replyId}/reactions`, e)} />
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <TapeButton title="Reply" variant="secondary" onPress={() => { setDraft(''); setMode(mode === 'reply' ? 'view' : 'reply'); }} />
-        {reply.mine ? (
-          <>
-            <TapeButton title="Edit" variant="secondary" onPress={() => { setDraft(reply.body); setMode(mode === 'edit' ? 'view' : 'edit'); }} />
-            <TapeButton title="Delete" variant="secondary" onPress={() => actions.deleteReply(reply.replyId)} />
-          </>
-        ) : (
-          <ReportBlock author={reply.author} targetType="reply" targetId={reply.replyId} />
-        )}
-      </View>
-      {mode !== 'view' ? (
-        <>
-          <TapeInput placeholder={mode === 'edit' ? 'Edit your reply' : 'Your reply'} value={draft} onChangeText={setDraft} maxLength={500} />
-          <TapeButton title={mode === 'edit' ? 'Save reply' : 'Send reply'} variant="secondary" onPress={submit} />
-        </>
-      ) : null}
-      {children.map((child) => (
-        <ReplyNode key={child.replyId} reply={child} guessId={guessId} replies={replies} actions={actions} depth={depth + 1} />
-      ))}
-    </View>
-  );
-}
-
-function CommentThread({ comment, actions }: { comment: Comment; actions: ThreadActions }) {
-  const [reply, setReply] = useState('');
-  return (
-    <View style={{ gap: 6, ...(actions.focus === comment.guessId && { borderLeftWidth: 3, paddingLeft: 6 }) }}>
-      {/* Your own comment is already on screen in its editor. */}
-      {comment.mine ? null : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-          <PlayerLink accountId={comment.guesser.accountId}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Avatar size={20} label="" url={comment.guesser.avatarUrl} initial={(comment.guesser.displayName ?? '?')[0]} />
-              <HandText>{comment.guesser.displayName ?? 'A player'}</HandText>
-            </View>
-          </PlayerLink>
-          <BodyText>“{comment.comment}”</BodyText>
-        </View>
-      )}
-      {comment.mine ? null : <ReportBlock author={comment.guesser} targetType="comment" targetId={comment.guessId} />}
-      <Reactions reactions={comment.reactions} onToggle={(e) => actions.react(`/guesses/${comment.guessId}/reactions`, e)} />
-      {comment.replies
-        .filter((r) => r.parentReplyId === null)
-        .map((r) => (
-          <ReplyNode key={r.replyId} reply={r} guessId={comment.guessId} replies={comment.replies} actions={actions} depth={1} />
-        ))}
-      <TapeInput placeholder="Reply" value={reply} onChangeText={setReply} maxLength={500} />
-      {reply.trim() ? (
-        <TapeButton
-          title="Send reply"
-          variant="secondary"
-          onPress={async () => {
-            await actions.reply(comment.guessId, reply);
-            setReply('');
-          }}
-        />
-      ) : null}
-    </View>
-  );
 }
 
 /** Your own comment on a track you guessed, editable here for as long as the results are up. */
@@ -251,13 +95,15 @@ function TrackCard({
   favorite,
   playingId,
   onPlay,
+  onReact,
   onSaveComment,
 }: {
   item: Track;
   playingId: string | null;
   onPlay: (submissionId: string) => void;
   actions: ThreadActions;
-  favorite: ReturnType<typeof useFavorite>;
+  favorite: ReturnType<typeof useTrackReactions>['favorite'];
+  onReact: (emoji: string) => void;
   onSaveComment: (comment: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(hasFocus(item, actions.focus));
@@ -279,20 +125,20 @@ function TrackCard({
       {item.note && <BodyText>“{item.note}”</BodyText>}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <View style={{ flex: 1 }}>
-          <Reactions reactions={item.reactions} onToggle={(e) => actions.react(`/submissions/${item.submissionId}/reactions`, e)} />
+          <Reactions reactions={item.reactions} onToggle={onReact} />
         </View>
         <FavoriteHeart favorited={item.favorited} onPress={() => favorite.toggle(item.submissionId, item.favorited)} />
       </View>
       <Sprocket />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Label>Submitted by</Label>
-        <Avatar size={20} label="" url={item.submitter.avatarUrl} initial={(item.submitter.displayName ?? '?')[0]} />
-        <HandText>{item.submitter.displayName ?? 'a player'}</HandText>
+        <Avatar size={20} label="" url={item.submitter.avatarUrl} initial={item.submitter.displayName?.[0] ?? '?'} />
+        <HandText>{nameOf(item.submitter)}</HandText>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
         <Label>Guessed by</Label>
         {item.correctGuessers.length > 0 ? (
-          <HandText>{item.correctGuessers.map((g) => g.displayName ?? 'a player').join(', ')}</HandText>
+          <HandText>{item.correctGuessers.map(nameOf).join(', ')}</HandText>
         ) : (
           <Label>Nobody</Label>
         )}
@@ -323,7 +169,7 @@ function Podium({ results }: { results: Results }) {
   const rank = (s: Score) => Math.min(scores.filter((o) => o.score > s.score).length, 2); // ties share
   // 2nd left, 1st centre, 3rd right; with fewer players the gaps just close up.
   const order = [scores[1], scores[0], scores[2]].filter((s): s is Score => !!s);
-  const names = winners.map((w) => w.displayName ?? 'A player').join(', ');
+  const names = winners.map(nameOf).join(', ');
   return (
     <JCard>
       {names ? <HandText>{names} {winners.length > 1 ? 'take' : 'takes'} the round 🏆</HandText> : null}
@@ -346,24 +192,15 @@ function Podium({ results }: { results: Results }) {
                   backgroundColor: podiumColor[rank(s)],
                 }}
               >
-                <Avatar size={28} label="" url={s.avatarUrl} initial={(s.displayName ?? '?')[0]} />
-                <BodyText numberOfLines={1} style={{ fontSize: 13, color: t.accentInk }}>{s.displayName ?? 'A player'}</BodyText>
+                <Avatar size={28} label="" url={s.avatarUrl} initial={s.displayName?.[0] ?? '?'} />
+                <BodyText numberOfLines={1} style={{ fontSize: 13, color: t.accentInk }}>{nameOf(s)}</BodyText>
                 <BodyText style={{ fontSize: 13, color: t.accentInk }}>{s.score} pts</BodyText>
               </View>
             </PlayerLink>
           </View>
         ))}
       </View>
-      {scores.slice(3).map((s, i) => (
-        <PlayerLink key={s.accountId} accountId={s.accountId}>
-          <LeaderboardRow
-            rank={i + 4}
-            name={s.displayName ?? 'A player'}
-            points={s.score}
-            avatar={<Avatar size={28} label="" url={s.avatarUrl} initial={(s.displayName ?? '?')[0]} />}
-          />
-        </PlayerLink>
-      ))}
+      <StandingRows standings={scores.slice(3)} firstRank={4} />
     </JCard>
   );
 }
@@ -376,25 +213,15 @@ export default function RoundResults() {
     `/rounds/${roundId}/results`,
     'Results are not available for this round',
   );
-  const [exports, setExports] = useState<ServiceExport[]>([]);
-
   // Each comment action posts, then re-reads the results so counts and threads match the server.
   async function act(path: string, method: string, body?: object) {
     await api(path, { method, body });
     await reload();
   }
 
-  const openInService = useCallback(
-    (submissionId: string) => {
-      const track = results?.tracks.find((t) => t.submissionId === submissionId);
-      if (track) openPlaybackLink(playbackHref(track.playback));
-    },
-    [results],
-  );
-  const { playingId, toggle } = usePreview(previewPath, openInService);
-  const favorite = useFavorite((submissionId, on) =>
-    setResults((r) => ({ ...r, tracks: r.tracks.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t)) })),
-  );
+  const setTracks = (update: (prev: Track[]) => Track[]) => setResults((r) => ({ ...r, tracks: update(r.tracks) }));
+  const { react, favorite } = useTrackReactions(setTracks);
+  const { playingId, toggle } = usePreview(submissionPreviewPath, results?.tracks);
   const saveComment = (submissionId: string, comment: string) =>
     act(`/rounds/${roundId}/submissions/${submissionId}/guesses/comment`, 'PUT', { comment });
   const actions: ThreadActions = {
@@ -414,24 +241,7 @@ export default function RoundResults() {
     scroller.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: false });
   };
 
-  const loaded = results !== null;
-  const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!loaded) return;
-    (async () => {
-
-      // First view of the results is what triggers the export; the route builds each playlist once
-      // per round, so a revisit -- or another player's first view -- reads back the same one. It can
-      // take a while (every track is matched into each service's catalog), so the links land after
-      // the results rather than holding them up.
-      //
-      // The route settles each service on its own now (#73), so a non-2xx here means the request
-      // itself died -- nothing per-service to report, and still not a reason to gate the scores.
-      const exported = await api<{ services: ServiceExport[] }>(`/rounds/${roundId}/export`, { method: 'POST' });
-      if (exported.ok) setExports(exported.data.services);
-    })();
-    // Not on `api`: its identity follows the session's, and one export per load is the point.
-  }, [loaded, roundId, epoch]);
+  const exports = useRoundExport(roundId, results !== null);
 
   const playlists = exports.flatMap((e) => (e.playlistUrl ? [{ ...e, playlistUrl: e.playlistUrl }] : []));
   const problems = exports.flatMap((e) => {
@@ -485,6 +295,7 @@ export default function RoundResults() {
               favorite={favorite}
               playingId={playingId}
               onPlay={toggle}
+              onReact={(emoji) => react(item.submissionId, emoji)}
               onSaveComment={(comment) => saveComment(item.submissionId, comment)}
             />
           </View>

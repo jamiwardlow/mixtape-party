@@ -1,11 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useResource } from '../../../lib/client';
-import { usePreview } from '../../../lib/preview';
+import { submissionPreviewPath, usePreview } from '../../../lib/preview';
 import { guessesLine, nameOf, nextStep, playbackHref, roundStatus, submitterNames, type RoundOverview } from '../../../lib/rounds';
 import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
-import { openPlaybackLink } from '../../../lib/bandcamp';
 
 /**
  * The canonical URL for a round, in any phase. Every other round screen is a phase — a link to
@@ -19,8 +17,7 @@ export default function RoundOverview() {
   // would otherwise show as missing until a remount.
   const { data: overview, error } = useResource<RoundOverview>(`/rounds/${roundId}/overview`, 'Could not load this round');
   const mine = overview?.round.you.submission;
-  const openInService = useCallback(() => mine && openPlaybackLink(playbackHref(mine.playback)), [mine]);
-  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), openInService);
+  const { playingId, toggle } = usePreview(submissionPreviewPath, mine && [mine]);
 
   if (!overview) {
     return (

@@ -336,6 +336,24 @@ describe('reactions and the fold', () => {
     expect(screen.queryByLabelText('React 🎧')).toBeNull();
   });
 
+  it('shows your reaction on the track without reloading the results', async () => {
+    globalThis.fetch = jest.fn(async (url: string) =>
+      String(url).includes('/export')
+        ? ok({ services: [] })
+        : String(url).includes('/reactions')
+          ? ok({ reacted: true })
+          : ok({ ...results, tracks: [track] }),
+    ) as unknown as typeof fetch;
+    await render(<RoundResults />);
+
+    await fireEvent.press(await screen.findByLabelText('Add reaction'));
+    await fireEvent.press(screen.getByLabelText('React 🎧'));
+
+    expect(await screen.findByText('🎧 1 ✓')).toBeTruthy();
+    const loads = (fetch as jest.Mock).mock.calls.filter(([u]) => /\/results$/.test(String(u)));
+    expect(loads).toHaveLength(1);
+  });
+
   it('takes any typed emoji', async () => {
     stub();
     await render(<RoundResults />);

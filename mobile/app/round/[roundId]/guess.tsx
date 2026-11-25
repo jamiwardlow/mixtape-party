@@ -1,14 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { FlatList, Linking, View } from 'react-native';
-import { useReconnectEpoch } from '../../../lib/api';
 import { useApi, useResource } from '../../../lib/client';
-import { FavoriteHeart, Reactions, useFavorite, type Reaction } from '../../../lib/Reactions';
+import { FavoriteHeart, Reactions, type Reaction } from '../../../lib/Reactions';
 import { usePreview } from '../../../lib/preview';
-import { playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
+import { commentSaved, guessed, unguessed, useRoundExport, useTrackReactions } from '../../../lib/roundTracks';
+import { nameOf, playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
 import { BodyText, Chip, ErrorNote, JCard, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
-import { openPlaybackLink } from '../../../lib/bandcamp';
 
 interface Track {
   submissionId: string;
@@ -26,6 +25,8 @@ interface Track {
   mine?: boolean;
 }
 
+const previewPath = (roundId: string) => (id: string) => `/rounds/${roundId}/submissions/${id}/preview`;
+
 export default function GuessRound() {
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   const api = useApi();
@@ -36,25 +37,14 @@ export default function GuessRound() {
   const tracks = data?.tracks ?? null;
   const players = data?.players ?? [];
   const setTracks = (update: (prev: Track[]) => Track[]) => setData((d) => ({ ...d, tracks: update(d.tracks) }));
-  const [playlistUrl, setPlaylistUrl] = useState<string | null>(null);
+  // A failure or a Bandcamp-only round leaves no link.
+  const playlistUrl = useRoundExport(roundId, data !== null).find((s) => s.playlistUrl)?.playlistUrl ?? null;
   // Per-track comment drafts, sent with the guess and editable (saved separately) after it. A
   // refetch seeds new tracks only: what's typed in a box survives it.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   useEffect(() => {
     if (tracks) setDrafts((d) => ({ ...Object.fromEntries(tracks.map((t) => [t.submissionId, t.comment ?? ''])), ...d }));
   }, [tracks]);
-
-  const loaded = data !== null;
-  const epoch = useReconnectEpoch();
-  useEffect(() => {
-    if (!loaded) return;
-    // The sweep builds the playlist when submissions close; this reads its url back (the route
-    // builds it if the sweep hasn't yet). A failure or a Bandcamp-only round leaves no link.
-    void api<{ services: { playlistUrl: string | null }[] }>(`/rounds/${roundId}/export`, { method: 'POST' }).then((r) => {
-      if (r.ok) setPlaylistUrl(r.data.services.find((s) => s.playlistUrl)?.playlistUrl ?? null);
-    });
-    // Not on `api`: its identity follows the session's.
-  }, [loaded, roundId, epoch]);
 
   async function guess(submissionId: string, guessedAccountId: string) {
     // Changing a guess leaves the saved comment alone (Save comment owns it); a first guess carries the draft.
@@ -63,23 +53,13 @@ export default function GuessRound() {
       method: 'POST',
       body: changing ? { guessedAccountId } : { guessedAccountId, comment: drafts[submissionId] },
     });
-    if (res.ok) {
-      setTracks((prev) =>
-        prev.map((t) =>
-          t.submissionId !== submissionId
-            ? t
-            : { ...t, guessedAccountId, comment: changing ? t.comment : drafts[submissionId]?.trim() || null },
-        ),
-      );
-    }
+    if (res.ok) setTracks((prev) => guessed(prev, submissionId, guessedAccountId, drafts[submissionId]));
   }
 
   async function unguess(submissionId: string) {
     const res = await api(`/rounds/${roundId}/submissions/${submissionId}/guesses`, { method: 'DELETE' });
-    if (res.ok) {
-      // The server drops the comment with the guess; the draft stays in the box to re-send with the next guess.
-      setTracks((prev) => prev.map((t) => (t.submissionId === submissionId ? { ...t, guessedAccountId: null, comment: null } : t)));
-    }
+    // The draft stays in the box to re-send with the next guess.
+    if (res.ok) setTracks((prev) => unguessed(prev, submissionId));
   }
 
   async function saveComment(submissionId: string) {
@@ -88,39 +68,12 @@ export default function GuessRound() {
       mine ? `/rounds/${roundId}/submissions/mine/note` : `/rounds/${roundId}/submissions/${submissionId}/guesses/comment`,
       { method: 'PUT', body: mine ? { note: drafts[submissionId] } : { comment: drafts[submissionId] } },
     );
-    if (res.ok) {
-      const comment = (mine ? res.data.note : res.data.comment) ?? null;
-      setTracks((prev) => prev.map((t) => (t.submissionId === submissionId ? { ...t, comment } : t)));
-    }
+    if (res.ok) setTracks((prev) => commentSaved(prev, submissionId, (mine ? res.data.note : res.data.comment) ?? null));
   }
 
   // Same reactions and favorites as the results screen: a track you react to or heart here shows there too.
-  const favorite = useFavorite((submissionId, on) =>
-    setTracks((prev) => prev.map((t) => (t.submissionId === submissionId ? { ...t, favorited: on } : t))),
-  );
-  async function react(submissionId: string, emoji: string) {
-    const res = await api<{ reacted: boolean }>(`/submissions/${submissionId}/reactions`, { method: 'POST', body: { emoji } });
-    if (!res.ok) return;
-    const { reacted } = res.data;
-    setTracks((prev) =>
-      prev.map((t) =>
-        t.submissionId !== submissionId
-          ? t
-          : { ...t, reactions: reacted ? [...t.reactions, { emoji, count: 1, mine: true }] : t.reactions.filter((r) => r.emoji !== emoji) },
-      ),
-    );
-  }
-
-  // No in-app preview for a track: open it in its service instead.
-  const openInService = useCallback(
-    (submissionId: string) => {
-      const track = tracks?.find((t) => t.submissionId === submissionId);
-      if (track) openPlaybackLink(playbackHref(track.playback));
-    },
-    [tracks],
-  );
-  const previewPath = useCallback((id: string) => `/rounds/${roundId}/submissions/${id}/preview`, [roundId]);
-  const { playingId, toggle } = usePreview(previewPath, openInService);
+  const { react, favorite } = useTrackReactions(setTracks);
+  const { playingId, toggle } = usePreview(useMemo(() => previewPath(roundId), [roundId]), tracks);
 
   // Each player can be guessed on one track only.
   const guessedIds = new Set((tracks ?? []).map((t) => t.guessedAccountId).filter(Boolean));
@@ -177,8 +130,8 @@ export default function GuessRound() {
                   return (
                     <Chip
                       key={player.accountId}
-                      avatar={player.displayName ?? 'A player'}
-                      label={player.displayName ?? 'A player'}
+                      avatar={nameOf(player)}
+                      label={nameOf(player)}
                       selected={here}
                       taken={!here && guessedIds.has(player.accountId)}
                       onPress={() => (here ? unguess(item.submissionId) : guess(item.submissionId, player.accountId))}

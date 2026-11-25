@@ -3,7 +3,6 @@ import { Linking } from 'react-native';
 import Favorites from '../favorites';
 
 const mockToggle = jest.fn();
-let mockFallback: (id: string) => void;
 
 const mockOpenURL = jest.fn();
 jest.spyOn(Linking, 'openURL').mockImplementation((url: string) => mockOpenURL(url));
@@ -13,9 +12,10 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../../lib/session', () => ({ useSession: () => ({ token: 'tok-1' }) }));
 jest.mock('../../lib/preview', () => ({
-  usePreview: (_path: (id: string) => string, fallback: (id: string) => void) => {
-    mockFallback = fallback;
-    return { playingId: null, toggle: mockToggle };
+  // A tap on a track with no preview, and no playback link to fall back to.
+  usePreview: () => {
+    const [unavailableId, setUnavailableId] = require('react').useState(null);
+    return { playingId: null, unavailableId, toggle: (id: string) => (mockToggle(id), setUnavailableId(id)) };
   },
 }));
 
@@ -70,8 +70,6 @@ it('plays a favorite, and says so when it has no preview', async () => {
 
   await fireEvent.press(screen.getByText('Play'));
   expect(mockToggle).toHaveBeenCalledWith('s1');
-
-  mockFallback('s1');
   await waitFor(() => expect(screen.getByText('No preview available for this track.')).toBeTruthy());
 });
 

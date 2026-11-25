@@ -1,14 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ScrollView, Platform, Text, View } from 'react-native';
-import { usePreview } from '../../../lib/preview';
+import { submissionPreviewPath, usePreview } from '../../../lib/preview';
 import { resolveBandcampUrl } from '../../../lib/bandcamp';
 import { useApi } from '../../../lib/client';
 import { useSession } from '../../../lib/session';
 import { useTheme } from '../../../lib/theme';
 import { playbackHref, type MySubmission, type Playback, type RoundOverview, type ServiceName } from '../../../lib/rounds';
 import { BodyText, Chip, ErrorNote, JCard, Label, ReelSpinner, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
-import { openPlaybackLink } from '../../../lib/bandcamp';
 
 // Every service is offered to every player: searching a catalog needs no per-user credential.
 const SERVICES: ServiceName[] = ['youtube_music', 'bandcamp'];
@@ -25,6 +24,7 @@ interface TrackResult {
   thumbnailUrl?: string | null;
   playback: Playback;
 }
+
 
 export default function SubmitTrack() {
   const { roundId, edit } = useLocalSearchParams<{ roundId: string; edit?: string }>();
@@ -68,8 +68,7 @@ export default function SubmitTrack() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edit, token, roundId]);
   // Your own track previews before guessing opens; with no preview it opens in its service.
-  const openInService = useCallback(() => current && openPlaybackLink(playbackHref(current.playback)), [current]);
-  const { playingId, toggle } = usePreview(useCallback((id: string) => `/submissions/${id}/preview`, []), openInService);
+  const { playingId, toggle } = usePreview(submissionPreviewPath, current && [current]);
   // Already has a track in this round (the entry screens say so), or has just sent one.
   const title = edit || submitted ? 'Edit your track' : 'Submit your track';
 
@@ -82,14 +81,10 @@ export default function SubmitTrack() {
     },
     [results],
   );
-  const openResult = useCallback(
-    (externalId: string) => {
-      const r = results.find((x) => x.externalId === externalId);
-      if (r) openPlaybackLink(playbackHref(r.playback));
-    },
-    [results],
+  const resultPreview = usePreview(
+    resultPreviewPath,
+    results.map((r) => ({ submissionId: r.externalId, playback: r.playback })),
   );
-  const resultPreview = usePreview(resultPreviewPath, openResult);
 
   async function search() {
     if (!service || service === 'bandcamp' || !query.trim()) return;
