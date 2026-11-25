@@ -1,20 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, ScrollView } from 'react-native';
-import { useApi, useResource } from '../../../lib/client';
+import { ScrollView } from 'react-native';
+import { ResourceGate, useApi, useResource } from '../../../lib/client';
+import { confirmDestructive } from '../../../lib/confirm';
 import { ThemeIdeas } from '../../../lib/ThemeIdeas';
 import {
-  DeadlineRows,
   ErrorNote,
   HandText,
   JCard,
   Label,
-  RoundGate,
   Screen,
   TapeButton,
-  TapeDateField,
   TapeInput,
 } from '../../../lib/ui';
+import { DeadlineRows, TapeDateField } from '../../../lib/deadlines';
 
 /** One round of the season, as `GET /leagues/:leagueId/rounds` serializes it. */
 interface Round {
@@ -112,23 +111,16 @@ export default function LeagueSchedule() {
       }
     };
     const msg = 'Its tracks and guesses will be deleted, and later rounds move up a number.';
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Delete round ${round.number}? ${msg}`)) remove();
-    } else {
-      Alert.alert(`Delete round ${round.number}?`, msg, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: remove },
-      ]);
-    }
+    confirmDestructive(`Delete round ${round.number}?`, msg, 'Delete', remove);
   }
 
   // Read once per render rather than per round, so the whole list agrees on where "now" falls.
   const now = new Date();
-  // RoundGate below never renders the list until this is non-null; the fallback is for the types.
+  // ResourceGate below never renders the list until this is non-null; the fallback is for the types.
   const season = rounds ?? [];
 
   return (
-    <RoundGate label="Season schedule" error={rounds === null ? error : null} ready={rounds !== null}>
+    <ResourceGate label="Season schedule" error={rounds === null ? error : null} ready={rounds !== null}>
       <Screen label="Season schedule">
         {error && <ErrorNote>{error}</ErrorNote>}
         <ScrollView style={{ margin: -6 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 6 }} showsVerticalScrollIndicator={false}>
@@ -223,6 +215,6 @@ export default function LeagueSchedule() {
           onPress={() => router.replace({ pathname: '/league/[leagueId]', params: { leagueId } })}
         />
       </Screen>
-    </RoundGate>
+    </ResourceGate>
   );
 }

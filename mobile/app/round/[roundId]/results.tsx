@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 import { Avatar } from '../../../lib/Avatar';
-import { useApi, useResource } from '../../../lib/client';
+import { ResourceGate, useApi, useResource } from '../../../lib/client';
 import { CommentThread, type Comment, type ThreadActions } from '../../../lib/CommentThread';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import { submissionPreviewPath, usePreview } from '../../../lib/preview';
@@ -18,7 +18,6 @@ import {
   HandText,
   JCard,
   Label,
-  RoundGate,
   Screen,
   ServiceBadge,
   TrackRow,
@@ -250,7 +249,7 @@ export default function RoundResults() {
   });
 
   return (
-    <RoundGate label="Results" error={error} ready={results !== null}>
+    <ResourceGate label="Results" error={error} ready={results !== null}>
       <Screen label="Results">
         <ScrollView
           ref={scroller}
@@ -303,6 +302,6 @@ export default function RoundResults() {
         </ScrollView>
         <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
       </Screen>
-    </RoundGate>
+    </ResourceGate>
   );
 }

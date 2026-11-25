@@ -2,12 +2,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 // react-native's Linking, not expo-linking's: on web only this one opens a new tab.
 import { FlatList, Linking, View } from 'react-native';
-import { useApi, useResource } from '../../../lib/client';
+import { ResourceGate, useApi, useResource } from '../../../lib/client';
 import { FavoriteHeart, Reactions, type Reaction } from '../../../lib/Reactions';
 import { usePreview } from '../../../lib/preview';
 import { commentSaved, guessed, unguessed, useRoundExport, useTrackReactions } from '../../../lib/roundTracks';
 import { nameOf, playbackHref, type Playback, type Player, type ServiceName } from '../../../lib/rounds';
-import { BodyText, Chip, ErrorNote, JCard, RoundGate, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
+import { BodyText, Chip, ErrorNote, JCard, Screen, ServiceBadge, Sprocket, TapeButton, TapeInput, TrackRow } from '../../../lib/ui';
 
 interface Track {
   submissionId: string;
@@ -79,7 +79,7 @@ export default function GuessRound() {
   const guessedIds = new Set((tracks ?? []).map((t) => t.guessedAccountId).filter(Boolean));
 
   return (
-    <RoundGate label="Guess the submitters" error={error} ready={tracks !== null}>
+    <ResourceGate label="Guess the submitters" error={error} ready={tracks !== null}>
       <Screen label="Guess the submitters">
         {favorite.error ? <ErrorNote>Couldn’t update your favorite. Try again.</ErrorNote> : null}
         {playlistUrl ? <TapeButton title="Open playlist" onPress={() => Linking.openURL(playlistUrl)} /> : null}
@@ -144,6 +144,6 @@ export default function GuessRound() {
         />
         <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
       </Screen>
-    </RoundGate>
+    </ResourceGate>
   );
 }

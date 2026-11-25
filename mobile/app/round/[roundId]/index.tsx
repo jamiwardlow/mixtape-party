@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useResource } from '../../../lib/client';
+import { ResourceGate, useResource } from '../../../lib/client';
 import { submissionPreviewPath, usePreview } from '../../../lib/preview';
 import { guessesLine, nameOf, nextStep, playbackHref, roundStatus, submitterNames, type RoundOverview } from '../../../lib/rounds';
-import { BodyText, DeadlineRows, HandText, JCard, Label, RoundGate, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
+import { BodyText, HandText, JCard, Label, Screen, ServiceBadge, TapeButton, TrackRow } from '../../../lib/ui';
+import { DeadlineRows } from '../../../lib/deadlines';
 
 /**
  * The canonical URL for a round, in any phase. Every other round screen is a phase — a link to
@@ -21,9 +22,9 @@ export default function RoundOverview() {
 
   if (!overview) {
     return (
-      <RoundGate label="Round" error={error} ready={false}>
+      <ResourceGate label="Round" error={error} ready={false}>
         {null}
-      </RoundGate>
+      </ResourceGate>
     );
   }
 

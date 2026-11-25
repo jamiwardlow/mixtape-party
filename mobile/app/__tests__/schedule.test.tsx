@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import LeagueSchedule from '../league/[leagueId]/schedule';
-import { formatDeadline } from '../../lib/ui';
+import { formatDeadline } from '../../lib/deadlines';
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },

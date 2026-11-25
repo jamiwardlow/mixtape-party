@@ -1,9 +1,6 @@
-import { Fragment, type Ref, useEffect, useRef, useState } from 'react';
+import { Fragment, type Ref, useState } from 'react';
 import {
-  AccessibilityInfo,
   ActivityIndicator,
-  Animated,
-  Easing,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -20,12 +17,8 @@ import {
   TouchableWithoutFeedback,
   View,
   ViewStyle,
-  useColorScheme,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import type { ServiceName } from './rounds';
 import { SERVICE_META, useServiceColor, useTheme, type Theme } from './theme';
 import { openPlaybackLink } from './bandcamp';
@@ -220,35 +213,6 @@ export function ServiceBadge({ service }: { service: ServiceName }) {
   );
 }
 
-export function RoundGate({
-  label,
-  error,
-  ready,
-  children,
-}: {
-  label: string;
-  error: string | null;
-  ready: boolean;
-  children: React.ReactNode;
-}) {
-  if (error) {
-    return (
-      <Screen label={label}>
-        <ErrorNote>{error}</ErrorNote>
-        <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
-      </Screen>
-    );
-  }
-  if (!ready) {
-    return (
-      <Screen label={label}>
-        <ReelSpinner />
-      </Screen>
-    );
-  }
-  return <>{children}</>;
-}
-
 // react-native-web adds hovered/focused to Pressable's state; the RN types don't know them.
 export type WebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
 
@@ -306,9 +270,9 @@ export function TapeButton({
   );
 }
 
-// The box shape TapeInput and TapeDateField's web control share. It lives out here because the
+// The box shape TapeInput and deadlines.tsx's TapeDateField web control share. It lives out here because the
 // web branch is a DOM node and can't reach into the StyleSheet.
-const INPUT_SHAPE = { borderRadius: 14, padding: 12, fontSize: 15, minHeight: 44 };
+export const INPUT_SHAPE = { borderRadius: 14, padding: 12, fontSize: 15, minHeight: 44 };
 
 export function TapeInput(props: TextInputProps & { ref?: Ref<TextInput> }) {
   const t = useTheme();
@@ -318,169 +282,6 @@ export function TapeInput(props: TextInputProps & { ref?: Ref<TextInput> }) {
       {...props}
       style={[styles.input, { borderColor: t.ink, borderWidth: t.border, color: t.ink, backgroundColor: t.shell, fontFamily: t.font.body }, props.style]}
     />
-  );
-}
-
-/** The one way a deadline is written in the UI: the date and the time, in the viewer's locale. */
-export function formatDeadline(date: Date): string {
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-const pad = (n: number) => String(n).padStart(2, '0');
-
-// <input type="datetime-local"> speaks local wall-clock time, so toISOString() would shift the
-// value by the UTC offset and show the host a date they did not pick.
-function toLocalInputValue(date: Date | undefined): string {
-  if (!date) return '';
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-// A date *and* time field: deadlines are TIMESTAMPTZ and the notification sweep fires on a
-// fraction of the remaining window, so the instant matters, not just the day.
-//
-// ponytail: one field, three controls. @react-native-community/datetimepicker ships no
-// react-native-web build, so web falls back to the DOM control -- which is the native picker
-// there -- and Android has no 'datetime' mode, so it chains the date dialog into the time one.
-// PRODUCT.md wants one design language across iOS and Android; this is as close as the library
-// gets. Replace all three with one JS calendar if that stops being close enough.
-//
-// minimumDate/maximumDate are affordances, not guarantees: Android applies them to the date
-// dialog only, and DOM `min`/`max` outside a <form> aren't enforced. Callers still have to check
-// the order themselves.
-export function TapeDateField({
-  label,
-  value,
-  onChange,
-  minimumDate,
-  maximumDate,
-  testID,
-}: {
-  label: string;
-  value: Date;
-  onChange: (date: Date) => void;
-  minimumDate?: Date;
-  maximumDate?: Date;
-  testID?: string;
-}) {
-  const t = useTheme();
-  const scheme = useColorScheme();
-
-  function control() {
-    if (Platform.OS === 'web') {
-      return (
-        <input
-          type="datetime-local"
-          aria-label={label}
-          data-testid={testID}
-          value={toLocalInputValue(value)}
-          min={toLocalInputValue(minimumDate)}
-          max={toLocalInputValue(maximumDate)}
-          onChange={(e) => {
-            // Clearing the field, or a half-typed date, parses to Invalid Date -- keep the last
-            // good value rather than handing the caller a NaN instant.
-            const picked = new Date(e.target.value);
-            if (!Number.isNaN(picked.getTime())) onChange(picked);
-          }}
-          // Clicking a segment only focuses it for typing; the calendar otherwise hides behind
-          // the small icon at the right edge. showPicker() opens it from anywhere in the field.
-          onClick={(e) => {
-            try {
-              e.currentTarget.showPicker();
-            } catch {
-              // No user gesture, or a browser without showPicker -- the icon still works.
-            }
-          }}
-          style={{
-            ...INPUT_SHAPE,
-            borderWidth: t.border,
-            borderStyle: 'solid',
-            borderColor: t.ink,
-            color: t.ink,
-            backgroundColor: t.shell,
-            fontFamily: t.font.body,
-            // Tints the browser's calendar popup; there's no way to restyle it beyond that.
-            accentColor: t.accent,
-          }}
-        />
-      );
-    }
-
-    if (Platform.OS === 'android') {
-      return (
-        <Pressable
-          testID={testID}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          onPress={() =>
-            DateTimePickerAndroid.open({
-              value,
-              mode: 'date',
-              minimumDate,
-              maximumDate,
-              // The date dialog answers first; the time dialog then refines the day it returned.
-              onValueChange: (_event, date) =>
-                DateTimePickerAndroid.open({
-                  value: date,
-                  mode: 'time',
-                  onValueChange: (_timeEvent, withTime) => onChange(withTime),
-                }),
-            })
-          }
-        >
-          <Text style={[styles.input, styles.dateValue, { borderColor: t.ink, borderWidth: t.border, color: t.ink, backgroundColor: t.shell, fontFamily: t.font.body }]}>
-            {formatDeadline(value)}
-          </Text>
-        </Pressable>
-      );
-    }
-
-    // iOS: the system pills can't take our font, but the box, tint and light theme can match.
-    return (
-      <View style={[styles.input, styles.iosDate, { borderColor: t.ink, borderWidth: t.border, backgroundColor: t.shell }]}>
-        <DateTimePicker
-          testID={testID}
-          value={value}
-          mode="datetime"
-          display="compact"
-          accentColor={t.accent}
-          themeVariant={scheme === 'dark' ? 'dark' : 'light'}
-          minimumDate={minimumDate}
-          maximumDate={maximumDate}
-          onValueChange={(_event, date) => onChange(date)}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.dateField}>
-      <Label>{label}</Label>
-      {control()}
-    </View>
-  );
-}
-
-/** A round's two deadlines, laid out the same way by the setup preview and the schedule screen. */
-export function DeadlineRows({
-  submissionDeadline,
-  guessingDeadline,
-  testID,
-}: {
-  submissionDeadline: Date;
-  guessingDeadline: Date;
-  testID: string;
-}) {
-  return (
-    <>
-      <View style={styles.deadlineRow}>
-        <Label>Submissions due</Label>
-        <Label testID={`${testID}-submission`}>{formatDeadline(submissionDeadline)}</Label>
-      </View>
-      <View style={styles.deadlineRow}>
-        <Label>Guesses due</Label>
-        <Label testID={`${testID}-guessing`}>{formatDeadline(guessingDeadline)}</Label>
-      </View>
-    </>
   );
 }
 
@@ -610,64 +411,6 @@ export function StickerBadge({ small }: { small?: boolean }) {
   );
 }
 
-const REEL_SPOKES = [0, 60, 120, 180, 240, 300];
-
-function Reel({ size, spin }: { size: number; spin: boolean }) {
-  const t = useTheme();
-  const turn = useRef(new Animated.Value(0)).current;
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => {});
-  }, []);
-  useEffect(() => {
-    if (!spin || reduced) return;
-    const loop = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [spin, reduced, turn]);
-  const c = size / 2;
-  return (
-    <Animated.View
-      style={{ width: size, height: size, transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }}
-    >
-      <Svg width={size} height={size}>
-        <Circle cx={c} cy={c} r={c - 1} fill={t.shell} stroke={t.ink} strokeWidth={2} />
-        {REEL_SPOKES.map((deg) => {
-          const a = (deg * Math.PI) / 180;
-          return <Line key={deg} x1={c} y1={c} x2={c + (c - 3) * Math.cos(a)} y2={c + (c - 3) * Math.sin(a)} stroke={t.ink} strokeWidth={2} />;
-        })}
-        <Circle cx={c} cy={c} r={c * 0.35} fill={t.ink} />
-      </Svg>
-    </Animated.View>
-  );
-}
-
-/** A cassette with a title on its label; the reels turn unless `still` (or the OS asks for less motion). */
-export function Cassette({ title, still, width = 220 }: { title?: string; still?: boolean; width?: number }) {
-  const t = useTheme();
-  const k = width / 220;
-  const reel = 40 * k;
-  return (
-    <View accessibilityRole="image" accessibilityLabel={title ? `Cassette: ${title}` : 'Cassette'} style={{ width, height: 140 * k }}>
-      <Svg width={width} height={140 * k} viewBox="0 0 220 140">
-        <Rect x={2} y={2} width={216} height={136} rx={14} fill={t.cobalt} stroke={t.ink} strokeWidth={3} />
-        <Rect x={16} y={14} width={188} height={52} rx={8} fill={t.shell} stroke={t.ink} strokeWidth={3} />
-        <SvgText x={110} y={48} textAnchor="middle" fontSize={20} fontFamily={t.font.display} fill={t.ink}>
-          {(title ?? 'Mixtape').slice(0, 16)}
-        </SvgText>
-        <Rect x={44} y={76} width={132} height={44} rx={22} fill={t.ink} />
-        <Rect x={72} y={124} width={76} height={10} rx={3} fill={t.bg} stroke={t.ink} strokeWidth={2} />
-      </Svg>
-      <View style={{ position: 'absolute', left: 66 * k - reel / 2, top: 98 * k - reel / 2 }}>
-        <Reel size={reel} spin={!still} />
-      </View>
-      <View style={{ position: 'absolute', left: 154 * k - reel / 2, top: 98 * k - reel / 2 }}>
-        <Reel size={reel} spin={!still} />
-      </View>
-    </View>
-  );
-}
-
 export function Sprocket() {
   const t = useTheme();
   return <View style={[styles.sprocket, { borderTopColor: t.ink }]} />;
@@ -696,10 +439,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 13 },
   card: { padding: 14, gap: 8 },
   input: { ...INPUT_SHAPE },
-  dateField: { gap: 4 },
-  dateValue: { lineHeight: 20 },
-  iosDate: { alignItems: 'flex-start', paddingVertical: 4 },
-  deadlineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   sprocket: { borderTopWidth: 3, borderStyle: 'dashed', marginVertical: 4 },
   button: { paddingVertical: 10, paddingHorizontal: 22, borderRadius: 999, minHeight: 44, justifyContent: 'center' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 2, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },

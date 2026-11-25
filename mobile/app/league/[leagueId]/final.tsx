@@ -1,10 +1,10 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { ScrollView } from 'react-native';
-import { useResource } from '../../../lib/client';
+import { ResourceGate, useResource } from '../../../lib/client';
 import { BestieGroup, type Bestie } from '../../../lib/BestieGroup';
 import { type SeasonResult as Overview } from '../../../lib/rounds';
 import { StandingRows, WinnersRow } from '../../../lib/Standings';
-import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, RoundGate, Screen, TapeButton } from '../../../lib/ui';
+import { BodyText, ErrorNote, HandText, JCard, Label, ReelSpinner, Screen, TapeButton } from '../../../lib/ui';
 
 export default function SeasonWrapUp() {
   const { leagueId } = useLocalSearchParams<{ leagueId: string }>();
@@ -17,9 +17,9 @@ export default function SeasonWrapUp() {
 
   if (!overview) {
     return (
-      <RoundGate label="Season" error={error} ready={false}>
+      <ResourceGate label="Season" error={error} ready={false}>
         {null}
-      </RoundGate>
+      </ResourceGate>
     );
   }
   if (!overview.league.concluded) {

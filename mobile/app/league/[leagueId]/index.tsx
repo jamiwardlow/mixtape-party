@@ -1,9 +1,10 @@
 import * as Linking from 'expo-linking';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../../lib/Avatar';
-import { useApi, useResource } from '../../../lib/client';
+import { ResourceGate, useApi, useResource } from '../../../lib/client';
+import { confirmDestructive } from '../../../lib/confirm';
 import { PlayerLink } from '../../../lib/PlayerLink';
 import { hasSubmitted, nameOf, nextStep, seasonEntry, submissionMark, type Player, type RoundSummary, type SeasonResult } from '../../../lib/rounds';
 import { useSession } from '../../../lib/session';
@@ -11,17 +12,16 @@ import { useTheme } from '../../../lib/theme';
 import { StandingRows, WinnersRow } from '../../../lib/Standings';
 import {
   BodyText,
-  DeadlineRows,
   HandText,
   JCard,
   Label,
-  RoundGate,
   Screen,
   Sprocket,
   TapeButton,
   focusRing,
   type WebState,
 } from '../../../lib/ui';
+import { DeadlineRows } from '../../../lib/deadlines';
 
 /** One round of the season, as `GET /leagues/:leagueId/overview` describes it. */
 interface OverviewRound extends RoundSummary {
@@ -91,21 +91,14 @@ export default function LeagueOverview() {
       if ((await api(`/leagues/${leagueId}/members/${member.accountId}`, { method: 'DELETE' })).ok) await reload();
     };
     const msg = `${name}'s track and guesses in this league will be deleted.`;
-    if (Platform.OS === 'web') {
-      if (window.confirm(`Remove ${name}? ${msg}`)) remove();
-    } else {
-      Alert.alert(`Remove ${name}?`, msg, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: remove },
-      ]);
-    }
+    confirmDestructive(`Remove ${name}?`, msg, 'Remove', remove);
   }
 
   if (!overview) {
     return (
-      <RoundGate label="Season" error={error} ready={false}>
+      <ResourceGate label="Season" error={error} ready={false}>
         {null}
-      </RoundGate>
+      </ResourceGate>
     );
   }
 

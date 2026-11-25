@@ -1,7 +1,8 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { fetchApi, useReconnectEpoch, type Upload } from './api';
 import { useSession } from './session';
+import { ErrorNote, ReelSpinner, Screen, TapeButton } from './ui';
 
 /** `status` 0 means the request never reached the API (offline, timeout). */
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
@@ -26,7 +27,7 @@ const DEFAULT_FALLBACK = 'Something went wrong. Try again.';
 export function useApi(): Api {
   const { token, signOut } = useSession();
   return useCallback<Api>(
-    async <T>(path: string, opts: ApiOptions = {}): Promise<ApiResult<T>> => {
+    async <T,>(path: string, opts: ApiOptions = {}): Promise<ApiResult<T>> => {
       const fallback = opts.fallback ?? DEFAULT_FALLBACK;
       let res: Response;
       try {
@@ -105,4 +106,34 @@ export function useResource<T>(path: string | null, fallback: string): Resource<
     reload,
     setData,
   };
+}
+
+/** Renders the screen chrome for a resource that failed to load (with a way home) or is still loading; children once it is ready. */
+export function ResourceGate({
+  label,
+  error,
+  ready,
+  children,
+}: {
+  label: string;
+  error: string | null;
+  ready: boolean;
+  children: React.ReactNode;
+}) {
+  if (error) {
+    return (
+      <Screen label={label}>
+        <ErrorNote>{error}</ErrorNote>
+        <TapeButton title="Back to home" onPress={() => router.replace('/home')} />
+      </Screen>
+    );
+  }
+  if (!ready) {
+    return (
+      <Screen label={label}>
+        <ReelSpinner />
+      </Screen>
+    );
+  }
+  return <>{children}</>;
 }

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import CreateLeague from '../create-league';
-import { formatDeadline } from '../../lib/ui';
+import { formatDeadline } from '../../lib/deadlines';
 
 const mockReplace = jest.fn();
 

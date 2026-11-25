@@ -7,7 +7,6 @@ import { ThemeIdeas } from '../lib/ThemeIdeas';
 import { pickIdeas } from '../lib/themeSuggestions';
 import {
   BodyText,
-  DeadlineRows,
   ErrorNote,
   HandText,
   JCard,
@@ -16,9 +15,9 @@ import {
   Screen,
   Sprocket,
   TapeButton,
-  TapeDateField,
   TapeInput,
 } from '../lib/ui';
+import { DeadlineRows, TapeDateField } from '../lib/deadlines';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
