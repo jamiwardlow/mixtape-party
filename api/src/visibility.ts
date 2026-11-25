@@ -1,8 +1,7 @@
 import type { Pool } from 'pg';
 import type { PlaybackLaunchHandle, ServiceName } from './adapters/types.js';
-import { avatarUrlOf } from './routes/accounts.js';
-import { blockedIds } from './routes/blocks.js';
-import { isLeagueMember, type Player } from './routes/rounds.js';
+import { blockedIds } from './blocks.js';
+import { avatarUrlOf, isLeagueMember, type Player } from './rounds.js';
 import { guessingOpened, isScored, roundPhase, type RoundSchedule } from './roundTimeline.js';
 import { finishedGuessing, guessesRemaining } from './scoring.js';
 

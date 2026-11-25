@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ServiceUnavailableError } from '../adapters/types.js';
 import { findService, type AdapterRegistry } from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isLeagueMember, loadRound } from './rounds.js';
+import { isLeagueMember, loadRound } from '../rounds.js';
 import { guessingOpened, submissionOpened } from '../roundTimeline.js';
 
 export interface SubmissionsDeps extends AccountsDeps, AdapterRegistry {}

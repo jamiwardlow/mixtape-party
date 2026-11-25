@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { EmailChannel } from '../notifications/types.js';
-import { requireAuth, avatarUrlOf, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { isUuid, sharesLeague } from './blocks.js';
+import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { avatarUrlOf } from '../rounds.js';
+import { isUuid, sharesLeague } from '../blocks.js';
 import { targetGateError } from '../visibility.js';
 
 export interface ModerationDeps extends AccountsDeps {

@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express';
-import { notifyAccounts } from '../notifications/sweep.js';
+import { notifyAccounts } from '../notifications/notifier.js';
 import type { EmailChannel, PushChannel } from '../notifications/types.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
-import { hasBlocked } from './blocks.js';
+import { hasBlocked } from '../blocks.js';
 import { targetGateError, type Target } from '../visibility.js';
 import { roundSql } from '../roundTimeline.js';
 import { owesGuessesSql } from '../scoring.js';

@@ -10,7 +10,7 @@ import {
   loadLeague,
   loadRound,
   type Player,
-} from './rounds.js';
+} from '../rounds.js';
 import { CURRENT_ROUND_CLAUSE, isSeasonConcluded, roundPhase, roundSql } from '../roundTimeline.js';
 import { checkDeadlineOrder, deleteRound, editRound, insertSeason, planSeason, type Refusal, type RoundRow } from '../seasonSchedule.js';
 import { asPlayer, describeRound, emptyRoundActivity, rosterFor, type RoundActivity } from '../visibility.js';

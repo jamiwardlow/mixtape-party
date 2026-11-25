@@ -2,7 +2,8 @@ import express, { Router, type ErrorRequestHandler, type NextFunction, type Requ
 import type { Pool } from 'pg';
 import { hashPassword, signSessionToken, verifyPassword, verifySessionToken } from '../auth.js';
 import { isSessionTokenRevoked, revokeSessionToken } from '../authTokens.js';
-import { isUuid } from './blocks.js';
+import { isUuid } from '../blocks.js';
+import { avatarUrlOf } from '../rounds.js';
 import { seasonConcludedSql } from '../roundTimeline.js';
 
 export interface AccountsDeps {
@@ -288,9 +289,6 @@ export function createAccountsRouter(deps: AccountsDeps): Router {
 
   return router;
 }
-
-export const avatarUrlOf = (id: string, updatedAt: Date | null) =>
-  updatedAt ? `/accounts/${id}/avatar?v=${updatedAt.getTime()}` : null;
 
 async function sendProfile(pool: Pool, accountId: string, res: Response): Promise<void> {
   const accountResult = await pool.query<{

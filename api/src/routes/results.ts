@@ -1,20 +1,21 @@
 import { Router } from 'express';
 import type { ServiceName } from '../adapters/types.js';
 import { playbackFor, serviceFor, thumbnailFor, type AdapterRegistry } from '../adapters/registry.js';
-import { blockedIds, isUuid } from './blocks.js';
+import { blockedIds, isUuid } from '../blocks.js';
 import { asPlayer, gateError, maskBlocked, rosterFor } from '../visibility.js';
 import { loadFavorites } from './guessing.js';
 import { listLeagues } from './leagues.js';
-import { avatarUrlOf, requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
+import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { isSeasonConcluded } from '../roundTimeline.js';
 import { correctGuessCounts, countCorrectGuesses, isCorrectGuess, scoreboard, topBesties } from '../scoring.js';
 import {
+  avatarUrlOf,
   isLeagueMember,
   loadCurrentRound,
   loadLeague,
   loadRound,
   type Player,
-} from './rounds.js';
+} from '../rounds.js';
 
 export interface ResultsDeps extends AccountsDeps, AdapterRegistry {}
 

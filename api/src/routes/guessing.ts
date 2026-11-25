@@ -12,7 +12,7 @@ import {
 } from '../adapters/registry.js';
 import { requireAuth, type AccountsDeps, type AuthedRequest } from './accounts.js';
 import { asPlayer, gateError, rosterFor, targetGateError } from '../visibility.js';
-import { isLeagueMember, loadRound } from './rounds.js';
+import { isLeagueMember, loadRound } from '../rounds.js';
 import { guessingOpened, isScored } from '../roundTimeline.js';
 import { parseComment } from './submissions.js';
 

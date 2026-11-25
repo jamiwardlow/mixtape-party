@@ -8,7 +8,7 @@
  */
 import type { Pool } from 'pg';
 import { roundSql } from './roundTimeline.js';
-import type { Player } from './routes/rounds.js';
+import type { Player } from './rounds.js';
 
 export interface GuessFacts {
   guesserId: string;

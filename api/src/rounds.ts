@@ -1,11 +1,15 @@
+/** Loading rounds, leagues and players, and league membership: lookups shared by routes and domain modules. */
 import type { Pool } from 'pg';
-import { CURRENT_ROUND_CLAUSE } from '../roundTimeline.js';
+import { CURRENT_ROUND_CLAUSE } from './roundTimeline.js';
 
 export interface Player {
   accountId: string;
   displayName: string | null;
   avatarUrl?: string | null;
 }
+
+export const avatarUrlOf = (id: string, updatedAt: Date | null) =>
+  updatedAt ? `/accounts/${id}/avatar?v=${updatedAt.getTime()}` : null;
 
 export interface RoundInfo {
   leagueId: string;
